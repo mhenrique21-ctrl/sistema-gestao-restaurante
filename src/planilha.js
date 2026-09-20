@@ -228,6 +228,11 @@ export function numeroBr(v) {
   const neg = /^\(.*\)$/.test(s) || s.startsWith('-');
   s = s.replace(/^[-(]|\)$/g, '');
   if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
+  // ⚠️ SEM VÍRGULA, o ponto ainda pode ser MILHAR: "1.200" é mil e duzentos,
+  // não um e dois décimos. `parseFloat` leria 1,2 — um valor mil vezes menor
+  // com cara de número certo, que é exatamente o erro que ninguém vê. Só o
+  // agrupamento de três em três é milhar; "1.5" continua sendo um e meio.
+  else if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, '');
   const n = parseFloat(s);
   if (!Number.isFinite(n)) return 0;
   return neg ? -Math.abs(n) : n;
@@ -241,6 +246,13 @@ export function dataDaCelula(v) {
   if (br) return `${br[3]}-${br[2].padStart(2, '0')}-${br[1].padStart(2, '0')}`;
   const iso = s.match(/(\d{4})-(\d{2})-(\d{2})/);
   if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  // O 99Food escreve a coluna "Data" como `20260919`, sem separador nenhum.
+  // ⚠️ Mês e dia são CONFERIDOS. Oito dígitos seguidos são um formato pobre
+  // demais para valer sozinho: um id de pedido, um CEP ou um código qualquer
+  // cairiam aqui e virariam "2026-99-99", uma data que a tela mostra e que
+  // nenhum filtro de período encontra.
+  const junto = s.match(/^(20\d{2})(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])$/);
+  if (junto) return `${junto[1]}-${junto[2]}-${junto[3]}`;
   // ⚠️ Serial do Excel: dia 1 é 01/01/1900 e a planilha acredita que 1900 foi
   // bissexto (não foi). O deslocamento de 25569 dias até a época do Unix já
   // embute esse bug — é por isso que a conta parece ter um dia a mais.

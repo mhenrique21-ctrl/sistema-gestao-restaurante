@@ -771,10 +771,57 @@ repõe.
 mediu 12,4%; na média ela puxaria a taxa para baixo e a conferência passaria a
 acusar todas as outras.
 
-⚠️ **Quem manda é o CONTEÚDO do arquivo**, não o nome — mesma lição do
-`plataforma.js`. Olha o cabeçalho **e** as primeiras linhas de dados (a coluna
-CANAL DE VENDA responde quando a loja não tem promoção nenhuma e a coluna do
-incentivo não existe). Aparecendo os dois nomes, **não escolhe**.
+⚠️ **A ASSINATURA É O CABEÇALHO, porque o relatório do 99Food NÃO DIZ "99food"
+em lugar nenhum** — nem no cabeçalho, nem numa coluna de canal, nem no nome da
+loja. Procurar o nome da plataforma no conteúdo, que era o que `detectarPlataforma`
+fazia, devolvia *"não reconheci de qual plataforma é este relatório"* para um
+arquivo perfeitamente legível. O que identifica cada um é o **conjunto de
+colunas**, que existe mesmo numa loja sem promoção nenhuma. Metade da assinatura
+basta; **empate não escolhe**. O nome no conteúdo continua valendo de reserva,
+para reconhecer uma plataforma conhecida num layout que ainda não sei ler — a
+mensagem que sai daí manda mandar o arquivo, em vez de mandar procurar o erro.
+
+##### O 99Food chama tudo por outro nome — `relatorio-99food-2026-09-14-a-19`
+
+48 colunas, metade de tempo de entrega em segundos. Escrito em cima do relatório
+**real** de 14–19/09/2026 (55 pedidos).
+
+| o que é | iFood | 99Food |
+|---|---|---|
+| mercadoria | VALOR DOS ITENS | Preço original do item |
+| promoção **da loja** | INCENTIVO PROMOCIONAL DA LOJA | Despesas de marketing |
+| promoção **da plataforma** | INCENTIVO PROMOCIONAL DO IFOOD | Recompensas da plataforma |
+| o que a plataforma reteve | TAXAS E COMISSOES | **três colunas**: comissão + taxa de processamento + custos logísticos |
+| o líquido | VALOR LIQUIDO | Receita real da loja |
+
+⚠️ **São TRÊS colunas de taxa, não uma** (`SOMAR_COLUNAS`). Guardar só a
+comissão deixaria de fora R$ 336,58 de pagamento e logística em seis dias.
+
+⚠️ **A CONTA DE CONFERÊNCIA É DIFERENTE EM CADA PLATAFORMA.** No iFood a taxa do
+plano é uma porcentagem limpa (26,2% em 19 dos 20 pedidos). No 99Food o **custo
+logístico é um valor por entrega**, não um percentual: a taxa efetiva vai de
+18,77% a 39% conforme o tamanho do pedido, e cobrar uma mediana de todos
+acusaria quase todo pedido — aviso que grita sempre é aviso que ninguém lê. No
+lugar dela o 99Food tem uma **identidade**, que fechou nas 55 linhas:
+
+```
+receita de vendas − comissão − taxa de pagamento − logística = receita real
+```
+
+São quatro colunas lidas de forma independente: a conta não é circular.
+
+⚠️ **CANCELADO e CANCELADO EM PARTE são coisas diferentes.** O #2027 do iFood é
+parcial: parte foi entregue, o iFood pagou R$ 13,24, e ele **conta**. Os cinco
+cancelados do 99Food (R$ 235,20 de mercadoria) pagaram **zero** e ficam fora do
+dia — no bruto sem estar no líquido, inflariam a taxa efetiva do canal com uma
+venda que não houve. Contados à parte, nunca sumindo.
+
+⚠️ Célula **`inlineStr`**: o 99Food escreve TODA célula assim, com o valor em
+`<is><t>` e não em `<v>`. Leitor que só olha `<v>` devolve a planilha em branco,
+sem erro nenhum. ⚠️ A coluna "Data" é `20260919`, **sem separador** — e mês e dia
+são conferidos, senão um id ou um CEP viraria "2026-99-99". ⚠️ **Sem vírgula, o
+ponto ainda pode ser MILHAR**: "1.200" é mil e duzentos, e `parseFloat` leria
+1,2 — mil vezes menor, com cara de número certo.
 
 ⚠️ **Origem própria `relatorio_ifood` / `relatorio_99food`.** Importar o mesmo
 dia de novo SUBSTITUI a linha — é o que torna seguro reimportar depois que a
@@ -848,9 +895,10 @@ separador do CSV é **descoberto** (`;` no Brasil, `,` fora): fixar um devolveri
 uma coluna só. ⚠️ `1.234,56` → o ponto é **milhar**; trocar só a vírgula daria
 1.234, mil vezes menor e com cara de número certo.
 
-⚠️ **A amostra real NÃO está no repositório** enquanto ele for público:
-`amostras/` está no `.gitignore` e os testes que dependem dela são **pulados**,
-não reprovados.
+⚠️ **As amostras reais NÃO estão no repositório** enquanto ele for público:
+`amostras/` está no `.gitignore` e os testes que dependem delas são **pulados**,
+não reprovados. São duas — `relatorio-ifood-2026-09-16.xlsx` e
+`relatorio-99food-2026-09-14-a-19.xlsx`.
 
 #### Editar recibo emitido: quem já foi lançado precisa REFAZER a soma em Vendas
 

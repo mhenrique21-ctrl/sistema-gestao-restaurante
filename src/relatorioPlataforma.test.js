@@ -59,11 +59,14 @@ describe('quem manda é o CONTEÚDO, não o nome do arquivo', () => {
     ]), null);
   });
 
-  test('relatório de plataforma sem leitor avisa em vez de inventar', () => {
-    const r = lerRelatorio([['ID DO PEDIDO 99FOOD', 'VALOR']]);
-    assert.equal(r.plataforma, '99food');
+  test('plataforma conhecida de nome, mas sem leitor, avisa em vez de inventar', () => {
+    // Quando chegar o relatório de uma terceira plataforma, a mensagem tem que
+    // dizer O QUE FALTA — "ainda não sei ler o relatório do rappi" manda a
+    // pessoa mandar o arquivo, e "não reconheci" a faria procurar o erro nela.
+    const r = lerRelatorio([['pedido', 'valor']], 'rappi');
+    assert.equal(r.plataforma, 'rappi');
     assert.equal(r.pedidos.length, 0);
-    assert.match(r.avisos.join(' '), /ainda não sei ler/);
+    assert.match(r.avisos.join(' '), /ainda não sei ler o relatório do rappi/);
   });
 });
 
@@ -127,8 +130,11 @@ describe('a conferência aponta, NUNCA corrige', () => {
     assert.equal(c.divergentes.length, 1);
     assert.equal(c.divergentes[0].numero, '2027');
     assert.equal(c.divergentes[0].liquido, 13.24, 'o que vale é o que a plataforma pagou');
-    assert.ok(c.divergentes[0].cancelado);
-    assert.match(c.avisos.join(' '), /foi cancelado/);
+    // ⚠️ PARCIAL, não cancelado: parte foi entregue e o iFood pagou por ela.
+    // O pedido CANCELADO de vez fica fora do dia; o parcial CONTA.
+    assert.ok(c.divergentes[0].parcial);
+    assert.ok(!c.divergentes[0].cancelado);
+    assert.match(c.avisos.join(' '), /cancelado em parte/);
   });
 
   test('a taxa do plano é a MEDIANA, não a média', seTemAmostra, async () => {
@@ -150,7 +156,9 @@ describe('o dia, do jeito que Vendas guarda', () => {
     assert.equal(d.liquido, 584.44);
     assert.equal(d.incentivoLoja, 67.37);
     assert.equal(d.incentivoPlataforma, 98.76);
-    assert.equal(d.cancelados, 1);
+    // Nenhum pedido CANCELADO de vez — o #2027 é cancelamento PARCIAL e
+    // continua contando, com o valor que o iFood realmente pagou.
+    assert.equal(d.cancelados, 0);
   });
 
   test('o BRUTO é o valor dos ITENS, não o que o cliente pagou', seTemAmostra, async () => {
@@ -316,5 +324,116 @@ describe('limpar o que a ponte lançou', () => {
     const alvos = automaticosDePlataforma(vendas, '2026-09-18', 7);
     assert.equal(alvos.apagar.length + alvos.limpar.length, 0);
     assert.deepEqual(limparAutomaticos(vendas, alvos), vendas);
+  });
+});
+
+// ── 99Food ──────────────────────────────────────────────────────────────────
+// Escrito em cima do relatório REAL de 14–19/09/2026 (55 pedidos, R$ 2.433,30
+// de mercadoria, R$ 1.485,29 de receita real) — não de layout imaginado.
+const AMOSTRA_99 = path.join(import.meta.dirname, '..', 'amostras', 'relatorio-99food-2026-09-14-a-19.xlsx');
+const TEM_99 = fs.existsSync(AMOSTRA_99);
+const seTem99 = { skip: TEM_99 ? false : 'amostras/relatorio-99food-2026-09-14-a-19.xlsx não está aqui' };
+let LINHAS_99;
+const linhas99 = async () => {
+  if (!LINHAS_99) {
+    const b = fs.readFileSync(AMOSTRA_99);
+    LINHAS_99 = await lerXlsx(b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength));
+  }
+  return LINHAS_99;
+};
+
+describe('99Food: o relatório NÃO diz "99food" em lugar nenhum', () => {
+  test('reconhece pelas COLUNAS, que são a impressão digital dele', seTem99, async () => {
+    // ⚠️ Era isto que quebrava: nem cabeçalho, nem coluna de canal, nem nome da
+    // loja trazem a palavra "99food". Procurando o nome no conteúdo, um arquivo
+    // perfeitamente legível respondia "não reconheci de qual plataforma é".
+    const L = await linhas99();
+    assert.equal(detectarPlataforma(L), '99food');
+    assert.ok(!L.slice(0, 6).flat().some((c) => foldCol(c).includes('99food')),
+      'o arquivo realmente não diz o nome da plataforma');
+  });
+
+  test('assinatura pela metade ainda resolve; empate NÃO escolhe', () => {
+    assert.equal(detectarPlataforma([['ID do pedido', 'Receita real da loja', 'Despesas de comissão']]), '99food');
+    assert.equal(detectarPlataforma([['ID curto do pedido', 'VALOR LIQUIDO (R$)', 'TAXAS E COMISSOES (R$)']]), 'ifood');
+    // Duas colunas de cada: lançar no canal errado dá outra taxa e outro
+    // faturamento, sem nada denunciando. Melhor pedir do que chutar.
+    assert.equal(detectarPlataforma([['pedido', 'Receita real da loja',
+      'Despesas de comissão', 'VALOR LIQUIDO (R$)', 'TAXAS E COMISSOES (R$)']]), null);
+  });
+});
+
+describe('99Food: a identidade que o próprio relatório obedece', () => {
+  test('receita de vendas − comissão − pagamento − logística = receita real', seTem99, async () => {
+    // ⚠️ São QUATRO colunas lidas de forma independente, então a conta não é
+    // circular. Ela fechou nas 55 linhas do arquivo real.
+    const r = lerRelatorio(await linhas99());
+    assert.equal(r.pedidos.length, 55);
+    assert.equal(conferirRelatorio(r).divergentes.length, 0);
+  });
+
+  test('a taxa do 99Food NÃO é uma porcentagem limpa — e por isso não é ela que confere', seTem99, async () => {
+    // O custo LOGÍSTICO é um valor por entrega, não um percentual: a taxa
+    // efetiva vai de ~19% a ~39% conforme o tamanho do pedido. Cobrar uma
+    // mediana de todos acusaria quase todo pedido, e o aviso que grita sempre
+    // é o aviso que ninguém lê.
+    const r = lerRelatorio(await linhas99());
+    const pcts = r.pedidos.filter((p) => !p.cancelado && p.baseComissao > 0).map((p) => p.taxaPct);
+    assert.ok(Math.max(...pcts) - Math.min(...pcts) > 10, 'a dispersão é grande de verdade');
+  });
+
+  test('as TRÊS colunas de taxa viram uma só', seTem99, async () => {
+    // Comissão 4,28 + pagamento 1,54 + logística 5,50 = 11,32. Guardando só a
+    // comissão, o líquido não fecharia — e por R$ 336,58 nos seis dias.
+    const r = lerRelatorio(await linhas99());
+    const p = r.pedidos.find((x) => x.numero.endsWith('501151'));
+    assert.equal(p.itens, 48);
+    assert.equal(p.incentivoLoja, 6, 'despesas de marketing é a promoção DA LOJA');
+    assert.equal(p.receitaVendas, 42, 'preço original − marketing');
+    assert.equal(p.taxasComissoes, 11.32);
+    assert.equal(p.liquido, 30.68);
+    assert.equal(p.incentivoPlataforma, 11.99, 'recompensa da plataforma NÃO sai do líquido');
+  });
+});
+
+describe('99Food: cancelado não é venda', () => {
+  test('os 5 cancelados ficam FORA do dia, e o aviso diz quanto', seTem99, async () => {
+    // ⚠️ Eles têm mercadoria (R$ 235,20 somados) e repasse ZERO. Contando no
+    // bruto e não no líquido, a taxa efetiva do canal sairia inflada por uma
+    // venda que não houve.
+    const r = lerRelatorio(await linhas99());
+    assert.equal(r.pedidos.filter((p) => p.cancelado).length, 5);
+    assert.match(r.avisos.join(' '), /5 pedido\(s\) CANCELADO\(S\) ficaram de fora/);
+    assert.match(r.avisos.join(' '), /R\$ 235,?\.?20 de mercadoria/);
+    const dias = resumoPorDia(r);
+    assert.equal(dias.reduce((s, d) => s + d.pedidos, 0), 50, 'só os 50 que viraram venda');
+    assert.equal(dias.reduce((s, d) => s + d.cancelados, 0), 5, 'contados à parte, não somem');
+  });
+
+  test('o líquido do período bate com a RECEITA REAL do relatório', seTem99, async () => {
+    const dias = resumoPorDia(lerRelatorio(await linhas99()));
+    assert.equal(r2(dias.reduce((s, d) => s + d.liquido, 0)), 1485.29);
+    // 2.433,30 de mercadoria menos os 235,20 que foram cancelados.
+    assert.equal(r2(dias.reduce((s, d) => s + d.bruto, 0)), 2198.10);
+    function r2(n) { return Math.round(n * 100) / 100; }
+  });
+
+  test('reembolso vira aviso, não desconto — o relatório já o considerou', seTem99, async () => {
+    const r = lerRelatorio(await linhas99());
+    assert.match(r.avisos.join(' '), /1 pedido\(s\) com reembolso/);
+    const p = r.pedidos.find((x) => x.reembolso > 0);
+    assert.equal(p.reembolso, 35.80);
+    assert.equal(p.liquido, 23.97, 'o líquido é o que o relatório diz, não o que eu calcularia');
+  });
+
+  test('seis dias, cada um na sua linha de Vendas', seTem99, async () => {
+    const lancs = lancamentosDoRelatorio(lerRelatorio(await linhas99()));
+    assert.equal(lancs.length, 6);
+    assert.equal(lancs[0].origem, 'relatorio_99food');
+    assert.equal(lancs[0].data, '2026-09-14');
+    assert.equal(lancs[0]['99food'], 325.80);
+    assert.equal(lancs[0].nfoodLiq, 204.42);
+    assert.equal(lancs[0].total, 204.42);
+    assert.equal(lancs[0].ifood, 0, 'não encosta no outro canal');
   });
 });

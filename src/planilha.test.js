@@ -119,3 +119,28 @@ describe('data da célula', () => {
     assert.equal(dataDaCelula('nada'), '');
   });
 });
+
+describe('o que o relatório do 99Food trouxe', () => {
+  test('célula inlineStr — o valor mora em <is><t>, não em <v>', () => {
+    // ⚠️ O .xlsx do 99Food escreve TODA célula como inlineStr. Um leitor que
+    // só olha <v> devolve a planilha inteira em branco — e sem erro nenhum.
+    const linhas = lerSheet('<row><c r="A1" t="inlineStr"><is><t>20260919</t></is></c>'
+      + '<c r="B1" t="inlineStr"><is><t>Confraria </t><t>Café</t></is></c></row>', []);
+    assert.deepEqual(linhas[0], ['20260919', 'Confraria Café']);
+  });
+
+  test('"Data" sem separador nenhum', () => {
+    assert.equal(dataDaCelula('20260919'), '2026-09-19');
+    assert.equal(dataDaCelula('2026-09-19 19:13:15'), '2026-09-19');
+    assert.equal(dataDaCelula('20269999'), '', 'oito dígitos não é sempre data');
+  });
+
+  test('sem vírgula, o ponto ainda pode ser MILHAR', () => {
+    // ⚠️ "1.200" é mil e duzentos. parseFloat leria 1,2 — mil vezes menor e
+    // com cara de número certo, que é o erro que ninguém enxerga.
+    assert.equal(numeroBr('1.200'), 1200);
+    assert.equal(numeroBr('2.433.300'), 2433300);
+    assert.equal(numeroBr('1.5'), 1.5, 'agrupamento é de três em três');
+    assert.equal(numeroBr('30,68'), 30.68);
+  });
+});
