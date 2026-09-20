@@ -39,7 +39,6 @@ src/movimentoEstoque.js  entrada/saída/ajuste/produção manual (com testes)
 src/folhaRh.js        folha: o que é desconto, o que é desembolso (com testes)
 src/faltaClt.js       desconto de falta: o dia E o DSR, pela CLT (com testes)
 src/nfeImportadas.js  quais NF-e já entraram, pela chave de 44 dígitos (com testes)
-src/producaoDia.js    produção do dia: custo real, perda e baixa de insumo (com testes)
 src/vinculoProducao.js  liga o nome da produção ao produto do Eclética (com testes)
 src/autoSave.js       salvar, reagendar ou ignorar — a decisão que perdia dado (com testes)
 src/planilha.js       .xlsx e .csv sem dependência nenhuma (com testes)
@@ -1188,9 +1187,35 @@ valor pequeno e nenhum lugar onde o olho descanse. A folha continua abrindo
 **por funcionário** — sem isso ela é um número que ninguém consegue conferir.
 
 ### Estoque
-Inventário · Contagem · Análise · Movimentações · Projeção de compras · Saldo
-Estoque · Produção do Dia · **Fichas técnicas** (só leitura) · Manutenção ·
-Produtos Eclética · Saídas por venda.
+Saldo Estoque · Análise · Projeção de compras · **Fichas técnicas** (só
+leitura) · Manutenção de Produtos · Produtos Eclética · Saídas por venda.
+
+⚠️ **CINCO TELAS FORAM APAGADAS em 20/09/2026** (decisão do dono, "não têm mais
+funcionalidade"): **Inventário**, **Contagem**, **Movimentações** e **Produção
+do Dia** em Estoque, e **Versus** (Confraria × Seama) em Gestão. Junto saíram os
+componentes `ContagemInsumos`, `ProducaoDiaPanel` e `Comparativo`, e o módulo
+`src/producaoDia.js` com o teste dele — nada mais importava. **Nenhum dado foi
+apagado:** `movEstoque`, `materiasPrimas` e `pedidosProducao` continuam
+inteiros, e o histórico está no git.
+
+⚠️ **A tela inicial de Estoque passou a ser SALDO ESTOQUE**, e os nove
+`setSub("inventario")` foram repontados. Sem isso o menu abriria num `sub` que
+nenhum bloco renderiza — **tela em branco, sem erro nenhum**, que é a mesma
+armadilha do `ABA_REL_ANTIGA` do relatório: nem o build nem o TypeScript acusam.
+
+⚠️ **O que parou junto com a Produção do Dia** (avisado e aceito): ela era a
+única chamadora de `aplicarProducaoDia` e `baixarPedidos`, então **o pedido da
+cozinha não fecha mais em lugar nenhum**, o produzido volta a entrar no estoque
+sem `custoUnitario` calculado, e a perda deixa de virar movimento próprio
+(`tipo:'perda'`). O Novo Pedido em Produção continua gravando `produtoId` — é
+barato, e sem ele um dia que traga o fechamento de volta recomeçaria pelo nome.
+A **Manutenção de Produtos** continua lançando Produção · Entrada · Saída ·
+Ajuste, mas por `aplicarMovimento`: ela não fecha pedido nem apura custo real.
+
+⚠️ **Não recrie por conta própria.** Toda a documentação da Produção do Dia
+abaixo (ponte pedido → produção, recheio, custo pelas unidades boas, o carimbo
+do `baixarPedidos`) descreve código que **não está mais no app** — ela fica como
+registro do que foi aprendido, e de onde recomeçar se um dia voltar.
 
 **Fichas técnicas em Estoque** (`FichasEstoquePanel` + `FichaTecnicaCard`) é a
 MESMA ficha de Produção → Fichas, vista pelo estoque: rendimento, insumos com o
