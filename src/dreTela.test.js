@@ -58,3 +58,26 @@ test('a folha continua aberta por funcionário', () => {
   // Sem isso ela é um número que ninguém consegue conferir.
   assert.ok(DRE.includes('sub={{[LINHA_FOLHA]:folhaPorFunc}}'), 'a folha perdeu o detalhe por funcionário');
 });
+
+test('a compra que não entrou no CMV é ligada de volta a ele', () => {
+  // ⚠️ Ela não some — desce para as Despesas. O que sumia era a LIGAÇÃO: o
+  // Lucro Bruto ficava alto sem que desse para dizer por quê.
+  assert.ok(DRE.includes('comprasForaDoCmv(foraCmvCats)'), 'falta a conferência do que ficou fora');
+  assert.ok(DRE.includes('fora do CMV'), 'o texto precisa dizer que ficaram fora');
+  assert.ok(DRE.includes('Compras → Reclassificar'), 'a categoria antiga precisa do caminho da migração');
+});
+
+test('categoria antiga e "não é CMV" são motivos DIFERENTES', () => {
+  // Tratá-los igual esconde trabalho pendente: a antiga vira CMV assim que
+  // alguém a migrar; a de limpeza nunca vira.
+  assert.ok(DRE.includes('MOTIVO_FORA_CMV'), 'o motivo de cada linha tem que aparecer');
+  assert.ok(/fora\.aReclassificar>0/.test(DRE), 'falta o destaque do que ainda dá para migrar');
+});
+
+test('a despesa que veio de Compras é marcada como tal', () => {
+  // "Material de limpeza e higiene" no meio das despesas é uma COMPRA, não uma
+  // conta a pagar — e sem a marca ninguém liga a linha à entrada que a gerou.
+  assert.ok(DRE.includes('deCompras={foraCmvCats}'), 'o mapa das compras não chega no detalhe');
+  assert.ok(DRE.includes('>de Compras<'), 'falta a marca na linha');
+  assert.ok(DRE.includes('de compra · '), 'linha mista precisa mostrar as duas parcelas');
+});

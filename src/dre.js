@@ -139,3 +139,36 @@ export function porDia(valor, de, ate) {
   const d = diasNoIntervalo(de, ate);
   return d > 0 ? r2(num(valor) / d) : 0;
 }
+
+// ── As compras do período que NÃO entraram no CMV ───────────────────────────
+// A linha do CMV soma só as SEIS categorias de matéria-prima (§5). O que ficou
+// de fora não sumiu — desceu para as Despesas —, mas some da vista: ninguém
+// liga "Material de limpeza e higiene" no meio das despesas à compra que
+// gerou aquela linha, e o Lucro Bruto fica alto sem que dê para dizer por quê.
+//
+// ⚠️ "A reclassificar" é um motivo DIFERENTE de "não é CMV", e tratá-los igual
+// esconde trabalho pendente: a categoria antiga vira CMV assim que alguém a
+// migrar em Compras → Reclassificar, e a de limpeza nunca vira.
+export const MOTIVO_FORA_CMV = {
+  reclassificar: 'categoria antiga, ainda não migrada',
+  naoCmv: 'não é custo de mercadoria',
+};
+
+export function comprasForaDoCmv(foraCmvCats, chaveReclassificar = 'A reclassificar') {
+  const linhas = Object.entries(foraCmvCats || {})
+    .filter(([, v]) => num(v) > 0)
+    .map(([cat, valor]) => ({
+      cat,
+      valor: r2(num(valor)),
+      motivo: cat === chaveReclassificar ? 'reclassificar' : 'naoCmv',
+    }))
+    // Maior primeiro; o nome desempata para a lista não trocar de ordem entre
+    // dois renders quando dois valores empatam.
+    .sort((a, b) => b.valor - a.valor || a.cat.localeCompare(b.cat, 'pt-BR'));
+
+  return {
+    linhas,
+    total: r2(linhas.reduce((s, l) => s + l.valor, 0)),
+    aReclassificar: r2(linhas.filter((l) => l.motivo === 'reclassificar').reduce((s, l) => s + l.valor, 0)),
+  };
+}

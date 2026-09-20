@@ -26,7 +26,7 @@ import { mergeArrayById } from "../mergeDocument.js";
 import QRCode from "qrcode";
 import { ConfigPanel, CONFIG_PADRAO, type ConfigAppState } from "./ConfigPanel";
 import { ConfigStyleInjector, useApplyConfig } from "./ConfigApplier";
-import {fatiasDaReceita,conferirCmv,diasNoIntervalo,mesDaData,porDia} from "./dre.js";
+import {fatiasDaReceita,conferirCmv,diasNoIntervalo,mesDaData,porDia,comprasForaDoCmv,MOTIVO_FORA_CMV} from "./dre.js";
 
 // ===================== STORAGE =====================
 const STORAGE_KEY = "gestao_app_v4";
@@ -19443,12 +19443,27 @@ function DREComp({db,setDb,empresa}){
 
   // O detalhe de uma linha. `sub` é o segundo nível — hoje só a folha, que abre
   // por funcionário: sem isso ela é um número que ninguém consegue conferir.
-  const Detalhe=({itens,sub}:{itens:{[k:string]:number},sub?:{[k:string]:{[q:string]:number}}})=>(
+  // ⚠️ `deCompras` marca a linha que veio de `db.compras`, não de `db.contas`.
+  // "Material de limpeza e higiene" no meio das despesas é uma COMPRA, e sem a
+  // marca ninguém liga essa linha à entrada que a gerou — nem descobre que ela
+  // saiu do CMV por causa da categoria.
+  const Detalhe=({itens,sub,deCompras}:{itens:{[k:string]:number},sub?:{[k:string]:{[q:string]:number}},deCompras?:{[k:string]:number}})=>(
     <div style={{borderLeft:"2px solid var(--border)",margin:"0 0 8px 10px",paddingLeft:12}}>
       {Object.entries(itens).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]).map(([k,v])=>(
         <div key={k}>
           <div style={{display:"flex",justifyContent:"space-between",gap:8,padding:"3px 0",fontSize:12,color:"var(--text2)"}}>
-            <span style={{flex:1,minWidth:0}}>{k}</span>
+            <span style={{flex:1,minWidth:0}}>
+              {k}
+              {(deCompras?.[k]||0)>0&&<span title="veio de Compras → Entradas, não do Financeiro"
+                style={{fontSize:9.5,fontWeight:700,padding:"1px 6px",borderRadius:999,marginLeft:6,
+                  background:"var(--bg2)",color:"var(--text3)",whiteSpace:"nowrap" as const}}>de Compras</span>}
+              {/* Linha MISTA: parte veio de compra, parte de conta a pagar.
+                  Sem a quebra, o total parece todo de um lado só. */}
+              {(deCompras?.[k]||0)>0&&(deCompras as any)[k]<v&&
+                <span style={{fontSize:10.5,color:"var(--text3)",marginLeft:6}}>
+                  {fmtMoney((deCompras as any)[k])} de compra · {fmtMoney(v-(deCompras as any)[k])} de contas
+                </span>}
+            </span>
             <span style={{fontFamily:"'SFMono-Regular',Consolas,'Liberation Mono',monospace",fontVariantNumeric:"tabular-nums" as const}}>{fmtMoney(v)}</span>
           </div>
           {sub?.[k]&&Object.keys(sub[k]).length>0&&
@@ -19673,12 +19688,32 @@ function DREComp({db,setDb,empresa}){
         aberto={abertos.has("cmv")} onToggle={Object.keys(cmvCats).length?()=>alterna("cmv"):undefined}
         quantos={Object.keys(cmvCats).length}/>
       {abertos.has("cmv")&&<Detalhe itens={cmvCats}/>}
+      {/* ⚠️ Estas compras NÃO sumiram — desceram para as Despesas. O que sumia
+          era a LIGAÇÃO: ninguém liga uma linha de despesa à compra que a gerou,
+          e o Lucro Bruto fica alto sem que dê para dizer por quê. */}
+      {(()=>{
+        const fora=comprasForaDoCmv(foraCmvCats);
+        if(!fora.total)return null;
+        return <div style={{background:"var(--bg4)",border:"1px solid var(--border)",borderRadius:9,
+          padding:"9px 11px",margin:"2px 0 8px",fontSize:11.5,lineHeight:1.55,color:"var(--text2)"}}>
+          <b>{fmtMoney(fora.total)}</b> em compras do período ficaram <b>fora do CMV</b> e estão nas Despesas:
+          <div style={{marginTop:5}}>
+            {fora.linhas.map((l:any)=><div key={l.cat} style={{display:"flex",justifyContent:"space-between",gap:8,padding:"2px 0"}}>
+              <span style={{flex:1,minWidth:0}}>{l.cat} <span style={{color:"var(--text3)"}}>· {(MOTIVO_FORA_CMV as any)[l.motivo]}</span></span>
+              <span style={{whiteSpace:"nowrap" as const,fontFamily:"'SFMono-Regular',Consolas,'Liberation Mono',monospace",fontVariantNumeric:"tabular-nums" as const}}>{fmtMoney(l.valor)}</span>
+            </div>)}
+          </div>
+          {fora.aReclassificar>0&&<div style={{color:"var(--warningText)",marginTop:6}}>
+            ⚠️ <b>{fmtMoney(fora.aReclassificar)}</b> estão numa categoria antiga — migre em <b>Compras → Reclassificar</b> e elas passam a contar no CMV.
+          </div>}
+        </div>;
+      })()}
       <Row label="= Lucro bruto" value={lucroBruto} color={col(lucroBruto)} bold/>
 
       <LinhaDre label="− Despesas" value={totalDesp} pctBase={vendasBrutas} neg
         aberto={abertos.has("despesa")} onToggle={Object.keys(despCats).length?()=>alterna("despesa"):undefined}
         quantos={Object.keys(despCats).length}/>
-      {abertos.has("despesa")&&<Detalhe itens={despCats} sub={{[LINHA_FOLHA]:folhaPorFunc}}/>}
+      {abertos.has("despesa")&&<Detalhe itens={despCats} sub={{[LINHA_FOLHA]:folhaPorFunc}} deCompras={foraCmvCats}/>}
       {!Object.keys(despCats).length&&<div className="muted" style={{fontSize:12,padding:"2px 0 8px"}}>Nenhuma conta paga no período.</div>}
       <Row label="= Resultado operacional" value={resultadoOp} color={col(resultadoOp)} bold/>
 

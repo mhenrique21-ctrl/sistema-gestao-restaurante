@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { fatiasDaReceita, conferirCmv, diasNoIntervalo, mesDaData, porDia } from './dre.js';
+import { fatiasDaReceita, conferirCmv, diasNoIntervalo, mesDaData, porDia, comprasForaDoCmv } from './dre.js';
 
 // O período real do dono, 14–19/09/2026, lido do print da DRE.
 const REAL = {
@@ -122,5 +122,40 @@ describe('datas', () => {
   test('por dia compara recortes de tamanhos diferentes', () => {
     assert.equal(porDia(14023.88, '2026-09-14', '2026-09-19'), 2337.31);
     assert.equal(porDia(100, '2026-09-19', '2026-09-14'), 0);
+  });
+});
+
+describe('as compras que ficaram fora do CMV', () => {
+  const FORA = {
+    'Material de limpeza e higiene': 689,
+    'Outros': 120.5,
+    'A reclassificar': 340,
+    'Vazia': 0,
+  };
+
+  test('soma e ordena da maior para a menor', () => {
+    const r = comprasForaDoCmv(FORA);
+    assert.equal(r.total, 1149.5);
+    assert.deepEqual(r.linhas.map((l) => l.cat),
+      ['Material de limpeza e higiene', 'A reclassificar', 'Outros']);
+  });
+
+  test('categoria zerada não vira linha', () => {
+    assert.ok(!comprasForaDoCmv(FORA).linhas.some((l) => l.cat === 'Vazia'));
+  });
+
+  test('"a reclassificar" é um motivo DIFERENTE de "não é CMV"', () => {
+    // ⚠️ Tratá-los igual esconde trabalho pendente: a categoria antiga VIRA
+    // CMV assim que alguém a migrar; a de limpeza nunca vira.
+    const r = comprasForaDoCmv(FORA);
+    assert.equal(r.aReclassificar, 340);
+    assert.equal(r.linhas.find((l) => l.cat === 'A reclassificar').motivo, 'reclassificar');
+    assert.equal(r.linhas.find((l) => l.cat === 'Outros').motivo, 'naoCmv');
+  });
+
+  test('nada fora do CMV devolve zero, não null', () => {
+    const r = comprasForaDoCmv({});
+    assert.equal(r.total, 0);
+    assert.deepEqual(r.linhas, []);
   });
 });

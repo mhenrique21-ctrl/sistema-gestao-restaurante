@@ -1158,6 +1158,30 @@ de 15, e a segunda bem acima dos 9,1 da `CORES_REL`. Cada cor fica a ΔE ≥ 15 
 tentativa (laranja para taxa, amarelo para CMV) media **5,9** sob daltonismo:
 laranja e amarelo colapsam, e na barra empilhada **todo par é adjacente**.
 
+⚠️ **A COMPRA QUE NÃO ENTROU NO CMV É LIGADA DE VOLTA A ELE**
+(`comprasForaDoCmv`). A linha do CMV soma só as **seis** categorias de
+matéria-prima (§5); o resto desce para as Despesas. Ele não some — mas a
+LIGAÇÃO sumia: ninguém liga "Material de limpeza e higiene" no meio das
+despesas à compra que gerou aquela linha, e o Lucro Bruto fica alto sem que dê
+para dizer por quê. Agora um quadro abaixo do CMV lista o que ficou de fora,
+com o motivo de cada um, e cada linha de despesa vinda de `compras` leva a marca
+**"de Compras"** (com a quebra `X de compra · Y de contas` quando é mista).
+
+⚠️ **"A reclassificar" é um motivo DIFERENTE de "não é CMV"**, e tratá-los igual
+esconde trabalho pendente: a categoria antiga **vira** CMV assim que alguém a
+migrar em Compras → Reclassificar, e a de limpeza nunca vira. Por isso o total a
+reclassificar aparece em âmbar, com o caminho escrito.
+
+⚠️ **Há um quarto jeito de o CMV sair vazio, e ele não está na tela:** a nota
+lançada **só** como conta a pagar, sem entrada em Compras. `MAPA_DRE_PADRAO`
+manda `alimentacao`, `bebidas` e `limpeza` para **"fora"** justamente porque
+"já entram pelo lado de Compras" — se não entraram, aquele dinheiro não aparece
+em lugar nenhum da DRE. O rodapé "Fora da DRE" é onde ele fica visível.
+
+⚠️ **Compra SEM data entra em TODO período** (`inPer` devolve `true` para data
+vazia). Isso infla, não zera — é o candidato quando um mês mostra CMV maior que
+o esperado.
+
 ⚠️ **O detalhe fica atrás de um "ver N"**, só a despesa aberta por padrão. Tudo
 aberto é o que fazia a tela ser, ao mesmo tempo, longa e vazia: muita linha de
 valor pequeno e nenhum lugar onde o olho descanse. A folha continua abrindo
