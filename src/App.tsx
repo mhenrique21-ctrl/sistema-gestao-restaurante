@@ -25,6 +25,7 @@ import { mergeArrayById } from "../mergeDocument.js";
 import QRCode from "qrcode";
 import { ConfigPanel, CONFIG_PADRAO, type ConfigAppState } from "./ConfigPanel";
 import { ConfigStyleInjector, useApplyConfig } from "./ConfigApplier";
+import {rotuloDelivery,ROTULO_RECIBOS,BUCKET_RECIBO_BALCAO,BUCKET_RECIBO_ENCOMENDA,taxasDePlataforma,statusDoDia,progressoDoDia,serieDosDias,mediaDaSerie,HORA_PENDENCIA_PADRAO} from "./fechamentoVendas.js";
 import {garantirFornecedor,criarItemDaLista,conferirPreco,auditarPrecos,normalizarEncoding,gruposDeFornecedor,mesclarFornecedores,conciliacaoPorCategoria,pctHistoricoPorCategoria,normalizarTexto,precoPorUnidadeBase,filaSemCategoria,janelaAnterior,soDigitos,linhasDaRevisao,pendenciasDaRevisao,correcoesDaRevisao,resumoDoEncoding} from "./qualidadeCompras.js";
 import {fatiasDaReceita,conferirCmv,diasNoIntervalo,mesDaData,porDia,comprasForaDoCmv,MOTIVO_FORA_CMV} from "./dre.js";
 
@@ -1089,6 +1090,19 @@ const CHECKLIST_FECHAMENTO_PADRAO=[
   "Sangrias e despesas do caixa anotadas",
   "Fechamento salvo no sistema",
 ].join("\n");
+// As modalidades que somam o dia, na ordem em que aparecem.
+//
+// ⚠️ UMA LISTA, TRÊS LEITORES (o mix do Dashboard, a DRE impressa e o Relatório
+// de Vendas impresso). Eram TRÊS cópias, e as três esqueceram
+// `entregasClientes`: o dinheiro do recibo de encomenda entrava no `total` e
+// sumia do gráfico e dos dois papéis — uma barra que mente sem nada denunciar,
+// e um relatório cuja quebra por modalidade não fecha com o próprio total.
+// `recibosBalcao` nasceu em 21/09/2026 e entra junto, pelo mesmo motivo.
+//
+// ⚠️ `ifood`/`99food` aqui são o BRUTO, que é o que se digita. Quem quer o
+// líquido do canal usa `ifoodLiq`/`nfoodLiq` — trocar um pelo outro aqui faria
+// o mix somar diferente do total do dia.
+const MODAIS_VENDA=["maquininha","dinheiro","ifood","99food","delivery","recibosBalcao","entregasClientes"];
 const VENDAS_AJUSTES_DEFAULT={
   checklistItens:CHECKLIST_FECHAMENTO_PADRAO,
   legNomeAba:"Vendas",legCliente:"Cliente",legBotaoEmitir:"Emitir Recibo",legVendasExtras:"Vendas Extras",
@@ -1097,6 +1111,10 @@ const VENDAS_AJUSTES_DEFAULT={
   fonte:"padrao",corDestaque:"",
   prefixoRecibo:"",casasRecibo:4,ordenacaoPadrao:"recente",abaRelatorioPadrao:"cliente",
   metaMensal:0,confirmacaoReforcadaAcima:0,diasEsfriando:10,diasSumiu:21,
+  // A partir desta hora, canal automático que não chegou é PENDÊNCIA de verdade
+  // — antes dela é só "ainda não chegou". Sem a hora, a tela acusaria o iFood
+  // às 9h da manhã, todo dia.
+  horaPendencia:HORA_PENDENCIA_PADRAO,
   mostrarWhatsapp:true,mostrarPdf:true,mostrarTelefone:true,mostrarChipVendasExtras:true,paginarLista:false,
   canalDinheiro:true,canalIfood:true,canal99food:true,canalVendasExtras:true,
 };
@@ -3127,7 +3145,7 @@ function Dashboard({db,setDb,setDbAndSave,onNavigate,setPendingSub}:{db:any,setD
   })();
   const maxDia=Math.max(...vendasDiarias.map(d=>d.total),1);
 
-  const modais=["maquininha","dinheiro","ifood","99food","delivery"];
+  const modais=MODAIS_VENDA;
   const vendasMod=modais.map(m=>({label:m,v:vendasPeriodo.reduce((s:number,d:any)=>s+(parseFloat(d[m])||0),0)}));
   const maxV=Math.max(...vendasMod.map(x=>x.v),1);
 
@@ -3361,6 +3379,8 @@ function Dashboard({db,setDb,setDbAndSave,onNavigate,setPendingSub}:{db:any,setD
 
       // --- Canais & Custos ---
       const totalCanais=vendasMod.reduce((s,x)=>s+x.v,0);
+      // ⚠️ Recibo de balcão e encomenda ficam DE FORA: "participação do
+      // delivery" tem que ser entrega, senão ela cresce com venda de balcão.
       const deliverySum=vendasPeriodo.reduce((s,v)=>s+(v.ifoodLiq||0)+(v.nfoodLiq||0)+(v.delivery||0),0);
       const participacaoDelivery=totalVendas>0?(deliverySum/totalVendas)*100:0;
       const custoMarketplaces=vendasPeriodo.reduce((s,v)=>{
@@ -3378,7 +3398,25 @@ function Dashboard({db,setDb,setDbAndSave,onNavigate,setPendingSub}:{db:any,setD
       const colMC=mcVal>=0?"#22C55E":"var(--btnDanger)";
 
       // --- Supervisão do PDV ---
-      const diasSemRegistro=vendasDiarias.filter(d=>d.total===0&&d.data<=hj);
+      // ⚠️ "LOJA FECHADA" E "FALHA NO ENVIO" ERAM A MESMA LINHA, e o texto do
+      // card dizia isso com todas as letras ("loja fechada ou falha no envio do
+      // PDV") porque a tela não tinha como saber. Agora o dia fechado carrega o
+      // marcador explícito (`fechamentos[dia].semMovimento`, posto no
+      // fechamento de Vendas) e sai da fila: uma lista que enche de domingos
+      // deixa de ser lida, e a falha real se esconde dentro dela.
+      //
+      // ⚠️ E a HORA importa: antes da hora limite o automático legitimamente
+      // ainda não chegou. `statusDoDia` separa "aguardando" de "pendente".
+      const horaAgora=Number(new Intl.DateTimeFormat("pt-BR",{timeZone:TZ,hour:"2-digit",hour12:false}).format(new Date()))||0;
+      const horaLimitePend=Number(getVendasAjustes(db).horaPendencia)||HORA_PENDENCIA_PADRAO;
+      const statusDeDia=(data:string,total:number)=>statusDoDia({
+        data,hoje:hj,hora:horaAgora,
+        semMovimento:!!(db.fechamentos||{})[data]?.semMovimento,
+        faltando:total>0?[]:["lançamento do dia"],temAlgumValor:total>0,horaLimite:horaLimitePend});
+      const diasZerados=vendasDiarias.filter(d=>d.total===0&&d.data<=hj);
+      const diasFechadosMarcados=diasZerados.filter(d=>statusDeDia(d.data,0).status==="fechado");
+      const diasAguardando=diasZerados.filter(d=>statusDeDia(d.data,0).status==="aguardando");
+      const diasSemRegistro=diasZerados.filter(d=>{const st=statusDeDia(d.data,0).status;return st!=="fechado"&&st!=="aguardando";});
       const anomalias=vendasDiarias.filter(d=>d.total>0&&fatMedioDia>0&&d.total<fatMedioDia*0.5).sort((a,b)=>a.total-b.total);
       const comOrigemPdv=vendasPeriodo.filter(v=>ehOrigemPdv(v)).length;
       const totalRegistrosVendas=vendasPeriodo.length;
@@ -3533,7 +3571,13 @@ function Dashboard({db,setDb,setDbAndSave,onNavigate,setPendingSub}:{db:any,setD
         diasSemRegistro:()=><div className="card" style={diasSemRegistro.length>0?{border:`1px solid ${corAtn}`,background:`${corAtn}0F`}:undefined}>
           <div className="muted" style={{fontSize:flbl(10)}}>⚠️ Dias sem registro de venda</div>
           <div style={{fontSize:fnum(20),fontWeight:800,color:diasSemRegistro.length>0?corAtn:corOk}}>{diasSemRegistro.length} <span style={{fontSize:flbl(12),fontWeight:600,color:"var(--text2)"}}>de {vendasDiarias.filter(d=>d.data<=hj).length}</span></div>
-          {diasSemRegistro.length>0&&<div className="muted" style={{fontSize:flbl(10),marginTop:2}}>{diasSemRegistro.slice(0,4).map(d=>fmtDate(d.data)).join(", ")}{diasSemRegistro.length>4?"...":""} — loja fechada ou falha no envio do PDV</div>}
+          {diasSemRegistro.length>0&&<div className="muted" style={{fontSize:flbl(10),marginTop:2}}>{diasSemRegistro.slice(0,4).map(d=>fmtDate(d.data)).join(", ")}{diasSemRegistro.length>4?"...":""} — sem lançamento e sem marcação de loja fechada</div>}
+          {(diasFechadosMarcados.length>0||diasAguardando.length>0)&&<div className="muted" style={{fontSize:flbl(10),marginTop:4,opacity:.8}}>
+            {diasFechadosMarcados.length>0&&<>{diasFechadosMarcados.length} marcado(s) como loja fechada</>}
+            {diasFechadosMarcados.length>0&&diasAguardando.length>0&&<> · </>}
+            {diasAguardando.length>0&&<>{diasAguardando.length} ainda dentro do horário</>}
+            {" "}— fora da conta acima
+          </div>}
         </div>,
         anomalia:()=><div className="card" style={anomalias.length>0?{border:`1px solid ${corCrit}`,background:`${corCrit}0F`}:undefined}>
           <div className="muted" style={{fontSize:flbl(10)}}>🔻 Anomalia de faturamento</div>
@@ -3717,6 +3761,12 @@ function IRow({label,value,positive,neutral}){return <div style={{display:"flex"
 // ===================== VENDAS =====================
 function Vendas({db,setDb,setDbAndSave,state,aj,login,empresa}:{db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,state?:any,aj?:any,login?:any,empresa?:string}){
   aj=aj||VENDAS_AJUSTES_DEFAULT;
+  // ⚠️ "Vendas Extras" e "Delivery" SEMPRE foram o mesmo campo (`vendas[].delivery`):
+  // `legVendasExtras` é só o rótulo dele, e o painel de TV já o chamava de
+  // "Delivery". `rotuloDelivery` traduz o padrão antigo na LEITURA — trocar só
+  // o default deixaria o nome velho em quem já mexeu em Ajustes uma vez, porque
+  // `setAj` congela todos os defaults no `db` na primeira gravação.
+  const legDelivery=rotuloDelivery(aj);
   // A taxa do iFood/99Food quase não muda de um dia pro outro: vem preenchida
   // com a do último lançamento que teve uma, pra não digitar 27 todo dia.
   // ⚠️ A taxa herdada é uma PORCENTAGEM, e só vale se puder ser uma. A ponte
@@ -3831,11 +3881,11 @@ function Vendas({db,setDb,setDbAndSave,state,aj,login,empresa}:{db:any,setDb:any
   if(aj.canalDinheiro&&!autoDin&&dinManual<=0)pendencias.push(aj.legDinheiro);
   if(aj.canalIfood&&ifoodBruto<=0)pendencias.push("iFood");
   if(aj.canal99food&&nfoodBruto<=0)pendencias.push("99Food");
-  if(aj.canalVendasExtras&&!deliverySincronizado&&parseMoney(form.delivery||0)<=0)pendencias.push(aj.legVendasExtras);
+  if(aj.canalVendasExtras&&!deliverySincronizado&&parseMoney(form.delivery||0)<=0)pendencias.push(legDelivery);
   const chips=([
     {label:aj.legMaquininha,val:autoNoCampo("maquininha")+maqManual,pend:pendencias.includes(aj.legMaquininha)},
     aj.canalDinheiro&&{label:aj.legDinheiro,val:autoNoCampo("dinheiro")+dinManual,pend:pendencias.includes(aj.legDinheiro)},
-    aj.canalVendasExtras&&{label:aj.legVendasExtras,val:deliveryValorExibir,pend:pendencias.includes(aj.legVendasExtras)},
+    aj.canalVendasExtras&&{label:legDelivery,val:deliveryValorExibir,pend:pendencias.includes(legDelivery)},
     aj.canalIfood&&{label:"iFood",val:ifoodLiq,pend:ifoodBruto<=0},
     aj.canal99food&&{label:"99Food",val:nfoodLiq,pend:nfoodBruto<=0},
     penduraAutomatica>0.005&&{label:"pendura (a receber)",val:penduraAutomatica,pend:false},
@@ -3881,14 +3931,26 @@ function Vendas({db,setDb,setDbAndSave,state,aj,login,empresa}:{db:any,setDb:any
     gravarFechamento(f=>({marcados:{...(f.marcados||{}),[String(i)]:marcado?null:{por:login?.label||"",em:new Date().toISOString()}}}));
   };
   const salvarObs=()=>{if((fechDia.obs||"")!==obsLocal)gravarFechamento(()=>({obs:obsLocal}));};
+  // ---- "Sem movimento / loja fechada" ----------------------------------------
+  // ⚠️ UM DOMINGO FECHADO E UM 99FOOD QUE ATRASOU eram a MESMA linha na
+  // Supervisão do PDV: "dias sem registro — loja fechada ou falha no envio do
+  // PDV", escrito assim porque a tela não tinha como saber. Uma lista que enche
+  // de domingos deixa de ser lida, e a falha real se esconde dentro dela.
+  //
+  // ⚠️ DESMARCAR GRAVA `null`, não apaga a chave: `fechamentos[dia]` é fundido
+  // por união rasa nos dois lugares (§3/§6), e a chave removida voltaria do
+  // outro aparelho no POST seguinte — exatamente a lição do `marcados`.
+  const semMovimento=!!fechDia.semMovimento;
+  const alternarSemMovimento=()=>gravarFechamento(()=>({
+    semMovimento:semMovimento?null:{por:login?.label||"",em:new Date().toISOString()}}));
   const imprimirFechamento=()=>{
     const linhas:[string,string,number|null][]=linhasAuto.map(l=>[l.label,l.fonte,l.val] as [string,string,number|null]);
-    if(deliverySincronizado)linhas.push([aj.legVendasExtras,"sincronizado",vendaSincronizada.delivery||0]);
+    if(deliverySincronizado)linhas.push([legDelivery,"sincronizado",vendaSincronizada.delivery||0]);
     if(autoMaq){if(maqManual>0)linhas.push([aj.legMaquininha+" fora do PDV","manual",maqManual]);}
     else linhas.push([aj.legMaquininha,"manual",maqManual>0?maqManual:null]);
     if(aj.canalDinheiro){if(autoDin){if(dinManual>0)linhas.push([aj.legDinheiro+" extra","manual",dinManual]);}
       else linhas.push([aj.legDinheiro,"manual",dinManual>0?dinManual:null]);}
-    if(aj.canalVendasExtras&&!deliverySincronizado)linhas.push([aj.legVendasExtras,"manual",parseMoney(form.delivery||0)>0?parseMoney(form.delivery||0):null]);
+    if(aj.canalVendasExtras&&!deliverySincronizado)linhas.push([legDelivery,"manual",parseMoney(form.delivery||0)>0?parseMoney(form.delivery||0):null]);
     if(aj.canalIfood)linhas.push(["iFood (líquido)","manual",ifoodBruto>0?ifoodLiq:null]);
     if(aj.canal99food)linhas.push(["99Food (líquido)","manual",nfoodBruto>0?nfoodLiq:null]);
     abrirRelatorio(gerarFechamentoCaixaHTML({empresa:empresa||"",data:form.data,linhas,pendura:penduraAutomatica,totalDia,comprasDia:comprasDoDia,itens:checklistItens,obs:obsLocal}));
@@ -4140,7 +4202,7 @@ Se não houver nenhuma imagem de algum tipo, retorne 0 nos campos correspondente
           <span style={{width:44,textAlign:"right"}}>{deltaTag(l.val,l.ontem)}</span>
         </div>)}
         {deliverySincronizado&&<div style={{display:"flex",alignItems:"center",gap:8,padding:"4px 0",fontSize:13}}>
-          <span style={{flex:1,minWidth:0,color:"var(--text2)",...FONTE_APP}}>{aj.legVendasExtras}{chipEstado("sincronizado","ok")}
+          <span style={{flex:1,minWidth:0,color:"var(--text2)",...FONTE_APP}}>{legDelivery}{chipEstado("sincronizado","ok")}
             <button onClick={()=>{setDeliveryManual(true);setForm(f=>({...f,delivery:String((vendaSincronizada.delivery||0).toFixed(2)).replace(".",",")}));}} style={{background:"none",border:"none",color:"var(--btnPrimary)",cursor:"pointer",fontSize:11,fontWeight:700,textDecoration:"underline",padding:0,marginLeft:8}}>editar</button>
           </span>
           <span style={MONO}>{fmtMoney(vendaSincronizada.delivery||0)}</span>
@@ -4238,7 +4300,7 @@ Se não houver nenhuma imagem de algum tipo, retorne 0 nos campos correspondente
         <input type="number" value={form.nfoodTaxa} onChange={e=>setForm(f=>({...f,nfoodTaxa:e.target.value}))} placeholder="taxa" min="0" max="100" step="0.1" className="inp" style={{width:72,marginBottom:0,padding:"10px 8px",textAlign:"right",...MONO}}/>
         <span style={{fontSize:11,color:"var(--text2)"}}>%</span>
       </LinhaFechamento>}
-      {aj.canalVendasExtras&&!deliverySincronizado&&<LinhaFechamento Icone={IconDelivery} label={aj.legVendasExtras} ontem={ontem("delivery")} valor={parseMoney(form.delivery||0)} direita={deltaTag(parseMoney(form.delivery||0),ontem("delivery"))}>
+      {aj.canalVendasExtras&&!deliverySincronizado&&<LinhaFechamento Icone={IconDelivery} label={legDelivery} ontem={ontem("delivery")} valor={parseMoney(form.delivery||0)} direita={deltaTag(parseMoney(form.delivery||0),ontem("delivery"))}>
         <MoneyInput value={form.delivery} onChange={v=>{setDeliveryManual(true);setForm(f=>({...f,delivery:v}));}} className="inp" placeholder="—" style={inpMoney}/>
         {deliveryManual&&vendaSincronizada&&(vendaSincronizada.delivery||0)>0&&
           <button onClick={()=>setDeliveryManual(false)} style={{background:"none",border:"none",color:"var(--btnPrimary)",cursor:"pointer",fontSize:11,fontWeight:700,textDecoration:"underline",padding:0,...FONTE_APP}}>usar valor sincronizado</button>}
@@ -4308,7 +4370,7 @@ Se não houver nenhuma imagem de algum tipo, retorne 0 nos campos correspondente
         const total=(db.vendas||[]).reduce((s,v)=>s+v.total,0);
         abrirRelatorio(gerarRelatorioHTML("Relatório de Vendas","Vendas",`
           <table>
-            <thead><tr><th>Data</th><th>${aj.legMaquininha}</th><th>${aj.legDinheiro}</th><th>iFood</th><th>99Food</th><th>${aj.legVendasExtras}</th><th>Total</th></tr></thead>
+            <thead><tr><th>Data</th><th>${aj.legMaquininha}</th><th>${aj.legDinheiro}</th><th>iFood</th><th>99Food</th><th>${legDelivery}</th><th>Total</th></tr></thead>
             <tbody>${rows}</tbody>
             <tfoot><tr><td colspan="6" style="text-align:right;font-weight:700">TOTAL</td><td style="text-align:right;font-weight:700">${fmtMoney(total)}</td></tr></tfoot>
           </table>`));
@@ -4328,7 +4390,7 @@ Se não houver nenhuma imagem de algum tipo, retorne 0 nos campos correspondente
         <div style={{overflowX:"auto" as const,marginTop:6}}>
           <table style={{width:"100%",borderCollapse:"collapse" as const,fontSize:12,minWidth:560}}>
             <thead><tr style={{fontSize:10,color:"var(--text3)"}}>
-              <th style={thL}>Origem</th><th style={thR}>{aj.legDinheiro}</th><th style={thR}>{aj.legMaquininha}</th><th style={thR}>{aj.legVendasExtras}</th><th style={thR}>iFood</th><th style={thR}>99Food</th><th style={thR}>Total</th><th style={{width:56,borderBottom:"1px solid var(--border)"}}/>
+              <th style={thL}>Origem</th><th style={thR}>{aj.legDinheiro}</th><th style={thR}>{aj.legMaquininha}</th><th style={thR}>{legDelivery}</th><th style={thR}>iFood</th><th style={thR}>99Food</th><th style={thR}>Total</th><th style={{width:56,borderBottom:"1px solid var(--border)"}}/>
             </tr></thead>
             <tbody>
               {g.itens.map((v:any)=>{const det=detalheVenda(v);const vazio=(v.total||0)<=0.005;return <Fragment key={v.id}>
@@ -4755,7 +4817,7 @@ function VendasAjustesPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:any,s
       <Campo label="Nome da aba no menu"><TextoComSalvar field="legNomeAba" placeholder="Vendas"/></Campo>
       <Campo label={`Rótulo "Cliente"`}><TextoComSalvar field="legCliente" placeholder="Cliente"/></Campo>
       <Campo label={`Botão "Emitir Recibo"`}><TextoComSalvar field="legBotaoEmitir" placeholder="Emitir Recibo"/></Campo>
-      <Campo label={`Rótulo "Vendas Extras"`}><TextoComSalvar field="legVendasExtras" placeholder="Vendas Extras"/></Campo>
+      <Campo label="Rótulo do canal de Delivery" hint="O campo é o mesmo de sempre (o delivery próprio); só o nome na tela muda. Em branco, vale &ldquo;Delivery&rdquo;."><TextoComSalvar field="legVendasExtras" placeholder="Delivery"/></Campo>
     </Grupo>
 
     <Grupo icon="🏷️" titulo="Legendas dos campos de Lançamentos">
@@ -4772,7 +4834,7 @@ function VendasAjustesPanel({db,setDb,setDbAndSave,onVoltar}:{db:any,setDb:any,s
     <Grupo icon="⚡" titulo="Canais ativos em Lançamentos">
       <ToggleSwitch checked={true} onChange={()=>{}} disabled label="Maquininha" desc="Sempre ativo — é o canal principal"/>
       {([
-        ["canalDinheiro","Dinheiro"],["canalIfood","iFood"],["canal99food","99Food"],["canalVendasExtras",aj.legVendasExtras],
+        ["canalDinheiro","Dinheiro"],["canalIfood","iFood"],["canal99food","99Food"],["canalVendasExtras",rotuloDelivery(aj)],
       ] as [string,string][]).map(([key,label])=>(
         <ToggleSwitch key={key} checked={!!(aj as any)[key]} onChange={v=>setAj(key,v)} label={label} desc="Desligado, o campo some do formulário de Lançamentos"/>
       ))}
@@ -4984,18 +5046,31 @@ function EmitirReciboPanel({db,setDb,setDbAndSave,login,aj,empresa,onVoltar}:{db
     const numero=Math.max(0,...(db.recibosVenda||[]).map((r:any)=>r.numero||0))+1;
     const recibo={id:uid(),numero,clienteNome:clienteNome.trim(),clienteTelefone:clienteTelefone.trim(),
       itens:itensVenda.map(({id,produtoId,...it})=>it),total:totalVenda,data,criadoEm:now,atualizadoEm:now,
-      lancadoEmVendas:true,valorLancado:totalVenda};
+      // ⚠️ O RECIBO CARIMBA EM QUAL BUCKET ELE SOMOU. Sem isso, desfazer um
+      // recibo antigo (que somou em `delivery`) pelo bucket novo deixaria o
+      // valor preso lá para sempre, e o dia fecharia errado para os dois
+      // lados. Data de corte seria palpite; o carimbo é o fato.
+      lancadoEmVendas:true,valorLancado:totalVenda,bucket:BUCKET_RECIBO_BALCAO};
     setDbAndSave((d:any)=>{
-      // Mesmo lançamento manual de Vendas (data/maquininha/dinheiro/.../delivery) —
-      // só soma no bucket "delivery" do dia, igual o Recibo de Entrega soma em
-      // "entregasClientes". Cria a linha do dia se ainda não existir.
+      // ⚠️ O RECIBO DE BALCÃO TEM BUCKET PRÓPRIO desde 21/09/2026
+      // (`recibosBalcao`). Antes ele somava em `delivery`, o mesmo campo do
+      // delivery próprio sincronizado: "Delivery" no Dashboard passava a
+      // incluir venda que não foi entregue a ninguém, e não havia como separar
+      // depois, porque o campo era um só.
+      //
+      // ⚠️ O HISTÓRICO NÃO FOI RECLASSIFICADO (decisão do dono): o que já está
+      // em `delivery` fica lá. Adivinhar quais reais antigos eram recibo seria
+      // chute sobre período fechado. A separação vale a partir daqui, e a tela
+      // de Lançamentos avisa isso uma vez.
+      //
+      // Cria a linha do dia se ainda não existir.
       let vendas=[...(d.vendas||[])];
       vendas=consolidarVendasDoDia(vendas,data,"recibo_venda");
       const i=vendas.findIndex((v:any)=>v.data===data&&origemVenda(v)==="recibo_venda");
       if(i>=0){
-        vendas[i]={...vendas[i],delivery:(vendas[i].delivery||0)+totalVenda,total:(vendas[i].total||0)+totalVenda,atualizadoEm:now};
+        vendas[i]={...vendas[i],[BUCKET_RECIBO_BALCAO]:(vendas[i][BUCKET_RECIBO_BALCAO]||0)+totalVenda,total:(vendas[i].total||0)+totalVenda,atualizadoEm:now};
       }else{
-        vendas.unshift({id:uid(),data,total:totalVenda,maquininha:0,dinheiro:0,ifood:0,ifoodTaxa:0,ifoodLiq:0,"99food":0,nfoodTaxa:0,nfoodLiq:0,delivery:totalVenda,origem:"recibo_venda",criadoEm:now,atualizadoEm:now});
+        vendas.unshift({id:uid(),data,total:totalVenda,maquininha:0,dinheiro:0,ifood:0,ifoodTaxa:0,ifoodLiq:0,"99food":0,nfoodTaxa:0,nfoodLiq:0,delivery:0,[BUCKET_RECIBO_BALCAO]:totalVenda,origem:"recibo_venda",criadoEm:now,atualizadoEm:now});
       }
       return{...d,recibosVenda:[recibo,...(d.recibosVenda||[])],clientesEncomenda:upsertCliente(d.clientesEncomenda||[],clienteNome,clienteTelefone,now),vendas};
     });
@@ -5008,7 +5083,7 @@ function EmitirReciboPanel({db,setDb,setDbAndSave,login,aj,empresa,onVoltar}:{db
     return <div style={{maxWidth:480,margin:"0 auto"}}>
       <div style={{display:"flex",alignItems:"center",gap:10,background:"var(--successBg)",border:"1px solid #22C55E55",borderRadius:10,padding:"11px 14px",marginBottom:18}}>
         <span style={{fontSize:22}}>✅</span>
-        <span style={{fontSize:13,color:"var(--successText)",fontWeight:700,lineHeight:1.4}}>Venda registrada! {fmtMoney(reciboGerado.total)} somado em Vendas → {aj.legVendasExtras} de {fmtDate(reciboGerado.data)}.</span>
+        <span style={{fontSize:13,color:"var(--successText)",fontWeight:700,lineHeight:1.4}}>Venda registrada! {fmtMoney(reciboGerado.total)} somado em Vendas → {ROTULO_RECIBOS} de {fmtDate(reciboGerado.data)}.</span>
       </div>
       <div style={{fontSize:11,fontWeight:800,letterSpacing:.5,color:"var(--text2)",textTransform:"uppercase" as const,marginBottom:2}}>{impressaoNome(cfg,empresa||"Seama")}</div>
       <div style={{fontSize:19,fontWeight:800,marginBottom:14}}>Recibo de Venda #{formatarNumeroRecibo(reciboGerado.numero,aj)}</div>
@@ -5114,7 +5189,7 @@ function EmitirReciboPanel({db,setDb,setDbAndSave,login,aj,empresa,onVoltar}:{db
           <div className="card" style={{marginBottom:14}}>
             <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:8}}>Data da venda</div>
             <input type="date" value={dataVenda} onChange={e=>setDataVenda(e.target.value)} className="inp" style={{marginBottom:0,width:"100%"}}/>
-            {dataVenda&&dataVenda!==today()&&<div style={{fontSize:10,color:"#F59E0B",marginTop:6}}>⚠️ Diferente de hoje — o recibo e o lançamento em Vendas → {aj.legVendasExtras} vão pra esta data.</div>}
+            {dataVenda&&dataVenda!==today()&&<div style={{fontSize:10,color:"#F59E0B",marginTop:6}}>⚠️ Diferente de hoje — o recibo e o lançamento em Vendas → {ROTULO_RECIBOS} vão pra esta data.</div>}
           </div>
           <div className="card">
             <div style={{fontSize:11,fontWeight:800,color:"var(--text2)",textTransform:"uppercase" as const,letterSpacing:.5,marginBottom:8}}>{aj.legCliente}</div>
@@ -5146,7 +5221,7 @@ function EmitirReciboPanel({db,setDb,setDbAndSave,login,aj,empresa,onVoltar}:{db
             <span style={{fontSize:22,fontWeight:800}}>{fmtMoney(totalVenda)}</span>
           </div>
           <button onClick={finalizarVenda} className="btn" style={{width:"100%",background:"var(--categoryText)",color:"#fff",padding:13,fontSize:14,fontWeight:800,marginTop:12}}>✅ Finalizar Venda</button>
-          <div style={{fontSize:10,color:"var(--text2)",textAlign:"center" as const,marginTop:8,lineHeight:1.5}}>Ao finalizar, o valor entra em <b>Vendas → {aj.legVendasExtras}</b> de {fmtDate(dataVenda||today())}.</div>
+          <div style={{fontSize:10,color:"var(--text2)",textAlign:"center" as const,marginTop:8,lineHeight:1.5}}>Ao finalizar, o valor entra em <b>Vendas → {ROTULO_RECIBOS}</b> de {fmtDate(dataVenda||today())}.</div>
         </div>
       </div>
       </>}
@@ -5156,11 +5231,18 @@ function EmitirReciboPanel({db,setDb,setDbAndSave,login,aj,empresa,onVoltar}:{db
 function RecibosVendaHistPanel({db,setDb,setDbAndSave,aj,empresa,onVoltar}:{db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,aj?:any,empresa?:string,onVoltar:()=>void}){
   aj=aj||VENDAS_AJUSTES_DEFAULT;
   const cfg=getImpressaoCfg(db);
-  // Recibo de venda balcão soma no bucket "delivery" do dia; recibo gerado
-  // por um pedido de produção confirmado (Extrato de cliente) soma em
-  // "entregasClientes" — editar/excluir precisa desfazer no bucket certo,
-  // senão o total do dia fica errado (subtrai de um bucket que nunca somou).
-  const bucketDoRecibo=(r:any)=>r.origem==="producao"?"entregasClientes":"delivery";
+  // Recibo de venda balcão soma no bucket PRÓPRIO dele (`recibosBalcao`);
+  // recibo gerado por um pedido de produção confirmado (Extrato de cliente)
+  // soma em "entregasClientes" — editar/excluir precisa desfazer no bucket
+  // certo, senão o total do dia fica errado (subtrai de um bucket que nunca
+  // somou).
+  //
+  // ⚠️ RECIBO ANTIGO SOMOU EM `delivery`, e desfazê-lo pelo bucket novo
+  // deixaria o valor preso lá para sempre. `bucketDoReciboLido` olha o que o
+  // recibo carrega: gravado antes da separação, ele desfaz no campo antigo.
+  // Recibo sem carimbo é anterior à separação: ele somou em `delivery`, e é de
+  // lá que tem que sair.
+  const bucketDoReciboLido=(r:any)=>r.origem==="producao"?BUCKET_RECIBO_ENCOMENDA:(r.bucket||"delivery");
   const [reciboEditando,setReciboEditando]=useState<any|null>(null);
   const [tipoEdicao,setTipoEdicao]=useState<"cliente"|"itens"|"valores"|"data"|"devolver"|"vendasExtras"|null>(null);
   const [busca,setBusca]=useState("");
@@ -5196,7 +5278,7 @@ function RecibosVendaHistPanel({db,setDb,setDbAndSave,aj,empresa,onVoltar}:{db:a
       let extra:any={};
       if(novoValorVendas!=null){
         const dataAlvo=atualizacoesRecibo.data||antigo.data;
-        const bucket=bucketDoRecibo(antigo);
+        const bucket=bucketDoReciboLido(antigo);
         const valorAntigo=antigo.lancadoEmVendas?(antigo.valorLancado||0):0;
         // Junta duplicata do dia (dentro da mesma origem "recibo_venda") antes
         // de mexer — senão o subtrai/soma podia acertar a duplicata errada (a
@@ -5228,7 +5310,7 @@ function RecibosVendaHistPanel({db,setDb,setDbAndSave,aj,empresa,onVoltar}:{db:a
     const jaLancado=r.lancadoEmVendas&&r.valorLancado>0;
     const voltaProducao=r.origem==="producao"&&r.recibosEntregaIds?.length;
     const msg=(jaLancado
-      ?`Excluir recibo #${formatarNumeroRecibo(r.numero,aj)}?\n\nEste recibo já está somado em ${aj.legVendasExtras} de ${fmtDate(r.data)}. Excluir também vai subtrair ${fmtMoney(r.valorLancado)} desse dia.`
+      ?`Excluir recibo #${formatarNumeroRecibo(r.numero,aj)}?\n\nEste recibo já está somado em ${ROTULO_RECIBOS} de ${fmtDate(r.data)}. Excluir também vai subtrair ${fmtMoney(r.valorLancado)} desse dia.`
       :`Excluir recibo #${formatarNumeroRecibo(r.numero,aj)}?`)
       +(voltaProducao?`\n\nEste recibo veio de um pedido de produção — excluir volta ele pra "a receber" lá, com a opção de gerar de novo.`:"");
     if(!confirm(msg))return;
@@ -5242,7 +5324,7 @@ function RecibosVendaHistPanel({db,setDb,setDbAndSave,aj,empresa,onVoltar}:{db:a
       let vendas=[...(d.vendas||[])];
       if(jaLancado){
         vendas=consolidarVendasDoDia(vendas,r.data,"recibo_venda");
-        const bucket=bucketDoRecibo(r);
+        const bucket=bucketDoReciboLido(r);
         const i=vendas.findIndex((v:any)=>v.data===r.data&&origemVenda(v)==="recibo_venda");
         if(i>=0)vendas[i]={...vendas[i],[bucket]:Math.max(0,(vendas[i][bucket]||0)-r.valorLancado),total:Math.max(0,(vendas[i].total||0)-r.valorLancado),atualizadoEm:now};
       }
@@ -5282,7 +5364,7 @@ function RecibosVendaHistPanel({db,setDb,setDbAndSave,aj,empresa,onVoltar}:{db:a
         <div style={{fontSize:16,fontWeight:800,color:"var(--successText)"}}>{fmtMoney(r.total)}</div>
       </div>
       {aj.mostrarChipVendasExtras&&<span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:20,marginTop:8,...(r.lancadoEmVendas&&r.valorLancado>0?{background:"var(--successBg)",color:"var(--successText)",border:"1px solid #22C55E55"}:{background:"var(--warningBg)",color:"var(--warningText)",border:"1px solid #FDE68A"})}}>
-        {r.lancadoEmVendas&&r.valorLancado>0?`✓ Em ${aj.legVendasExtras}`:"⚠️ Não lançado"}
+        {r.lancadoEmVendas&&r.valorLancado>0?`✓ Em ${ROTULO_RECIBOS}`:"⚠️ Não lançado"}
       </span>}
       <div style={{display:"flex",gap:6,marginTop:10,flexWrap:"wrap" as const}}>
         {aj.mostrarWhatsapp&&<button onClick={()=>window.open(`https://wa.me/?text=${encodeURIComponent(montarTextoWhatsRecibo(r,cfg,aj,empresa))}`,"_blank")} style={{background:"none",border:"1px solid #25d36644",borderRadius:5,color:"#25d366",cursor:"pointer",fontSize:11,padding:"4px 10px",fontWeight:700}}>📲 WhatsApp</button>}
@@ -5331,7 +5413,7 @@ function PainelEdicaoRecibo({recibo,tipoEdicao,setTipoEdicao,onSalvar,onSalvarCo
           <div style={{fontSize:11,color:"var(--text2)",marginTop:4}}>{dataEdit}</div>
         </button>
         <button onClick={()=>setTipoEdicao("vendasExtras")} style={{background:"none",border:"1px solid var(--border2)",borderRadius:8,padding:"14px",textAlign:"left",cursor:"pointer",fontSize:13,fontWeight:600}}>
-          💵 {aj.legVendasExtras}
+          💵 {ROTULO_RECIBOS}
           <div style={{fontSize:11,color:recibo.lancadoEmVendas&&recibo.valorLancado>0?"#15803D":"#B45309",marginTop:4,fontWeight:700}}>{recibo.lancadoEmVendas&&recibo.valorLancado>0?`✓ Já lançado · R$ ${(recibo.valorLancado||0).toFixed(2).replace(".",",")}`:"⚠️ Ainda não lançado"}</div>
         </button>
         <button onClick={()=>setTipoEdicao("devolver")} style={{background:"none",border:"1px solid var(--border2)",borderRadius:8,padding:"14px",textAlign:"left",cursor:"pointer",fontSize:13,fontWeight:600,color:"#dc2626"}}>
@@ -5364,17 +5446,17 @@ function PainelEdicaoRecibo({recibo,tipoEdicao,setTipoEdicao,onSalvar,onSalvarCo
   if(tipoEdicao==="vendasExtras"){
     const lancado=recibo.lancadoEmVendas&&recibo.valorLancado>0;
     return <div>
-      <BackBar label={aj.legVendasExtras} onClick={()=>setTipoEdicao(null)}/>
+      <BackBar label={ROTULO_RECIBOS} onClick={()=>setTipoEdicao(null)}/>
       {lancado
         ? <div style={{background:"var(--successBg)",border:"1px solid #22C55E55",borderRadius:10,padding:14,marginBottom:16}}>
-            <div style={{fontWeight:800,fontSize:13,color:"var(--successText)"}}>✓ Lançado em {aj.legVendasExtras}</div>
+            <div style={{fontWeight:800,fontSize:13,color:"var(--successText)"}}>✓ Lançado em {ROTULO_RECIBOS}</div>
             <div style={{fontSize:11.5,color:"var(--text2)",marginTop:5,lineHeight:1.5}}>{fmtMoney(recibo.valorLancado)} somado em {fmtDate(recibo.data)}. Editou os itens? Use "Editar Itens" pra reenviar o valor certo.</div>
           </div>
         : <div style={{background:"var(--warningBg)",border:"1px solid #FDE68A",borderRadius:10,padding:14,marginBottom:16}}>
-            <div style={{fontWeight:800,fontSize:13,color:"var(--warningText)"}}>⚠️ Ainda não lançado em {aj.legVendasExtras}</div>
+            <div style={{fontWeight:800,fontSize:13,color:"var(--warningText)"}}>⚠️ Ainda não lançado em {ROTULO_RECIBOS}</div>
             <div style={{fontSize:11.5,color:"var(--text2)",marginTop:5,lineHeight:1.5}}>Recibos não entram automaticamente aqui — use o botão abaixo pra somar {fmtMoney(recibo.total)} no dia {fmtDate(recibo.data)}.</div>
           </div>}
-      <button disabled={lancado} onClick={()=>onSalvarComVendas({},recibo.total)} style={{width:"100%",background:lancado?"var(--border2)":"var(--btnPrimary)",color:lancado?"var(--text2)":"white",border:"none",borderRadius:6,padding:"12px",fontWeight:700,cursor:lancado?"default":"pointer",fontSize:14}}>{lancado?"✓ Já lançado":`💵 Lançar em ${aj.legVendasExtras}`}</button>
+      <button disabled={lancado} onClick={()=>onSalvarComVendas({},recibo.total)} style={{width:"100%",background:lancado?"var(--border2)":"var(--btnPrimary)",color:lancado?"var(--text2)":"white",border:"none",borderRadius:6,padding:"12px",fontWeight:700,cursor:lancado?"default":"pointer",fontSize:14}}>{lancado?"✓ Já lançado":`💵 Lançar em ${ROTULO_RECIBOS}`}</button>
     </div>;
   }
 
@@ -5397,7 +5479,7 @@ function PainelEdicaoRecibo({recibo,tipoEdicao,setTipoEdicao,onSalvar,onSalvarCo
         </div>
       </div>
       {jaLancado&&<div style={{background:"var(--infoBg)",border:"1px solid var(--border2)",borderRadius:6,padding:"10px 12px",marginBottom:16,fontSize:11.5,color:"var(--text2)",lineHeight:1.5}}>
-        Em {aj.legVendasExtras}, o dia {fmtDate(recibo.data)} passa de <b>{fmtMoney(recibo.valorLancado)}</b> para <b>{fmtMoney(Math.round((parseFloat(totalEdit)||0)*100)/100)}</b> ao salvar.
+        Em {ROTULO_RECIBOS}, o dia {fmtDate(recibo.data)} passa de <b>{fmtMoney(recibo.valorLancado)}</b> para <b>{fmtMoney(Math.round((parseFloat(totalEdit)||0)*100)/100)}</b> ao salvar.
       </div>}
       <button onClick={()=>{
         const novo=Math.round((parseFloat(totalEdit)||0)*100)/100;
@@ -5419,8 +5501,8 @@ function PainelEdicaoRecibo({recibo,tipoEdicao,setTipoEdicao,onSalvar,onSalvarCo
       </div>
       {jaLancado&&<div style={{background:"var(--infoBg)",border:"1px solid var(--border2)",borderRadius:6,padding:"10px 12px",marginBottom:16,fontSize:11.5,color:"var(--text2)",lineHeight:1.5}}>
         {dataEdit&&dataEdit!==recibo.data
-          ?<>Em {aj.legVendasExtras}, <b>{fmtMoney(recibo.valorLancado)}</b> sai de {fmtDate(recibo.data)} e entra em <b>{fmtDate(dataEdit)}</b> ao salvar.</>
-          :<>Em {aj.legVendasExtras}, {fmtMoney(recibo.valorLancado)} está somado em {fmtDate(recibo.data)}.</>}
+          ?<>Em {ROTULO_RECIBOS}, <b>{fmtMoney(recibo.valorLancado)}</b> sai de {fmtDate(recibo.data)} e entra em <b>{fmtDate(dataEdit)}</b> ao salvar.</>
+          :<>Em {ROTULO_RECIBOS}, {fmtMoney(recibo.valorLancado)} está somado em {fmtDate(recibo.data)}.</>}
       </div>}
       <button onClick={()=>{
         if(!dataEdit)return alert("Informe a data do recibo.");
@@ -5510,7 +5592,7 @@ function EditorItensRecibo({recibo,onSalvarComVendas,aj,onVoltar}:{recibo:any,on
       <span style={{fontSize:20,fontWeight:800}}>{fmtMoney(novoTotal)}</span>
     </div>
     <div style={{background:"#7C3AED14",border:"1px solid #7C3AED",borderRadius:10,padding:14,marginTop:14}}>
-      <div style={{fontSize:12,fontWeight:800,color:"#5b21b6",marginBottom:8}}>🔄 Reenviar para {aj.legVendasExtras}?</div>
+      <div style={{fontSize:12,fontWeight:800,color:"#5b21b6",marginBottom:8}}>🔄 Reenviar para {ROTULO_RECIBOS}?</div>
       {jaLancado&&<div style={{fontSize:12,display:"flex",justifyContent:"space-between",padding:"3px 0"}}>
         <span style={{color:"var(--text2)"}}>Valor antigo (já lançado)</span>
         <strong style={{textDecoration:"line-through",color:"var(--text2)",fontWeight:700}}>{fmtMoney(recibo.valorLancado)}</strong>
@@ -5519,9 +5601,9 @@ function EditorItensRecibo({recibo,onSalvarComVendas,aj,onVoltar}:{recibo:any,on
         <span style={{color:"var(--text2)"}}>{jaLancado?"Novo valor":"Valor a lançar"}</span>
         <strong style={{color:"var(--successText)",fontSize:14}}>{fmtMoney(novoTotal)}</strong>
       </div>
-      <button disabled={!itens.length} onClick={()=>onSalvarComVendas({itens,total:novoTotal},novoTotal)} style={{width:"100%",background:!itens.length?"var(--border2)":"var(--btnPrimary)",color:!itens.length?"var(--text2)":"var(--onPrimary,#FFFFFF)",border:"none",borderRadius:6,padding:"12px",fontWeight:700,cursor:!itens.length?"default":"pointer",fontSize:14,marginTop:10}}>{jaLancado?`Salvar e substituir em ${aj.legVendasExtras}`:`Salvar e lançar em ${aj.legVendasExtras}`}</button>
+      <button disabled={!itens.length} onClick={()=>onSalvarComVendas({itens,total:novoTotal},novoTotal)} style={{width:"100%",background:!itens.length?"var(--border2)":"var(--btnPrimary)",color:!itens.length?"var(--text2)":"var(--onPrimary,#FFFFFF)",border:"none",borderRadius:6,padding:"12px",fontWeight:700,cursor:!itens.length?"default":"pointer",fontSize:14,marginTop:10}}>{jaLancado?`Salvar e substituir em ${ROTULO_RECIBOS}`:`Salvar e lançar em ${ROTULO_RECIBOS}`}</button>
     </div>
-    <button onClick={()=>onSalvarComVendas({itens,total:novoTotal},null)} style={{width:"100%",background:"none",border:"1px solid var(--border2)",borderRadius:6,padding:"10px",color:"var(--text2)",cursor:"pointer",fontSize:12,fontWeight:600,marginTop:10}}>Salvar sem mexer em {aj.legVendasExtras}</button>
+    <button onClick={()=>onSalvarComVendas({itens,total:novoTotal},null)} style={{width:"100%",background:"none",border:"1px solid var(--border2)",borderRadius:6,padding:"10px",color:"var(--text2)",cursor:"pointer",fontSize:12,fontWeight:600,marginTop:10}}>Salvar sem mexer em {ROTULO_RECIBOS}</button>
   </div>;
 }
 
@@ -6060,7 +6142,7 @@ function RecibosVendaRelatorioPanel({db,setDb,setDbAndSave,state,empresa,aj,onVo
           <span style={{fontSize:12,fontWeight:700,color:"var(--warningText)",textTransform:"uppercase" as const}}>{pendentes.length} recibo(s) pendente(s)</span>
           <span style={{fontSize:20,fontWeight:800,color:"var(--warningText)"}}>{fmtMoney(totalPendente)}</span>
         </div>
-        {!pendentes.length&&<EmptyState msg={`Nenhum recibo pendente — tudo lançado em ${aj.legVendasExtras}. 🎉`}/>}
+        {!pendentes.length&&<EmptyState msg={`Nenhum recibo pendente — tudo lançado em ${ROTULO_RECIBOS}. 🎉`}/>}
         {pendentes.sort((a:any,b:any)=>a.data<b.data?-1:1).map((r:any)=><div key={r.id} style={{display:"flex",justifyContent:"space-between",padding:"9px 0",borderBottom:"1px solid var(--border)"}}>
           <span style={{fontSize:13}}>#{formatarNumeroRecibo(r.numero,aj)} · {r.clienteNome} <span style={{color:"var(--text2)",fontSize:11}}>({fmtDate(r.data)})</span></span>
           <span style={{fontWeight:700,color:"var(--warningText)"}}>{fmtMoney(r.total)}</span>
@@ -16462,8 +16544,13 @@ function EstoqueTab({db,setDb,setDbAndSave,empresa,pendingSub,setPendingSub,onNa
         perdasPorMotivo[r]=(perdasPorMotivo[r]||0)+(mv.quantidade||0)*(cmpMap[mv.mpId]||mv.custo||0);
       });
       // CMV% vs receita bruta
+      // ⚠️ ISTO SOMAVA `v.nfood`, CAMPO QUE NÃO EXISTE — o 99Food é `v["99food"]`.
+      // O canal valia ZERO neste denominador, então o CMV% da Análise saía
+      // inflado e nada na tela denunciava: o número continuava plausível.
+      // Faltavam também os dois buckets de recibo. (Achado em 21/09/2026; a DRE
+      // tem conta própria e nunca passou por aqui.)
       const receitaBruta=(db.vendas||[]).filter((v:any)=>(v.data||"")>=cutoffStr)
-        .reduce((s:number,v:any)=>s+(v.maquininha||0)+(v.dinheiro||0)+(v.ifood||0)+(v.nfood||0)+(v.delivery||0),0);
+        .reduce((s:number,v:any)=>s+MODAIS_VENDA.reduce((t:number,m:string)=>t+(v[m]||0),0),0);
       const cmvPct=receitaBruta>0?(cmvReal/receitaBruta)*100:0;
       const valPorCat:Record<string,{valor:number,items:number,isCMV:boolean}>={};
       mps.forEach((m:any)=>{const cat=m.categoria||"outros";if(!valPorCat[cat])valPorCat[cat]={valor:0,items:0,isCMV:REGRAS_CAT[cat]?.cmv!==false};valPorCat[cat].valor+=(m.estoqueAtual||0)*(m.ultimoValor||0);valPorCat[cat].items++;});
@@ -19020,14 +19107,18 @@ function DREComp({db,setDb,empresa}){
     : contasBase.filter(c=>inPer(c.vencimento));
 
   // Vendas Brutas (gross incl. delivery fees)
-  const vendasBrutas=vendas.reduce((s,v)=>{
-    const ifFee=(v.ifood||0)-(v.ifoodLiq??v.ifood??0);
-    const nfFee=(v["99food"]||0)-(v.nfoodLiq??v["99food"]??0);
-    return s+(v.total||0)+ifFee+nfFee;
-  },0);
-  const despVendas=vendas.reduce((s,v)=>{
-    return s+((v.ifood||0)-(v.ifoodLiq??v.ifood??0))+((v["99food"]||0)-(v.nfoodLiq??v["99food"]??0));
-  },0);
+  // ⚠️ TAREFA 3 (21/09/2026) — A CONTA NÃO MUDOU, só saiu daqui.
+  // `taxasDePlataforma` é esta mesma fórmula, palavra por palavra, agora com
+  // teste (`src/fechamentoVendas.test.js`). Ela é a única parte do fechamento
+  // de Vendas que, mexida, NÃO aparece na tela de Vendas: aparece na linha
+  // "Taxas das plataformas" aqui embaixo, e só quando alguém for olhar a
+  // margem do mês. Nenhum canal sem comissão (delivery próprio, recibo de
+  // balcão, encomenda) entra nela — há teste travando isso.
+  const taxasPlat=taxasDePlataforma(vendas);
+  const despVendas=taxasPlat.total;
+  // Bruto = o que entrou + o que a plataforma reteve. Escrito assim, a relação
+  // entre as duas linhas fica explícita em vez de repetida.
+  const vendasBrutas=vendas.reduce((s,v)=>s+(v.total||0),0)+despVendas;
   const vendasLiq=vendasBrutas-despVendas;
 
   // CMV por categoria — só as 6 categorias de matéria-prima entram. Compra
@@ -19651,7 +19742,7 @@ function Relatorios({db,setDb,setDbAndSave,empresa,state}:{db:any,setDb:any,setD
     const pg=contasPer.filter(x=>x.status==="pago"&&x.tipo==="saida").reduce((s,x)=>s+parseMoney(x.valor),0);
     const pend=contasPer.filter(x=>x.status==="pendente").reduce((s,x)=>s+parseMoney(x.valor),0);
     const folha=(db.funcionarios||[]).reduce((s,f)=>s+f.salario,0);
-    const modais=["maquininha","dinheiro","ifood","99food","delivery"];
+    const modais=MODAIS_VENDA;
     const html=gerarRelatorioHTML("DRE – Demonstrativo de Resultado",empresa,`
       <div class="summary-grid">
         <div class="summary-card"><div class="val">${fmtMoney(v)}</div><div class="lbl">Receita Total</div></div>
@@ -19791,7 +19882,7 @@ function Relatorios({db,setDb,setDbAndSave,empresa,state}:{db:any,setDb:any,setD
   const gVendas=()=>{
     const vendas=(db.vendas||[]).filter(x=>inPer(x.data));
     const total=vendas.reduce((s,v)=>s+(v.total||0),0);
-    const modais=["maquininha","dinheiro","ifood","99food","delivery"];
+    const modais=MODAIS_VENDA;
     abrirRelatorio(gerarRelatorioHTML("Relatório de Vendas",empresa,`
       <div class="summary-grid">
         <div class="summary-card"><div class="val">${vendas.length}</div><div class="lbl">Dias</div></div>
@@ -23770,14 +23861,14 @@ ${cfg.encomendaAssinatura?`<div class="assinatura">Ciente: _____________________
 }
 
 
-const CANAIS_VENDA_TV:[string,string][]=[["maquininha","Maquininha"],["dinheiro","Dinheiro"],["ifood","iFood"],["99food","99Food"],["delivery","Delivery"],["entregasClientes","Entregas"]];
+const CANAIS_VENDA_TV:[string,string][]=[["maquininha","Maquininha"],["dinheiro","Dinheiro"],["ifood","iFood"],["99food","99Food"],["delivery","Delivery"],["recibosBalcao","Recibos"],["entregasClientes","Entregas"]];
 // Defesa contra duplicata de vendas do mesmo dia (registro velho antes do
 // conserto de "um lançamento por dia" em Lançamentos, ou qualquer outra
 // forma de acabar com dois registros pra mesma data): em vez de pegar só o
 // primeiro que .find() achar — que podia ser o incompleto, deixando os
 // paineis "Ao Vivo" com o total errado até alguém limpar a duplicata na
 // mão — soma os canais de TODOS os registros daquele dia.
-const CAMPOS_VENDA_NUM=["total","maquininha","dinheiro","ifood","ifoodLiq","99food","nfoodLiq","delivery","entregasClientes"];
+const CAMPOS_VENDA_NUM=["total","maquininha","dinheiro","ifood","ifoodLiq","99food","nfoodLiq","delivery","recibosBalcao","entregasClientes"];
 const mergeVendasDoDia=(vendas:any[],data:string):any=>{
   const dias=(vendas||[]).filter((v:any)=>v.data===data);
   if(!dias.length)return null;
