@@ -18,6 +18,8 @@ justamente por isso.
 | Empresas são `"confraria"` / `"seama"` | São **`"CONFRARIA"`** e **`"SEAMA"`**, maiúsculas |
 | Dados nunca são compartilhados entre empresas | **`produtosLista` é compartilhado de propósito** (ver `applyBothProdutos`) |
 | "Vendas Extras" é uma modalidade à parte do Delivery | **São o MESMO campo** — `vendas[].delivery`. `legVendasExtras` era só o rótulo dele |
+| O campo "Rua" da Lista é o corredor do mercado | Era **duas coisas no mesmo campo**: corredor (`"Rua 7"`) e loja inteira (`"Santa Lucia"`). Virou `localId` + `corredor` |
+| Categoria da Lista é livre | **Fechada** (`CATS_LISTA`, 10). Criar categoria na tela era a causa da poluição, não uma conveniência |
 | Existe `db.rh` / `db.financeiro` | Não. Folha vem de **`db.funcionarios`**; financeiro é **`db.contas`** |
 | Categoria tem campo de tipo/módulo | **Não tem campo nenhum.** São strings puras; todo vínculo é estrutura à parte, ligada por nome |
 
@@ -48,6 +50,7 @@ src/relatorioPlataforma.js  o relatório do iFood/99Food vira Vendas (com testes
 src/relatorioPeriodo.js  o período, os canais e as formas de pagamento (com testes)
 src/grupoMarcas.js    várias marcas e embalagens viram um produto só (com testes)
 src/dre.js            as fatias da barra da DRE e o aviso do CMV vazio (com testes)
+src/listaCompras.js   categoria fechada, local de compra e a ponte com Compras (com testes)
 src/fechamentoVendas.js  o fechamento do dia: rótulo, taxa da plataforma, loja
                       fechada e o progresso (com testes)
 src/qualidadeCompras.js  fornecedor duplicado, categoria obrigatória, preço por
@@ -712,6 +715,19 @@ Nenhuma dentro da categoria:
 | Vai pro PDV? | `db.config.categoriasParaPdvDesligadas` — **lista de EXCLUSÃO**, nasce ligada |
 | Linha da DRE | `db.mapaCategoriaDre` |
 | Sangria do PDV | `db.categoriaFinanceiroSangria` |
+
+### A Lista tem categoria PRÓPRIA — e agora um campo de LOCAL
+
+⚠️ **A separação do §5 continua valendo** (decisão do dono, 21/09/2026): a
+categoria da Lista organiza o **corredor**, a de Compras mede **CMV**. Unificá-las
+faria a lista de compras ser organizada por conta contábil — é a lição da
+Contagem, que agrupava por categoria contábil e virou "uma rolagem que ninguém
+termina".
+
+⚠️ **O QUE ESTAVA ERRADO NÃO ERA A SEPARAÇÃO, ERA O CAMPO LIVRE.** `db.ruaCatMap`
+DERIVA a rua da categoria: quem precisava marcar *onde compra* um item só tinha
+um caminho — criar uma CATEGORIA com o nome da loja, e a rua vinha junto. Foi
+assim que "queijo minas" e "cia do sorveteiro" viraram categoria. Ver §6, Lista.
 
 ### Comparação de nome
 
@@ -2331,6 +2347,103 @@ vínculo duplicado, não de bug de sincronização.
 A conversão é `materiasPrimas[].unidadesPorEmbalagem`. Sem ela, comparar
 "40 vendidas" com "7 compradas" inventa um rombo — por isso a tela avisa em vez
 de mostrar o número quando a conversão não está configurada.
+
+### Lista → Categoria e Local — `src/listaCompras.js` (com testes)
+
+A Lista misturava **o que o item é** com **onde ele se compra**, e a mistura não
+foi descuido: era o único caminho que a tela oferecia.
+
+| onde | o que guardava |
+|---|---|
+| `listaCompras[].rua` | ora corredor (**"Rua 7"**, que existe no Açaí *e* no Sendas), ora loja inteira (**"Santa Lucia"**) |
+| `db.ruaCatMap` | **categoria → rua**. É ele que fecha o círculo: para marcar onde se compra, criava-se uma categoria com o nome da loja |
+| `produtosLista[].cat` | as 19 operacionais, as criadas à mão (com nome de loja) **e** a categoria CONTÁBIL que `criarItemDaLista` grava desde a Fase 1 de Compras |
+
+#### A taxonomia virou FECHADA, com dez
+
+⚠️ **DEZ, NÃO DEZENOVE.** As antigas se sobrepunham tanto que arquivar virava
+adivinhação: "carnes" e "proteína" são a mesma coisa; "grãos", "farinhas",
+"massas", "molhos", "temperos" e "latas, caixas e temperos" são todas a
+mercearia. Categoria que se sobrepõe não organiza — só multiplica o lugar onde o
+item pode estar, e é parte do motivo de alguém preferir criar uma nova a procurar
+a certa. **A ordem é a do CORREDOR**, não alfabética.
+
+⚠️ **`categoriaFechada` traduz na LEITURA** as 19 antigas E as 8 contábeis —
+nenhum item precisou ser reescrito para aparecer no lugar certo. O que não casa
+devolve **`null`, nunca "Outros"**: chutar esconderia o trabalho, porque o que
+não casa é exatamente o nome de loja e o produto que viraram categoria.
+
+⚠️ **CRIAR CATEGORIA NA TELA DEIXOU DE EXISTIR**, e não é restrição de permissão
+— é a causa removida. `addCat`/`delCat`/`renameCat` foram apagadas. Renomear
+também: renomear categoria quebra vínculo por nome (§5), e com lista fixa não há
+o que renomear. O que sobrou de inválido se resolve em **Lista → Categorias**,
+que **reclassifica os itens** em vez de editar o nome.
+
+#### "Rua 7" é corredor; "Santa Lucia" é loja
+
+⚠️ **O NÚMERO É A ÚNICA PISTA CONFIÁVEL** no dado antigo (`classificarRua`).
+"Supermercado 3 Irmãos" continua sendo loja.
+
+⚠️ **O CORREDOR NÃO SABE DE QUAL LOJA É** — "Rua 7" existe no Açaí e no Sendas.
+Por isso a migração **exige escolher o local à mão**: adivinhar mandaria o item
+para o mercado errado, e a lista sairia impossível de seguir sem ninguém
+entender por quê. `planoDeMigracao` lê e **não decide nada**; categoria fora da
+taxonomia tanto pode ser loja ("cia do sorveteiro") quanto produto ("bombom"), e
+as duas viram pergunta com o motivo escrito (`pareceLocal` quando o mesmo nome
+também é uma rua — a assinatura do problema).
+
+⚠️ **A tela "Ruas" foi APAGADA** junto com as funções dela. Ela cadastrava rua
+por texto livre e mantinha o `ruaCatMap` — o mecanismo inteiro. O `sub:"ruas"`
+saiu do menu junto, senão ficaria bloco pendurado num `sub` que nada seleciona:
+tela em branco sem erro nenhum (a armadilha do `ABA_REL_ANTIGA`).
+
+⚠️ **`db.listaRuas` e `db.ruaCatMap` NÃO foram apagados do banco**: são a fonte
+que a migração lê para propor os locais. Some a tela, fica o dado.
+
+#### Os locais
+
+⚠️ **INATIVAR, NUNCA EXCLUIR.** Item antigo aponta para o local pelo **id**:
+apagando o cadastro, a lista arquivada deixa de dizer onde aquilo foi comprado.
+Por isso `locaisCompra` não precisa de tombstone.
+
+⚠️ **O corredor só aparece quando o local escolhido TEM corredor cadastrado** —
+num mercadinho sem corredor numerado, o campo seria uma pergunta sem resposta. E
+trocar de local **limpa** o corredor, senão ficaria a "Rua 7" de outra loja.
+
+⚠️ `locaisCompra` está nas **duas** fusões (§3).
+
+#### "Tem na Loja" virou saldo real
+
+⚠️ Era **digitado à mão** (`estoqueQtd`) e nunca mais conferido: o número podia
+ter sido escrito três semanas antes. Agora vem de `mpVinculados` →
+`materiasPrimas[].estoqueAtual` (`saldoDoItem`). **Sem vínculo não mostra nada**
+— zero diria "não tem na loja", que é uma afirmação; não mostrar é "não sei", que
+é a verdade. Um campo em branco para preencher à mão reintroduziria exatamente o
+dado velho. Os valores antigos continuam no `db` e no histórico impresso.
+
+#### O elo com Compras
+
+⚠️ **ENCHE O CARRINHO, NÃO LANÇA A COMPRA.** A lista sabe produto, categoria e
+quanto foi pedido; **não sabe preço**, e preço é o que a compra existe para
+registrar. Lançar sozinho criaria entrada com valor zero, que estraga o CMV em
+silêncio.
+
+⚠️ **A categoria vai TRADUZIDA para a contábil** (`contabilDaLista`). Mandar
+"Açougue e frios" direto para o campo de Compras criaria uma categoria contábil
+nova — a mesma poluição desta fase, do outro lado. Quem chega sem categoria vira
+"Outros", que é justamente o que a revisão de entrada (Fase 1) obriga alguém a
+resolver antes de gravar.
+
+⚠️ **É UM BOTÃO, NÃO UM DIÁLOGO A CADA ITEM MARCADO.** Quem faz compra marca dez
+itens seguidos, e uma pergunta por marcação vira a pergunta que se fecha sem ler.
+
+⚠️ **A entrega é de mão em mão, não campo no `db`** (`poremRascunhoCompras` /
+`tomarRascunhoCompras`). É estado de navegação: no `db` viraria campo novo nas
+duas fusões e, pior, um rascunho esquecido voltaria dias depois no aparelho de
+outra pessoa. **Esvazia ao ser lido**, senão voltar à aba encheria o carrinho de
+novo.
+
+`src/listaTela.test.js` lê o `App.tsx` e trava as nove decisões acima.
 
 ### Lista de Compras — blindagem
 

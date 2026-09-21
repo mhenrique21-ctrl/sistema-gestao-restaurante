@@ -2,7 +2,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   CATS_LISTA, categoriaFechada, classificarRua, novoLocal, locaisAtivos,
-  localPorId, planoDeMigracao, saldoDoItem,
+  localPorId, planoDeMigracao, saldoDoItem, contabilDaLista,
 } from './listaCompras.js';
 
 describe('a taxonomia fechada da Lista', () => {
@@ -200,5 +200,34 @@ describe('"Tem na Loja" vem do saldo real', () => {
   test('vínculo apontando para marca que sumiu não vira zero', () => {
     const r = saldoDoItem({ nome: 'Creme de leite', produtosLista, materiasPrimas: [] });
     assert.equal(r, null);
+  });
+});
+
+describe('a ponte da Lista para Compras', () => {
+  test('cada categoria da Lista vira uma categoria CONTÁBIL válida', () => {
+    // ⚠️ As duas medem coisas diferentes (§5). Mandar "Açougue e frios" direto
+    // para o campo de Compras criaria uma categoria contábil nova — a mesma
+    // poluição que esta fase limpou, do outro lado.
+    const CONTABEIS = ['Proteínas', 'Hortifruti', 'Laticínios', 'Mercearia/Secos',
+      'Bebidas para revenda', 'Descartáveis de consumo do produto',
+      'Material de limpeza e higiene', 'Outros'];
+    for (const c of CATS_LISTA) {
+      assert.ok(CONTABEIS.includes(contabilDaLista(c)), `${c} → ${contabilDaLista(c)} não é contábil`);
+    }
+  });
+
+  test('doce e café caem em Mercearia/Secos — não existe linha de CMV para doce', () => {
+    assert.equal(contabilDaLista('Doces e sobremesas'), 'Mercearia/Secos');
+    assert.equal(contabilDaLista('Café e complementos'), 'Mercearia/Secos');
+    assert.equal(contabilDaLista('Açougue e frios'), 'Proteínas');
+    assert.equal(contabilDaLista('Limpeza e higiene'), 'Material de limpeza e higiene');
+  });
+
+  test('sem categoria vira "Outros", que é o que a revisão de entrada cobra', () => {
+    // O item chega no carrinho pedindo decisão, em vez de entrar calado numa
+    // categoria que ninguém escolheu.
+    assert.equal(contabilDaLista(null), 'Outros');
+    assert.equal(contabilDaLista(''), 'Outros');
+    assert.equal(contabilDaLista('categoria que não existe'), 'Outros');
   });
 });

@@ -217,3 +217,32 @@ export function saldoDoItem({ nome, produtosLista = [], materiasPrimas = [] }) {
     marcas: marcas.length,
   };
 }
+
+// ── Da Lista para Compras ───────────────────────────────────────────────────
+// ⚠️ AS DUAS TAXONOMIAS MEDEM COISAS DIFERENTES (§5): a da Lista organiza o
+// corredor, a de Compras mede CMV. Mandar "Açougue e frios" direto para o campo
+// de Compras criaria uma categoria contábil nova — a mesma poluição que esta
+// fase limpou, só que do outro lado. Esta é a ponte, e ela é explícita.
+//
+// ⚠️ "Doces e sobremesas" e "Café e complementos" caem em Mercearia/Secos
+// porque é isso que eles são contabilmente: não existe linha de CMV para doce.
+const PARA_CONTABIL = {
+  'Hortifruti': 'Hortifruti',
+  'Açougue e frios': 'Proteínas',
+  'Laticínios': 'Laticínios',
+  'Mercearia': 'Mercearia/Secos',
+  'Bebidas': 'Bebidas para revenda',
+  'Doces e sobremesas': 'Mercearia/Secos',
+  'Café e complementos': 'Mercearia/Secos',
+  'Descartáveis e embalagens': 'Descartáveis de consumo do produto',
+  'Limpeza e higiene': 'Material de limpeza e higiene',
+  'Outros': 'Outros',
+};
+
+// ⚠️ Sem categoria na Lista, devolve "Outros" — e "Outros" é justamente o que a
+// revisão de entrada de Compras (Fase 1) obriga alguém a resolver antes de
+// gravar. O item chega no carrinho pedindo decisão, em vez de entrar calado
+// numa categoria que ninguém escolheu.
+export function contabilDaLista(catLista) {
+  return PARA_CONTABIL[catLista] || 'Outros';
+}
