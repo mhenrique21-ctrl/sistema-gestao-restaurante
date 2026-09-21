@@ -72,11 +72,18 @@ test('a migração NÃO converte nada sozinha', () => {
   assert.ok(LISTA.includes('não mexe'), 'o aviso de que criar não altera item nenhum saiu');
 });
 
-test('"Tem na Loja" digitado à mão deu lugar ao saldo real', () => {
-  // ⚠️ O número que aparecia podia ter sido escrito três semanas antes.
-  assert.ok(!LISTA.includes('setF("estoqueQtd"'), 'o campo digitado à mão voltou');
-  assert.equal((LISTA.match(/saldoDoItem\(\{/g) || []).length, 3,
-    'o saldo real sumiu de algum lugar (form + duas listas)');
+test('"Tem na Loja" continua sendo digitado à mão', () => {
+  // ⚠️ Chegou a ser trocado pelo saldo real e foi DESFEITO no mesmo dia
+  // (decisão do dono): o saldo automático só existe para o produto vinculado a
+  // uma matéria-prima, e a maior parte da lista não está — a informação sumia
+  // da tela justo onde era usada. O campo grava: tirá-lo do save deixaria o
+  // input na tela sem nada por trás, que foi o que aconteceu na primeira
+  // tentativa de reverter.
+  // Ele vive no formulário de ADICIONAR (dentro do painel), não no de editar.
+  assert.ok(LISTA.includes('setF("estoqueQtd"'), 'o campo digitado sumiu do formulário');
+  assert.ok(!APP.includes('saldoDoItem'), 'o saldo automático voltou ao App');
+  assert.equal((LISTA.match(/estoqueQtd:form\.estoqueQtd/g) || []).length, 2,
+    'o campo parou de ser gravado em algum dos dois caminhos (novo e edição)');
 });
 
 test('o elo com Compras enche o CARRINHO, não lança a compra', () => {

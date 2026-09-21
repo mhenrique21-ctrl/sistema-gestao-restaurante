@@ -25,7 +25,7 @@ import { mergeArrayById } from "../mergeDocument.js";
 import QRCode from "qrcode";
 import { ConfigPanel, CONFIG_PADRAO, type ConfigAppState } from "./ConfigPanel";
 import { ConfigStyleInjector, useApplyConfig } from "./ConfigApplier";
-import {CATS_LISTA,categoriaFechada,classificarRua,novoLocal,locaisAtivos,localPorId,planoDeMigracao,saldoDoItem,contabilDaLista} from "./listaCompras.js";
+import {CATS_LISTA,categoriaFechada,classificarRua,novoLocal,locaisAtivos,localPorId,planoDeMigracao,contabilDaLista} from "./listaCompras.js";
 import {rotuloDelivery,ROTULO_RECIBOS,LEGADO_ROTULO_DELIVERY,BUCKET_RECIBO_BALCAO,BUCKET_RECIBO_ENCOMENDA,taxasDePlataforma,statusDoDia,progressoDoDia,serieDosDias,mediaDaSerie,HORA_PENDENCIA_PADRAO} from "./fechamentoVendas.js";
 import {garantirFornecedor,criarItemDaLista,conferirPreco,auditarPrecos,normalizarEncoding,gruposDeFornecedor,mesclarFornecedores,conciliacaoPorCategoria,pctHistoricoPorCategoria,normalizarTexto,precoPorUnidadeBase,filaSemCategoria,janelaAnterior,soDigitos,linhasDaRevisao,pendenciasDaRevisao,correcoesDaRevisao,resumoDoEncoding} from "./qualidadeCompras.js";
 import {fatiasDaReceita,conferirCmv,diasNoIntervalo,mesDaData,porDia,comprasForaDoCmv,MOTIVO_FORA_CMV} from "./dre.js";
@@ -11074,7 +11074,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onNavigate,onLogout,setState,login,
 
     if(editId){
       const editNome=form.nome.trim();
-      (setDbAndSave||setDb)((d:any)=>({...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===editId?{...i,nome:editNome,quantidade:parseFloat(form.qtd)||1,unidade:form.unidade,categoria:form.cat||i.categoria||"outros",localId:form.localId||"",corredor:form.corredor||"",obs:form.obs,urgente:form.urgente,updatedAt:Date.now()}:i)}));
+      (setDbAndSave||setDb)((d:any)=>({...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===editId?{...i,nome:editNome,quantidade:parseFloat(form.qtd)||1,unidade:form.unidade,categoria:form.cat||i.categoria||"outros",localId:form.localId||"",corredor:form.corredor||"",estoqueQtd:form.estoqueQtd,estoqueUn:form.estoqueUn||"un",obs:form.obs,urgente:form.urgente,updatedAt:Date.now()}:i)}));
       if(pendingMpLinks!==null){
         syncProdByName(editNome,(p:any)=>({...p,mpVinculados:pendingMpLinks,mpVinculadoId:undefined}));
       }
@@ -11101,7 +11101,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onNavigate,onLogout,setState,login,
         (setDbAndSave||setDb)((d:any)=>({...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===pendenteExistente.id?{...i,quantidade:(i.quantidade||0)+qtdNova,updatedAt:ts}:i)}));
       }else{
         const maxOrdem=lista.length>0?Math.max(...lista.map((i:any)=>i.ordem||0))+1:0;
-        const newItem={id:uid(),listaId:listaAtualId,nome,quantidade:qtdNova,unidade:form.unidade,categoria:cat,localId:form.localId||"",corredor:form.corredor||"",obs:form.obs,urgente:form.urgente,comprado:false,ordem:maxOrdem,adicionadoPor:login?.label||"",criadoEm:new Date().toISOString(),updatedAt:Date.now()};
+        const newItem={id:uid(),listaId:listaAtualId,nome,quantidade:qtdNova,unidade:form.unidade,categoria:cat,localId:form.localId||"",corredor:form.corredor||"",estoqueQtd:form.estoqueQtd,estoqueUn:form.estoqueUn||"un",obs:form.obs,urgente:form.urgente,comprado:false,ordem:maxOrdem,adicionadoPor:login?.label||"",criadoEm:new Date().toISOString(),updatedAt:Date.now()};
         (setDbAndSave||setDb)((d:any)=>({...d,listaCompras:[...(d.listaCompras||[]).filter((i:any)=>i.id!==newItem.id),newItem]}));
       }
       if(pendingMpLinks!==null){
@@ -12654,23 +12654,20 @@ function ListaComprasPanel({db,setDb,isAdmin,onNavigate,onLogout,setState,login,
             {["un","kg","g","L","ml","cx","pc","sc","bd"].map(u=><option key={u} value={u}>{u}</option>)}
           </select>
         </div>
-        {/* ⚠️ O CAMPO "TEM NA LOJA" SAIU DO FORMULÁRIO (decisão do dono,
-            21/09/2026). Ele era digitado à mão e nunca mais conferido: o número
-            que aparecia na lista podia ter sido escrito três semanas antes, e
-            ninguém tinha como saber. No lugar dele, a linha do item mostra o
-            saldo REAL quando o produto está vinculado a uma matéria-prima
-            (`saldoDoItem`). Sem vínculo não mostra nada — um campo em branco
-            para preencher à mão reintroduziria exatamente o dado velho.
-            Os valores antigos continuam no `db` e no histórico impresso. */}
+        {/* "Tem na Loja": quanto já existe na loja, digitado por quem monta a
+            lista. Chegou a ser trocado pelo saldo do estoque em 21/09/2026 e
+            foi DESFEITO no mesmo dia, por decisão do dono — o saldo automático
+            só serve quando o produto está vinculado a uma matéria-prima, e a
+            maior parte da lista não está. Aqui vale o que a pessoa viu na
+            prateleira. */}
         <div style={{flex:"2 1 130px"}}>
-          <div style={{fontSize:11,color:"var(--text3)",fontWeight:600,marginBottom:4}}>Em estoque</div>
-          {(()=>{
-            const sld=saldoDoItem({nome:form.nome,produtosLista:db.produtosLista||[],materiasPrimas:db.materiasPrimas||[]});
-            return <div style={{fontSize:12.5,padding:"7px 0",color:sld?"var(--text)":"var(--text3)"}}>
-              {sld?<><b>{sld.total} {sld.unidade}</b> <span className="muted" style={{fontSize:10.5}}>de {sld.marcas} marca(s)</span></>
-                :<span style={{fontSize:11}}>sem vínculo com o estoque</span>}
-            </div>;
-          })()}
+          <div style={{fontSize:11,color:"#888",fontWeight:600,marginBottom:4}}>Tem na Loja</div>
+          <div style={{display:"flex",gap:4}}>
+            <input type="number" min="0" step="0.1" placeholder="0" value={form.estoqueQtd} onChange={e=>setF("estoqueQtd",e.target.value)} className="inp" style={{marginBottom:0,flex:1}}/>
+            <select value={form.estoqueUn} onChange={e=>setF("estoqueUn",e.target.value)} className="inp" style={{marginBottom:0,flex:"0 0 56px",padding:"0 4px"}}>
+              {["un","g","kg"].map(u=><option key={u} value={u}>{u}</option>)}
+            </select>
+          </div>
         </div>
       </div>
       {/* Categoria (admin) */}
@@ -12813,16 +12810,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onNavigate,onLogout,setState,login,
                     style={{width:18,height:18,borderRadius:4,border:"1px solid var(--border2)",background:"var(--bg4)",color:"var(--btnPrimary)",cursor:"pointer",fontSize:11,lineHeight:1,padding:0}}>+</button>
                   <span style={{fontSize:11,color:"var(--btnPrimary)",fontWeight:700}}>{item.unidade}</span>
                 </div>
-                {(()=>{
-                  // ⚠️ "Tem na Loja" era DIGITADO À MÃO (`estoqueQtd`) e nunca mais
-                  // conferido: o número podia ter três semanas. Agora vem do saldo
-                  // REAL, por `mpVinculados` → `materiasPrimas[].estoqueAtual`.
-                  // Sem vínculo não mostra nada — zero diria "não tem", que é uma
-                  // afirmação; não mostrar é "não sei", que é a verdade.
-                  const sld=saldoDoItem({nome:item.nome,produtosLista:db.produtosLista||[],materiasPrimas:db.materiasPrimas||[]});
-                  if(!sld)return null;
-                  return <span style={{fontSize:10,color:sld.total>0?"var(--successText)":"var(--text3)",background:"var(--bg4)",border:"1px solid var(--border2)",borderRadius:8,padding:"1px 6px"}} title={`somado de ${sld.marcas} marca(s) no estoque`}>Em estoque: <b>{sld.total} {sld.unidade}</b></span>;
-                })()}
+                {estoqueRef>0&&<span style={{fontSize:10,color:"#f87171",background:"var(--bg4)",border:"1px solid #f8717144",borderRadius:8,padding:"1px 6px"}}>Tem na Loja: <b>{estoqueRef} {item.estoqueUn||item.unidade}</b></span>}
               </div>
               {(item.adicionadoPor||mpPreco>0||isAdmin)&&<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:3,gap:6}}>
                 {item.adicionadoPor?<span style={{fontSize:12,color:getCorPorNome(item.adicionadoPor),fontWeight:600,letterSpacing:0.2}}>● {item.adicionadoPor}{item.criadoEm&&<span style={{fontWeight:400,color:"#888",marginLeft:5}}>{new Date(item.criadoEm).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit",timeZone:"America/Sao_Paulo"})}</span>}</span>:<span/>}
@@ -12885,16 +12873,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onNavigate,onLogout,setState,login,
                     style={{width:18,height:18,borderRadius:4,border:"1px solid var(--border2)",background:"var(--bg4)",color:"var(--btnPrimary)",cursor:"pointer",fontSize:11,lineHeight:1,padding:0}}>+</button>
                   <span style={{fontSize:11,color:"var(--btnPrimary)",fontWeight:700}}>{item.unidade}</span>
                 </div>
-                {(()=>{
-                  // ⚠️ "Tem na Loja" era DIGITADO À MÃO (`estoqueQtd`) e nunca mais
-                  // conferido: o número podia ter três semanas. Agora vem do saldo
-                  // REAL, por `mpVinculados` → `materiasPrimas[].estoqueAtual`.
-                  // Sem vínculo não mostra nada — zero diria "não tem", que é uma
-                  // afirmação; não mostrar é "não sei", que é a verdade.
-                  const sld=saldoDoItem({nome:item.nome,produtosLista:db.produtosLista||[],materiasPrimas:db.materiasPrimas||[]});
-                  if(!sld)return null;
-                  return <span style={{fontSize:10,color:sld.total>0?"var(--successText)":"var(--text3)",background:"var(--bg4)",border:"1px solid var(--border2)",borderRadius:8,padding:"1px 6px"}} title={`somado de ${sld.marcas} marca(s) no estoque`}>Em estoque: <b>{sld.total} {sld.unidade}</b></span>;
-                })()}
+                {estoqueRef>0&&<span style={{fontSize:10,color:"#f87171",background:"var(--bg4)",border:"1px solid #f8717144",borderRadius:8,padding:"1px 6px"}}>Tem na Loja: <b>{estoqueRef} {item.estoqueUn||item.unidade}</b></span>}
               </div>
               {(item.adicionadoPor||mpPreco>0||isAdmin)&&<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:3,gap:6}}>
                 {item.adicionadoPor?<span style={{fontSize:12,color:getCorPorNome(item.adicionadoPor),fontWeight:600,letterSpacing:0.2}}>● {item.adicionadoPor}{item.criadoEm&&<span style={{fontWeight:400,color:"#888",marginLeft:5}}>{new Date(item.criadoEm).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit",timeZone:"America/Sao_Paulo"})}</span>}</span>:<span/>}

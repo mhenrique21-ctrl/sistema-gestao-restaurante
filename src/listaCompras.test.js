@@ -2,7 +2,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   CATS_LISTA, categoriaFechada, classificarRua, novoLocal, locaisAtivos,
-  localPorId, planoDeMigracao, saldoDoItem, contabilDaLista,
+  localPorId, planoDeMigracao, contabilDaLista,
 } from './listaCompras.js';
 
 describe('a taxonomia fechada da Lista', () => {
@@ -168,38 +168,6 @@ describe('o plano de migração', () => {
     assert.deepEqual(p.locais, []);
     assert.deepEqual(p.corredores, []);
     assert.equal(p.totalItens, 0);
-  });
-});
-
-describe('"Tem na Loja" vem do saldo real', () => {
-  const produtosLista = [
-    { id: 'p1', nome: 'Creme de leite', mpVinculados: ['m1', 'm2'], unidadeBase: 'un' },
-    { id: 'p2', nome: 'Sal', mpVinculados: [] },
-  ];
-  const materiasPrimas = [
-    { id: 'm1', nome: 'Italac', estoqueAtual: 12, unidade: 'un' },
-    { id: 'm2', nome: 'Piracanjuba', estoqueAtual: 3.5, unidade: 'un' },
-  ];
-
-  test('soma as marcas do produto', () => {
-    const r = saldoDoItem({ nome: 'creme de leite', produtosLista, materiasPrimas });
-    assert.equal(r.total, 15.5);
-    assert.equal(r.unidade, 'un');
-    assert.equal(r.marcas, 2);
-  });
-
-  test('SEM VÍNCULO não mostra nada — nem zero', () => {
-    // ⚠️ Zero diria "não tem na loja", que é uma afirmação; `null` é "não sei",
-    // que é a verdade. O campo antigo era digitado à mão e podia ter três
-    // semanas.
-    assert.equal(saldoDoItem({ nome: 'Sal', produtosLista, materiasPrimas }), null);
-    assert.equal(saldoDoItem({ nome: 'Coisa que não existe', produtosLista, materiasPrimas }), null);
-    assert.equal(saldoDoItem({ nome: '', produtosLista, materiasPrimas }), null);
-  });
-
-  test('vínculo apontando para marca que sumiu não vira zero', () => {
-    const r = saldoDoItem({ nome: 'Creme de leite', produtosLista, materiasPrimas: [] });
-    assert.equal(r, null);
   });
 });
 

@@ -193,30 +193,14 @@ export function planoDeMigracao({ listaCompras = [], produtosLista = [], listaRu
   };
 }
 
-// ── O saldo que a Lista mostra ──────────────────────────────────────────────
-// ⚠️ "TEM NA LOJA" ERA DIGITADO À MÃO (`estoqueQtd` no item) e nunca mais era
-// conferido: o número que aparecia podia ter sido escrito três semanas antes.
-// Decisão do dono (21/09/2026): passa a vir do saldo REAL.
+// ⚠️ `saldoDoItem` FOI REMOVIDA em 21/09/2026, no mesmo dia em que nasceu. Ela
+// trocava o "Tem na Loja" digitado à mão pelo saldo real (`mpVinculados` →
+// `materiasPrimas[].estoqueAtual`), e foi DESFEITA por decisão do dono: o saldo
+// automático só existe para o produto que está vinculado a uma matéria-prima, e
+// a maior parte da lista não está — na prática a informação sumia da tela justo
+// onde ela era usada. O campo digitado voltou como era.
 //
-// ⚠️ SEM VÍNCULO NÃO SE MOSTRA NADA. O produto da Lista chega ao saldo por
-// `mpVinculados` → `materiasPrimas[].estoqueAtual`; sem esse elo, qualquer
-// número seria invenção — e um campo vazio que a pessoa possa preencher à mão
-// reintroduz exatamente o dado velho que estamos tirando.
-export function saldoDoItem({ nome, produtosLista = [], materiasPrimas = [] }) {
-  const alvo = fold(nome);
-  if (!alvo) return null;
-  const prod = produtosLista.find((p) => fold(p?.nome) === alvo);
-  const ids = prod?.mpVinculados || [];
-  if (!ids.length) return null;
-  const marcas = ids.map((id) => materiasPrimas.find((m) => m?.id === id)).filter(Boolean);
-  if (!marcas.length) return null;
-  const total = marcas.reduce((s, m) => s + (Number(m.estoqueAtual) || 0), 0);
-  return {
-    total: Math.round(total * 100) / 100,
-    unidade: prod?.unidadeBase || marcas[0]?.unidade || 'un',
-    marcas: marcas.length,
-  };
-}
+// Se um dia o vínculo cobrir a lista inteira, é este o lugar de trazer de volta.
 
 // ── Da Lista para Compras ───────────────────────────────────────────────────
 // ⚠️ AS DUAS TAXONOMIAS MEDEM COISAS DIFERENTES (§5): a da Lista organiza o

@@ -2412,14 +2412,23 @@ trocar de local **limpa** o corredor, senão ficaria a "Rua 7" de outra loja.
 
 ⚠️ `locaisCompra` está nas **duas** fusões (§3).
 
-#### "Tem na Loja" virou saldo real
+#### "Tem na Loja" continua digitado à mão — e isso foi uma decisão
 
-⚠️ Era **digitado à mão** (`estoqueQtd`) e nunca mais conferido: o número podia
-ter sido escrito três semanas antes. Agora vem de `mpVinculados` →
-`materiasPrimas[].estoqueAtual` (`saldoDoItem`). **Sem vínculo não mostra nada**
-— zero diria "não tem na loja", que é uma afirmação; não mostrar é "não sei", que
-é a verdade. Um campo em branco para preencher à mão reintroduziria exatamente o
-dado velho. Os valores antigos continuam no `db` e no histórico impresso.
+⚠️ **Chegou a virar saldo automático e foi DESFEITO no mesmo dia** (21/09/2026,
+decisão do dono). A troca lia `mpVinculados` → `materiasPrimas[].estoqueAtual`, o
+que parecia melhor no papel: o campo digitado nunca é reconferido, e o número na
+tela pode ter três semanas. Mas o saldo automático **só existe para o produto que
+está vinculado a uma matéria-prima**, e a maior parte da lista não está — na
+prática a informação sumia da tela justamente onde era usada, e um campo que
+some é pior que um campo desatualizado.
+
+⚠️ **Reverter exige mexer em TRÊS lugares, não um.** A primeira tentativa
+devolveu o input e esqueceu as duas gravações (`estoqueQtd`/`estoqueUn` no item
+novo e na edição): o campo voltava à tela e não guardava nada.
+`src/listaTela.test.js` trava os três.
+
+Se um dia o vínculo cobrir a lista inteira, `src/listaCompras.js` diz onde a
+função ficava.
 
 #### O elo com Compras
 
