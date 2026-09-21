@@ -20,6 +20,13 @@ export const MERGEABLE_FIELDS = [
   // Fica FORA de `vendas` de propósito: não participa de nenhum cálculo de
   // faturamento, então um erro aqui não pode contaminar a receita.
   'itensVendidos',
+  // Locais de compra (Açaí, Sendas, Santa Lucia…), com os corredores de cada um.
+  // Array com id e atualizadoEm — fusão por id como os demais.
+  //
+  // ⚠️ Local NUNCA é excluído, só inativado (`ativo:false`): item antigo aponta
+  // para ele pelo id, e apagando o cadastro a lista arquivada deixa de dizer
+  // onde aquilo foi comprado. Por isso ele não precisa de tombstone.
+  'locaisCompra',
   // Recibos de entrega: array com id, tinha fusão no cliente e não aqui.
   // Sem isto, dois aparelhos emitindo recibo perto um do outro faziam o
   // último POST apagar o recibo do outro.

@@ -297,7 +297,7 @@ const PRODS_SEED_V6=[
 const mkDb = () => ({
   contas:[], vendas:[], compras:[], fornecedores:[], fichasTecnicas:[],
   materiasPrimas:[], funcionarios:[], faltas:[], adiantamentos:[], consumacoes:[], encargos:[], encomendas:[], anotacoes:[], clientesEncomenda:[] as any[], recibosVenda:[] as any[], itensVendidos:[] as any[], mapaProdutoFicha:{} as any, tipoInsumo:{} as any,
-  normalizacoes:[], movEstoque:[], listaCompras:[], listaDeletedIds:[] as string[], listaCategorias:[] as string[], listaCatOrdem:[] as string[], listaCatOrdemV2:false, listaCatOrdemV3:false, pedidosLista:[] as any[], produtosLista:[] as any[], pedidosProducao:[] as any[], produtosProducao:[] as any[], itensProducaoPendentes:[] as any[], categoriasProducao:[] as string[], categoriasClientes:{} as Record<string,boolean>, recibosEntrega:[] as any[], pedidosProducaoSeedCats:false, iconesProducao:{} as Record<string,string>, produtosSeedDone:false, produtosSeedV2:false, produtosSeedV3:false, produtosSeedV4:false, produtosSeedV5:false, produtosSeedV6:false, produtosDedupV1:false, produtosDedupV2:false, produtosCatsRepairV1:false,
+  normalizacoes:[], movEstoque:[], listaCompras:[], listaDeletedIds:[] as string[], listaCategorias:[] as string[], listaCatOrdem:[] as string[], locaisCompra:[] as any[], listaCatOrdemV2:false, listaCatOrdemV3:false, pedidosLista:[] as any[], produtosLista:[] as any[], pedidosProducao:[] as any[], produtosProducao:[] as any[], itensProducaoPendentes:[] as any[], categoriasProducao:[] as string[], categoriasClientes:{} as Record<string,boolean>, recibosEntrega:[] as any[], pedidosProducaoSeedCats:false, iconesProducao:{} as Record<string,string>, produtosSeedDone:false, produtosSeedV2:false, produtosSeedV3:false, produtosSeedV4:false, produtosSeedV5:false, produtosSeedV6:false, produtosDedupV1:false, produtosDedupV2:false, produtosCatsRepairV1:false,
   usuarios:[] as any[], usuariosSeedDone:false,
   categorias:["Alimentação","Bebidas","Limpeza","Salários","Adiantamento","Aluguel","Energia","Água","Internet","Encomenda","Outros"],
   config:{snAliquota:6},
@@ -2196,6 +2196,11 @@ const mergeFromServer=(prev:any,updates:any)=>{
     }
     // listaDeletedIds: unir local e servidor
     next[emp].listaDeletedIds=[...new Set([...(s.listaDeletedIds||[]),...(p.listaDeletedIds||[])])].slice(-5000);
+    // ⚠️ `locaisCompra` é array com id: entra na fusão por id como os demais.
+    // Sem registrar AQUI e no `mergeDocument.js`, o poll devolveria a versão do
+    // servidor e o local recém-criado sumiria antes do POST confirmar — é a
+    // armadilha que já mordeu seis vezes (§3).
+    next[emp].locaisCompra=mergeArrayById(s.locaisCompra||[],p.locaisCompra||[],_listaDeletados);
     // listaCategorias, listaRuas, ruaCatMap: unir
     next[emp].listaCategorias=[...new Set([...(s.listaCategorias||[]),...(p.listaCategorias||[])])];
     next[emp].listaRuas=[...new Set([...(s.listaRuas||[]),...(p.listaRuas||[])])];
