@@ -25,6 +25,7 @@ import { mergeArrayById } from "../mergeDocument.js";
 import QRCode from "qrcode";
 import { ConfigPanel, CONFIG_PADRAO, type ConfigAppState } from "./ConfigPanel";
 import { ConfigStyleInjector, useApplyConfig } from "./ConfigApplier";
+import {garantirFornecedor,criarItemDaLista,conferirPreco,auditarPrecos,normalizarEncoding,gruposDeFornecedor,mesclarFornecedores,conciliacaoPorCategoria,pctHistoricoPorCategoria,normalizarTexto,precoPorUnidadeBase} from "./qualidadeCompras.js";
 import {fatiasDaReceita,conferirCmv,diasNoIntervalo,mesDaData,porDia,comprasForaDoCmv,MOTIVO_FORA_CMV} from "./dre.js";
 
 // ===================== STORAGE =====================
@@ -417,6 +418,7 @@ const autoVincularInsumosCompra = (prodsListaIn:any[], mpsTocadas:any[]) => {
   let prodsLista = prodsListaIn;
   const autoVinculados:{mp:string,prod:string}[] = [];
   const pendentes:{mp:string,prod:string}[] = [];
+  const criados:any[] = [];
   mpsTocadas.forEach((mp:any) => {
     if (!mp) return;
     if (prodsLista.some((p:any) => (p.mpVinculados||[]).includes(mp.id))) return;
@@ -432,9 +434,22 @@ const autoVincularInsumosCompra = (prodsListaIn:any[], mpsTocadas:any[]) => {
       const pn = foldNome(p.nome);
       return pn.length >= 4 && (alvo.includes(pn) || pn.includes(alvo));
     });
-    if (parecido) pendentes.push({ mp: mp.nome, prod: parecido.nome });
+    if (parecido) { pendentes.push({ mp: mp.nome, prod: parecido.nome }); return; }
+
+    // ⚠️ TAREFA 3 (Fase 1, 21/09/2026): sem item na Lista, CRIA. Antes o insumo
+    // ficava sem vínculo para sempre e o contador de pendência só crescia —
+    // 756 quando isto foi escrito. O item "parecido" acima continua virando
+    // pendência em vez de vínculo: casamento por inclusão com 4 caracteres
+    // ligaria "leite" a "leite condensado", e o custo sairia do produto errado.
+    //
+    // ⚠️ `produtosLista` é COMPARTILHADO entre Confraria e Seama (§1/§3): o
+    // item criado aqui numa compra da Confraria aparece na Seama. É como a
+    // Lista já funciona — não é regressão desta fase.
+    const novo = criarItemDaLista(mp, uid);
+    prodsLista = [...prodsLista, novo];
+    criados.push({ mp: mp.nome, prod: novo.nome, mpId: mp.id, prodId: novo.id });
   });
-  return { prodsLista, autoVinculados, pendentes };
+  return { prodsLista, autoVinculados, pendentes, criados };
 };
 // Dia cujo faturamento vira base do budget de compras: o último dia com
 // movimento antes de `dataAlvo`, pulando domingo (nem CONFRARIA nem SEAMA
@@ -7258,8 +7273,9 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
       });
       // cadastrar fornecedor se novo
       let fornecedores=[...(d.fornecedores||[])];
-      if(fornecedor&&!fornecedores.find(f=>f.nome.toLowerCase()===fornecedor.toLowerCase()))
-        fornecedores.push({id:uid(),nome:fornecedor,endereco:"",criadoEm:new Date().toISOString()});
+      // TAREFA 1 — o CNPJ decide; nome parecido vira sugestão, nunca fusão.
+      const gf=garantirFornecedor(fornecedores,{nome:fornecedor,cnpj:"",endereco:""},foldNome,uid);
+      fornecedores=gf.fornecedores;
       // lançar no financeiro
       const statusFinanceiro=["dinheiro","pix","cartão débito"].includes(formaPag)?"pago":"pendente";
       const novaContaFinanceiro={
@@ -7467,8 +7483,11 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
     let resultoConciliaIA={autoVinculados:[] as {mp:string,prod:string,mpId?:string,prodId?:string}[],pendentes:[] as {mp:string,prod:string}[]};
     (setDbAndSave||setDb)(d=>{
       let fornecedores=[...(d.fornecedores||[])];
-      if(forn?.nome&&!fornecedores.find(f=>f.nome.toLowerCase()===forn.nome.toLowerCase()))
-        fornecedores.push({id:uid(),nome:forn.nome,endereco:forn.endereco||"",criadoEm:new Date().toISOString()});
+      // TAREFA 1 — e o CNPJ que a IA leu passa a ser GRAVADO: antes ele era
+      // descartado aqui, então todo cupom do mesmo fornecedor entrava sem a
+      // chave que evitaria a duplicata seguinte.
+      const gf=garantirFornecedor(fornecedores,{nome:forn?.nome,cnpj:forn?.cnpj,endereco:forn?.endereco},foldNome,uid);
+      fornecedores=gf.fornecedores;
       const normsAtualizadas=mergeResolucoesEmNormalizacoes(d.normalizacoes||[],resolucoesNome);
       const grupoId=uid();
       const paresCompra=(iaResult.itens||[]).filter((item:any)=>!item.removido).map((item:any)=>({
@@ -7587,8 +7606,9 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
     let resultoConciliaNFe={autoVinculados:[] as {mp:string,prod:string,mpId?:string,prodId?:string}[],pendentes:[] as {mp:string,prod:string}[]};
     (setDbAndSave||setDb)(d=>{
       let fornecedores=[...(d.fornecedores||[])];
-      if(forn?.nome&&!fornecedores.find(f=>f.nome.toLowerCase()===forn.nome.toLowerCase()))
-        fornecedores.push({id:uid(),nome:forn.nome,cnpj:forn.cnpj||"",endereco:forn.endereco||"",criadoEm:new Date().toISOString()});
+      // TAREFA 1 — ponto único; o CNPJ do XML manda.
+      const gf=garantirFornecedor(fornecedores,{nome:forn?.nome,cnpj:forn?.cnpj,endereco:forn?.endereco},foldNome,uid);
+      fornecedores=gf.fornecedores;
       const normsAtualizadas=mergeResolucoesEmNormalizacoes(d.normalizacoes||[],resolucoesNome);
       const grupoId=uid();
       const paresCompra=(nfeResult.itens||[]).map((item:any)=>({
@@ -7928,8 +7948,9 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
     let resultoConciliaSefaz={autoVinculados:[] as {mp:string,prod:string,mpId?:string,prodId?:string}[],pendentes:[] as {mp:string,prod:string}[]};
     (setDbAndSave||setDb)(d=>{
       let fornecedores=[...(d.fornecedores||[])];
-      if(forn?.nome&&!fornecedores.find(f=>f.nome.toLowerCase()===forn.nome.toLowerCase()))
-        fornecedores.push({id:uid(),nome:forn.nome,cnpj:forn.cnpj||"",endereco:forn.endereco||"",criadoEm:new Date().toISOString()});
+      // TAREFA 1 — ponto único; o CNPJ do XML manda.
+      const gf=garantirFornecedor(fornecedores,{nome:forn?.nome,cnpj:forn?.cnpj,endereco:forn?.endereco},foldNome,uid);
+      fornecedores=gf.fornecedores;
       const normsAtualizadas=mergeResolucoesEmNormalizacoes(d.normalizacoes||[],resolucoesNome);
       const grupoId=uid();
       const paresCompra=(nfe.itens||[]).map((item:any)=>({

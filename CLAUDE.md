@@ -46,6 +46,7 @@ src/relatorioPlataforma.js  o relatório do iFood/99Food vira Vendas (com testes
 src/relatorioPeriodo.js  o período, os canais e as formas de pagamento (com testes)
 src/grupoMarcas.js    várias marcas e embalagens viram um produto só (com testes)
 src/dre.js            as fatias da barra da DRE e o aviso do CMV vazio (com testes)
+src/qualidadeCompras.js  fornecedor, preço/unidade, encoding e conciliação (com testes)
 src/pdfTexto.js       tira as linhas de texto de um PDF (com testes)
 src/paletas.test.js   mede o contraste das paletas LENDO o App.tsx (trava regressão)
 src/vinculoSombra.test.js  trava o normalizarNome sombreado, LENDO o App.tsx
@@ -1057,6 +1058,57 @@ errado, nada denunciando. `checkDuplicataCompra` não pega: ela roda ANTES da
 conciliação. O botão também trava no primeiro clique, porque o modal só some no
 render seguinte.
 - Budget por categoria com sugestão híbrida e `statusPace` ok/warn/over
+
+#### Qualidade do dado na entrada — `src/qualidadeCompras.js` (com testes)
+
+Fase 1, 21/09/2026. Quatro erros estragam o CMV em silêncio, e os quatro nascem
+na ENTRADA, não no relatório onde aparecem.
+
+⚠️ **ERAM QUATRO CÓPIAS da regra de fornecedor** — `f.nome.toLowerCase()===…`
+em cada caminho (manual, Cupom IA, XML, SEFAZ). Quatro cópias é como uma fica
+para trás: a do **Cupom IA descartava o CNPJ que a IA já tinha lido**, então
+todo cupom do mesmo fornecedor entrava sem a chave que evitaria a duplicata
+seguinte. Agora é `garantirFornecedor`, um ponto só.
+
+⚠️ **O CNPJ DECIDE; o nome SUGERE.** Identificador fiscal vence qualquer
+grafia. E ⚠️ **CNPJ diferente nos dois BARRA o nome parecido**: duas filiais
+têm razão social quase igual e CNPJ distinto — juntá-las misturaria a compra de
+duas lojas. Nome só parecido **cria** e devolve sugestão: "Boi Forte" e "Boi
+Bom" medem 0,848 e são duas empresas. Só o sufixo de razão social diferindo
+("… Ltda") reaproveita, porque `nucleoDoNome` tira o ruído — sem isso "LIDER
+LTDA" e "SENDAS LTDA" ganhariam semelhança de graça pelo fim do nome.
+
+⚠️ **Semelhança por BIGRAMA, não distância de edição:** "Comercial Santa Lucia"
+e "Santa Lucia Comercial" têm quase todos os pares de letras em comum e uma
+distância de edição enorme. Fornecedor é exatamente o campo onde a palavra
+troca de lugar.
+
+⚠️ **Mesclar REESCREVE o histórico.** `compras[].fornecedor` guarda o **nome**,
+não o id, e `materiasPrimas[].fornecedores` é uma lista de nomes: apagar o
+cadastro sem reescrever deixaria o histórico apontando para quem não existe
+mais, e o filtro por fornecedor devolveria vazio para compras que estão lá. O
+canônico **herda o CNPJ** de quem tinha — sem isso a duplicata volta na
+importação seguinte.
+
+⚠️ **PREÇO: a referência é a MEDIANA, não a média.** Uma compra já gravada com
+a unidade errada (o óleo a R$ 769/100 ml) puxaria a média e passaria a
+**absolver** o próximo erro igual — a mesma lição da taxa do plano do iFood.
+⚠️ g e ml viram kg e L **antes** de comparar, senão o alerta dispararia em todo
+item comprado em grama. ⚠️ **Sem referência não se bloqueia**: travar o
+primeiro cadastro de um insumo ensina a ignorar o aviso.
+
+⚠️ **ENCODING: normaliza para NFC, nunca "conserta" o U+FFFD.** Onde o byte se
+perdeu não há o que recuperar; chutar a letra criaria um nome novo que não casa
+com nada. Esses ficam **listados** para decisão.
+
+⚠️ **TAREFA 3 esbarra numa premissa:** `produtosLista` é **compartilhado** entre
+Confraria e Seama (§1/§3). O item criado automaticamente numa compra da
+Confraria **aparece na Seama** — é como a Lista já funciona, não uma regressão.
+Tornar a Lista por empresa é decisão de outra ordem.
+
+⚠️ **O "parecido" continua virando PENDÊNCIA, não vínculo.** Casamento por
+inclusão com 4 caracteres ligaria "leite" a "leite condensado", e o custo
+sairia do produto errado — mesma recusa do `sugerirGrupo`.
 
 #### NF-e da SEFAZ: a lista mostra só o que FALTA importar
 
