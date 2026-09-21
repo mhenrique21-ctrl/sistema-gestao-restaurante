@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   assinarSessao, lerSessao, sessaoValida, acharUsuario,
   lerCookies, montarCookieSessao, cookieDeSaida, ehHttps, autorizarDados,
+  hashSenha, conferirSenha, ehHash, semSenhas, preservarSenhas,
   COOKIE_SESSAO, SESSAO_HORAS,
 } from './auth.js';
 
@@ -182,5 +183,121 @@ describe('a porta dos dados', () => {
       { secret: SEG, sessoesValidasApos: agora });
     assert.equal(r.ok, false);
     assert.equal(r.motivo, 'sessão revogada');
+  });
+});
+
+describe('a senha guardada não é a senha', () => {
+  test('o hash confere e não parece com o original', () => {
+    const h = hashSenha('1234');
+    assert.ok(ehHash(h));
+    assert.ok(!h.includes('1234'));
+    assert.equal(conferirSenha(h, '1234'), true);
+    assert.equal(conferirSenha(h, '4321'), false);
+    assert.equal(conferirSenha(h, ''), false);
+  });
+
+  test('SAL POR USUÁRIO: mesma senha, hashes diferentes', () => {
+    // ⚠️ Com sal único, dois operadores com o mesmo código teriam o mesmo hash,
+    // e olhar o JSON diria quem compartilha senha com quem.
+    assert.notEqual(hashSenha('1234'), hashSenha('1234'));
+    // E os dois conferem.
+    assert.equal(conferirSenha(hashSenha('1234'), '1234'), true);
+  });
+
+  test('o texto puro ANTIGO continua entrando', () => {
+    // ⚠️ Recusar o legado trancaria fora quem estivesse com o arquivo
+    // restaurado de um backup anterior à migração.
+    assert.equal(conferirSenha('1234', '1234'), true);
+    assert.equal(conferirSenha('1234', '9999'), false);
+    assert.equal(ehHash('1234'), false);
+  });
+
+  test('hash corrompido ou mexido não passa', () => {
+    const h = hashSenha('1234');
+    for (const x of [h.slice(0, -2), 'scrypt$', 'scrypt$16384$xx', 'scrypt$0$aa$bb',
+                     'scrypt$99$aa$bb', null, undefined, '', 42]) {
+      assert.equal(conferirSenha(x, '1234'), false);
+    }
+  });
+
+  test('senha vazia guardada nunca autentica', () => {
+    assert.equal(conferirSenha('', '1234'), false);
+    assert.equal(conferirSenha('   ', '   '), false);
+  });
+
+  test('acharUsuario funciona com usuário já hasheado', () => {
+    const usuarios = [{ id: 'u1', nome: 'Gerente', senha: hashSenha('segredo'), role: 'admin' }];
+    assert.equal(acharUsuario('segredo', { usuarios }).label, 'Gerente');
+    assert.equal(acharUsuario('outra', { usuarios }), null);
+  });
+});
+
+describe('o que sai para o navegador', () => {
+  const GUARDADOS = [
+    { id: 'u1', nome: 'Admin', senha: hashSenha('aaa'), role: 'admin' },
+    { id: 'u2', nome: 'Op', senha: '1234', role: 'op' },
+    { id: 'u3', nome: 'Sem senha', senha: '', role: 'op' },
+  ];
+
+  test('a senha NÃO sai, e o sinal de que existe sai', () => {
+    // ⚠️ Era isto: o documento inteiro vai para quem tem sessão, então qualquer
+    // operador logado lia a senha do admin no JSON.
+    const fora = semSenhas(GUARDADOS);
+    assert.ok(fora.every((u) => u.senha === undefined));
+    assert.equal(JSON.stringify(fora).includes('1234'), false);
+    assert.deepEqual(fora.map((u) => u.temSenha), [true, true, false]);
+    // O resto do cadastro continua inteiro.
+    assert.equal(fora[0].nome, 'Admin');
+    assert.equal(fora[0].role, 'admin');
+  });
+
+  test('não quebra com lixo na lista', () => {
+    assert.deepEqual(semSenhas(null), []);
+    assert.deepEqual(semSenhas([null, 'x']), [null, 'x']);
+  });
+});
+
+describe('a senha sobrevive ao POST do cliente', () => {
+  const GUARDADOS = [
+    { id: 'u1', nome: 'Admin', senha: hashSenha('aaa'), role: 'admin' },
+    { id: 'u2', nome: 'Op', senha: '1234', role: 'op' },
+  ];
+
+  test('incoming SEM senha mantém a guardada — senão o primeiro POST apaga todas', () => {
+    // ⚠️ O cliente recebe os usuários sem senha e devolve o documento inteiro:
+    // sem esta preservação, a PRIMEIRA gravação de qualquer tela deixaria o
+    // sistema sem ninguém capaz de entrar.
+    const doCliente = semSenhas(GUARDADOS);
+    const r = preservarSenhas(doCliente, GUARDADOS);
+    assert.equal(r[0].senha, GUARDADOS[0].senha);
+    assert.equal(r[1].senha, '1234');
+    // E o marcador não fica no banco.
+    assert.ok(r.every((u) => u.temSenha === undefined));
+  });
+
+  test('senha NOVA vem em texto e é guardada em HASH', () => {
+    const doCliente = [{ id: 'u1', nome: 'Admin', role: 'admin', senha: 'nova-senha' }];
+    const r = preservarSenhas(doCliente, GUARDADOS);
+    assert.ok(ehHash(r[0].senha));
+    assert.equal(conferirSenha(r[0].senha, 'nova-senha'), true);
+    assert.equal(JSON.stringify(r).includes('nova-senha'), false);
+  });
+
+  test('senha que já é hash não é hasheada de novo', () => {
+    const h = hashSenha('x');
+    const r = preservarSenhas([{ id: 'u1', senha: h }], GUARDADOS);
+    assert.equal(r[0].senha, h);
+    assert.equal(conferirSenha(r[0].senha, 'x'), true);
+  });
+
+  test('usuário NOVO sem senha entra sem senha — e não autentica', () => {
+    const r = preservarSenhas([{ id: 'novo', nome: 'X' }], GUARDADOS);
+    assert.equal(r[0].senha, undefined);
+    assert.equal(acharUsuario('', { usuarios: r }), null);
+  });
+
+  test('campo em branco é "não mexi", nunca "apagar a senha"', () => {
+    const r = preservarSenhas([{ id: 'u2', nome: 'Op', senha: '   ' }], GUARDADOS);
+    assert.equal(r[0].senha, '1234');
   });
 });

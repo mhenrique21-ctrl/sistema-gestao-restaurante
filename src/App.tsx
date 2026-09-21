@@ -2278,6 +2278,19 @@ const SYNC_TIMEOUT_MS=15000;
 // armadilha nº 0 (§3) de novo, agora pela porta da autenticação. `fetchSync` é o
 // ponto único por onde as chamadas de `/api/dados` passam, então é aqui que a
 // queda de sessão é detectada UMA vez.
+// ⚠️ A TELA NÃO TEM MAIS A LISTA DE SENHAS para conferir duplicata sozinha
+// (Fase 4: `senha` não sai do servidor). Ela pergunta. Falhando a rede, NÃO
+// bloqueia o cadastro: recusar por causa de uma checagem de conveniência seria
+// pior que aceitar duas pessoas com o mesmo código — o login pega a primeira, e
+// isso é visível.
+const senhaJaEmUso=async(senha:string,exceto?:string):Promise<boolean>=>{
+  try{
+    const r=await fetch("/api/senha-em-uso",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({senha,exceto:exceto||""})});
+    if(!r.ok)return false;
+    return !!(await r.json())?.emUso;
+  }catch{return false;}
+};
 let _aoPerderSessao:(()=>void)|null=null;
 const registrarQuedaDeSessao=(fn:(()=>void)|null)=>{_aoPerderSessao=fn;};
 const fetchSync=(url:string,opts:any={},ms=SYNC_TIMEOUT_MS)=>{
@@ -20296,7 +20309,6 @@ function UsuariosPanel({state,setState}:{state:any,setState:any}){
   const [form,setForm]=useState(EMPTY);
   const [editId,setEditId]=useState<string|null>(null);
   const formRef=useRef<HTMLDivElement>(null);
-  const [showSenha,setShowSenha]=useState<Record<string,boolean>>({});
   const [pdvSaving,setPdvSaving]=useState(false);
 
   const setF=(k:string,v:any)=>setForm(f=>({...f,[k]:v}));
@@ -20315,21 +20327,26 @@ function UsuariosPanel({state,setState}:{state:any,setState:any}){
     const nome=form.nome.trim();
     const senha=form.senha.trim();
     if(!nome)return alert("Informe o nome.");
-    if(!senha)return alert("Informe a senha.");
-    if(!editId&&usuarios.some((u:any)=>u.senha===senha))return alert("Esta senha já está em uso por outro usuário.");
-    if(editId&&usuarios.some((u:any)=>u.senha===senha&&u.id!==editId))return alert("Esta senha já está em uso por outro usuário.");
+    // ⚠️ Em branco na EDIÇÃO é "não mexi na senha", não "apagar": o servidor
+    // preserva a guardada. Em cadastro novo continua sendo obrigatório.
+    if(!editId&&!senha)return alert("Informe a senha.");
+    if(senha&&await senhaJaEmUso(senha,editId||undefined))return alert("Esta senha já está em uso por outro usuário.");
     if(editId){
-      setBoth(arr=>arr.map((u:any)=>u.id===editId?{...u,nome,senha,role:form.role,empresa:form.role!=="admin"?form.empresa:undefined,corTexto:form.corTexto||"#e8eaf0",pdv:form.pdv}:u));
+      setBoth(arr=>arr.map((u:any)=>u.id===editId?{...u,nome,...(senha?{senha}:{}),role:form.role,empresa:form.role!=="admin"?form.empresa:undefined,corTexto:form.corTexto||"#e8eaf0",pdv:form.pdv}:u));
       setEditId(null);
     }else{
       const novo={id:uid(),nome,senha,role:form.role,empresa:form.role!=="admin"?form.empresa:undefined,corTexto:form.corTexto||"#e8eaf0",pdv:form.pdv};
       setBoth(arr=>[...arr,novo]);
     }
-    if(form.pdv){
+    // Sem senha digitada não há o que provisionar no PDV — ele precisa do texto,
+    // que aqui só existe quando a pessoa acabou de digitar.
+    if(form.pdv&&senha){
       setPdvSaving(true);
       const res=await provisionPdvUser(nome,senha);
       setPdvSaving(false);
       if(!res.ok) alert("Usuário salvo aqui, mas o acesso ao PDV falhou: "+res.message);
+    }else if(form.pdv&&editId){
+      alert("Usuário salvo. Para atualizar o acesso ao PDV, digite a senha — ela não fica guardada em texto para ser reenviada.");
     }
     setForm(EMPTY);
   };
@@ -20341,7 +20358,8 @@ function UsuariosPanel({state,setState}:{state:any,setState:any}){
   };
 
   const startEdit=(u:any)=>{
-    setForm({nome:u.nome,senha:u.senha,role:u.role,empresa:u.empresa||"CONFRARIA",corTexto:u.corTexto||"#e8eaf0",pdv:!!u.pdv});
+    // A senha não vem do servidor: campo em branco significa "manter a atual".
+    setForm({nome:u.nome,senha:"",role:u.role,empresa:u.empresa||"CONFRARIA",corTexto:u.corTexto||"#e8eaf0",pdv:!!u.pdv});
     setEditId(u.id);
     setTimeout(()=>formRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),100);
   };
@@ -20351,7 +20369,7 @@ function UsuariosPanel({state,setState}:{state:any,setState:any}){
     <div ref={formRef} className="card" style={{marginBottom:14}}>
       <div style={{fontSize:13,fontWeight:700,color:"var(--acc)",marginBottom:10}}>{editId?"✏️ Editar Usuário":"➕ Novo Usuário"}</div>
       <input placeholder="Nome do usuário" value={form.nome} onChange={e=>setF("nome",e.target.value)} className="inp" style={{marginBottom:8}}/>
-      <input placeholder="Senha de acesso" value={form.senha} onChange={e=>setF("senha",e.target.value)} className="inp" style={{marginBottom:8}}/>
+      <input placeholder={editId?"Senha (em branco = manter a atual)":"Senha de acesso"} value={form.senha} onChange={e=>setF("senha",e.target.value)} className="inp" style={{marginBottom:8}}/>
       <select value={form.role} onChange={e=>setF("role",e.target.value)} className="inp" style={{marginBottom:8}}>
         <option value="admin">Administrador — acesso completo</option>
         <option value="op">Lista + Produção + Encomendas</option>
@@ -20404,9 +20422,14 @@ function UsuariosPanel({state,setState}:{state:any,setState:any}){
               </span>
               {u.empresa&&<span className="tag" style={{background:"var(--bg4)",color:"var(--text2)",border:"1px solid var(--border2)"}}>{u.empresa}</span>}
               {u.pdv&&<span className="tag" style={{background:"#1a3a2a44",color:"#22C55E",border:"1px solid #2a5a3a"}}>🖥️ PDV</span>}
-              <button onClick={()=>setShowSenha(p=>({...p,[u.id]:!p[u.id]}))} style={{background:"none",border:"1px solid var(--border2)",borderRadius:6,color:"var(--text2)",cursor:"pointer",fontSize:11,padding:"2px 7px"}}>
-                {showSenha[u.id]?`🔑 ${u.senha}`:"👁 ver senha"}
-              </button>
+              {/* ⚠️ O BOTÃO "VER SENHA" FOI REMOVIDO (Fase 4). Ele mostrava a
+                  senha de qualquer usuário em texto para quem abrisse a tela —
+                  e só funcionava porque a senha vinha no JSON. Agora ela não sai
+                  do servidor, e lá dentro é hash: não há o que mostrar. Trocar
+                  continua possível (editar → digitar a nova). */}
+              <span className="tag" style={{background:u.temSenha===false?"var(--warningBg)":"var(--bg4)",color:u.temSenha===false?"var(--warningText)":"var(--text2)",border:"1px solid var(--border2)"}}>
+                {u.temSenha===false?"⚠️ sem senha":"🔒 senha definida"}
+              </span>
             </div>
           </div>
           <div style={{display:"flex",gap:4,flexShrink:0}}>
@@ -22662,27 +22685,32 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
   const [userForm,setUserForm]=useState({nome:"",senha:"",role:"op" as string,empresa:"CONFRARIA",corTexto:"#e8eaf0",pdv:false});
   const [editUserId,setEditUserId]=useState<string|null>(null);
   const formRefUser=useRef<HTMLDivElement>(null);
-  const [showSenha,setShowSenha]=useState<Record<string,boolean>>({});
   const [pdvSaving,setPdvSaving]=useState(false);
   const setBothUsers=(fn:(arr:any[])=>any[])=>{
     setState((s:any)=>{const next={...s};["CONFRARIA","SEAMA"].forEach(emp=>{next[emp]={...next[emp],usuarios:fn(next[emp]?.usuarios||[])};});return next;});
   };
   const saveUser=async ()=>{
     const nome=userForm.nome.trim();const senha=userForm.senha.trim();
-    if(!nome)return alert("Informe o nome.");if(!senha)return alert("Informe a senha.");
-    if(!editUserId&&usuarios.some((u:any)=>u.senha===senha))return alert("Senha já em uso.");
-    if(editUserId&&usuarios.some((u:any)=>u.senha===senha&&u.id!==editUserId))return alert("Senha já em uso.");
-    if(editUserId){setBothUsers(arr=>arr.map((u:any)=>u.id===editUserId?{...u,nome,senha,role:userForm.role,empresa:userForm.role!=="admin"?userForm.empresa:undefined,corTexto:userForm.corTexto||"#e8eaf0",pdv:userForm.pdv}:u));setEditUserId(null);}
+    if(!nome)return alert("Informe o nome.");if(!editUserId&&!senha)return alert("Informe a senha.");
+    // Em branco na EDIÇÃO é "não mexi na senha" (o servidor preserva a guardada);
+    // em cadastro novo continua obrigatório. A duplicata é perguntada ao
+    // servidor: a tela não tem mais a lista de senhas.
+    if(senha&&await senhaJaEmUso(senha,editUserId||undefined))return alert("Senha já em uso.");
+    if(editUserId){setBothUsers(arr=>arr.map((u:any)=>u.id===editUserId?{...u,nome,...(senha?{senha}:{}),role:userForm.role,empresa:userForm.role!=="admin"?userForm.empresa:undefined,corTexto:userForm.corTexto||"#e8eaf0",pdv:userForm.pdv}:u));setEditUserId(null);}
     else{setBothUsers(arr=>[...arr,{id:uid(),nome,senha,role:userForm.role,empresa:userForm.role!=="admin"?userForm.empresa:undefined,corTexto:userForm.corTexto||"#e8eaf0",pdv:userForm.pdv}]);}
-    if(userForm.pdv){
+    // O PDV precisa do texto da senha, que só existe quando a pessoa digitou.
+    if(userForm.pdv&&senha){
       setPdvSaving(true);
       const res=await provisionPdvUser(nome,senha);
       setPdvSaving(false);
       if(!res.ok) alert("Usuário salvo aqui, mas o acesso ao PDV falhou: "+res.message);
+    }else if(userForm.pdv&&editUserId){
+      alert("Usuário salvo. Para atualizar o acesso ao PDV, digite a senha — ela não fica guardada em texto para ser reenviada.");
     }
     setUserForm({nome:"",senha:"",role:"op",empresa:"CONFRARIA",corTexto:"#e8eaf0",pdv:false});
   };
-  const startEditUser=(u:any)=>{setUserForm({nome:u.nome,senha:u.senha,role:u.role,empresa:u.empresa||"CONFRARIA",corTexto:u.corTexto||"#e8eaf0",pdv:!!u.pdv});setEditUserId(u.id);setTimeout(()=>formRefUser.current?.scrollIntoView({behavior:"smooth",block:"start"}),100);};
+  // Senha em branco: ela não vem do servidor, e vazio significa "manter".
+  const startEditUser=(u:any)=>{setUserForm({nome:u.nome,senha:"",role:u.role,empresa:u.empresa||"CONFRARIA",corTexto:u.corTexto||"#e8eaf0",pdv:!!u.pdv});setEditUserId(u.id);setTimeout(()=>formRefUser.current?.scrollIntoView({behavior:"smooth",block:"start"}),100);};
   const delUser=(id:string,nome:string)=>{if(!confirm(`Excluir "${nome}"?`))return;_listaDeletados.add(id);setBothUsers(arr=>arr.filter((u:any)=>u.id!==id));};
 
   // ---- Integrações ----
@@ -23409,7 +23437,7 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
       <div ref={formRefUser} className="card" style={{marginBottom:12}}>
         <div style={{fontSize:13,fontWeight:700,color:"var(--acc)",marginBottom:10}}>{editUserId?"✏️ Editar Usuário":"➕ Novo Usuário"}</div>
         <input placeholder="Nome do usuário" value={userForm.nome} onChange={e=>setUserForm(f=>({...f,nome:e.target.value}))} className="inp" style={{marginBottom:8}}/>
-        <input placeholder="Senha de acesso" value={userForm.senha} onChange={e=>setUserForm(f=>({...f,senha:e.target.value}))} className="inp" style={{marginBottom:8}}/>
+        <input placeholder={editUserId?"Senha (em branco = manter a atual)":"Senha de acesso"} value={userForm.senha} onChange={e=>setUserForm(f=>({...f,senha:e.target.value}))} className="inp" style={{marginBottom:8}}/>
         <select value={userForm.role} onChange={e=>setUserForm(f=>({...f,role:e.target.value}))} className="inp" style={{marginBottom:8}}>
           <option value="admin">Administrador — acesso completo</option>
           <option value="op">Lista + Produção + Encomendas</option>
@@ -23458,10 +23486,11 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
                 </span>
                 {u.empresa&&<span className="tag" style={{background:"var(--bg4)",color:"var(--text2)"}}>{u.empresa}</span>}
                 {u.pdv&&<span className="tag" style={{background:"#1a3a2a44",color:"#22C55E"}}>🖥️ PDV</span>}
-                <button onClick={()=>setShowSenha(p=>({...p,[u.id]:!p[u.id]}))}
-                  style={{background:"none",border:"1px solid var(--border)",borderRadius:6,color:"var(--text2)",cursor:"pointer",fontSize:11,padding:"2px 7px"}}>
-                  {showSenha[u.id]?`🔑 ${u.senha}`:"👁 ver"}
-                </button>
+                {/* Removido junto com o outro — ver o comentário na tela de
+                    Cadastro de Usuários. */}
+                <span className="tag" style={{background:u.temSenha===false?"var(--warningBg)":"var(--bg4)",color:u.temSenha===false?"var(--warningText)":"var(--text2)"}}>
+                  {u.temSenha===false?"⚠️ sem senha":"🔒 senha definida"}
+                </span>
               </div>
             </div>
             <div style={{display:"flex",gap:4,flexShrink:0}}>

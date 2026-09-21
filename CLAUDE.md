@@ -2783,18 +2783,80 @@ APP_ADMIN_SENHA      entrada de administrador; é o que impede sistema sem acess
 APP_ADMIN_LABEL      opcional, nome que aparece logado (padrão "Administrativo")
 ```
 
-### O que AINDA falta (não foi feito nesta fase)
+### Fase 4 — a senha não sai do servidor (21/09/2026)
 
-⚠️ **As senhas continuam em texto puro em `db.usuarios[].senha`**, e o documento
-inteiro continua sendo enviado a quem tem sessão. Ou seja: um operador logado
-consegue ler a senha do administrador no JSON, pelo navegador. Fechar isso exige
-(a) não mandar `senha` no GET e (b) o merge **preservar** a senha guardada quando
-o incoming vier sem ela — senão o primeiro POST do cliente apaga todas. Ficou
-fora de propósito, para não entregar meia mudança num sistema em operação.
+A Fase 3 tirou a lista de senhas do navegador de quem **não** está logado.
+Faltava o outro lado: `db.usuarios[].senha` estava em texto puro dentro do
+documento, e o documento vai inteiro para quem **tem** sessão — qualquer operador
+logado lia a senha do administrador no JSON. Havia até um botão **"👁 ver senha"**
+em **duas** telas (`UsuariosPanel` e Configurações → Usuários), que mostrava a
+senha de qualquer um para quem abrisse a tela.
 
-`src/authTela.test.js` lê o `App.tsx` e o `new_server.js` e reprova quem
-reintroduzir senha no cliente, tirar o gate de alguma das três rotas, ou voltar a
-tratar 401 como erro de rede.
+⚠️ **SCRYPT, NÃO SHA.** Hash rápido sobre um código de 4 dígitos é resolvido em
+microssegundos: são 10 mil candidatos. **Sal por usuário**, dentro do próprio
+valor guardado — com sal único, dois operadores com o mesmo código teriam o
+mesmo hash, e olhar o JSON diria quem compartilha senha com quem.
+
+⚠️ **O TAMANHO DO HASH É FIXO, NÃO SAI DO VALOR GUARDADO.** A primeira versão
+derivava o `keylen` do que estava gravado, e por isso um hash **truncado**
+continuava conferindo: a comparação passava a ser só sobre o prefixo que sobrou.
+Pego pelo teste de "hash corrompido não passa".
+
+⚠️ **O CUSTO É PAGO POR USUÁRIO A CADA LOGIN** (~42 ms medidos), porque o login é
+**só senha, sem nome**: não há como saber qual registro conferir antes de tentar.
+Se a lista crescer muito, o caminho é pedir o nome no login — não enfraquecer o
+hash.
+
+⚠️ **O TEXTO PURO ANTIGO CONTINUA ENTRANDO** (`conferirSenha` aceita os dois
+formatos). Recusá-lo trancaria fora quem restaurasse um backup anterior à
+migração. A migração roda **na subida, uma vez por arquivo**, e só reescreve se
+achou texto puro — deixar para "migrar quando alguém logar" espalharia a gravação
+pelo horário de serviço e deixaria senha em claro no arquivo por tempo
+indeterminado, que é justamente o que um backup copia.
+
+⚠️ **A SENHA GUARDADA É PRESERVADA NO POST, DEPOIS DA FUSÃO.** O cliente recebe os
+usuários **sem** senha e devolve o documento inteiro: sem `preservarSenhas`, a
+PRIMEIRA gravação de qualquer tela — uma venda, um item da lista — apagaria a
+senha de todo mundo e o sistema ficaria sem ninguém capaz de entrar. Campo em
+branco quer dizer **"não mexi"**; senha nova sobe em texto e é gravada em hash.
+
+⚠️ **O GET só faz `JSON.parse` quando há `usuarios`.** O resto do documento
+(3 MB) continua indo como texto cru — o app consulta essa rota a cada ~100ms em
+cada aparelho.
+
+⚠️ **`temSenha` não é cosmético:** as telas precisam distinguir "usuário sem senha
+definida" de "senha existe e não vou te mostrar". Sem esse sinal, as duas viram
+um campo vazio e a pessoa não sabe se precisa preencher.
+
+⚠️ **A duplicata é perguntada ao servidor** (`POST /api/senha-em-uso`, exige
+sessão) — a tela não tem mais a lista para conferir sozinha. **Falha de rede não
+bloqueia o cadastro:** recusar por causa de uma checagem de conveniência é pior
+que aceitar duas pessoas com o mesmo código, que é visível. E não é oráculo novo:
+quem pode chamar isso já podia tentar a senha em `/api/login`, que ainda entrega
+uma sessão.
+
+⚠️ **O PDV precisa do TEXTO da senha** (`provisionPdvUser`), que só existe quando
+a pessoa acabou de digitar. Editando um usuário de PDV sem digitar senha, a tela
+avisa que o acesso ao PDV não foi atualizado — em vez de reenviar silenciosamente
+um valor que não existe mais.
+
+⚠️ **A lista de usuários é DUPLICADA nos dois arquivos de empresa**, e o login
+aceita match em qualquer um dos dois. Se os arquivos divergirem (um POST falhou,
+um aparelho ficou offline), **a senha antiga continua entrando até os dois serem
+atualizados**. `setBoth`/`setBothUsers` gravam nos dois de propósito; medido em
+teste com o servidor no ar. Unificar exigiria uma fonte única de usuários — não
+foi feito.
+
+### O que AINDA falta
+
+⚠️ **Senha de 4 dígitos continua sendo 4 dígitos.** O hash protege o arquivo, não
+o espaço de busca: quem conseguir o arquivo testa 10 mil candidatos. O que
+encurta isso de verdade é código maior, não mais custo de hash.
+
+`src/authTela.test.js` lê o `App.tsx`, o `auth.js` e o `new_server.js` e reprova
+quem reintroduzir senha no cliente, tirar o gate de alguma das três rotas, voltar
+a tratar 401 como erro de rede, mandar `senha` no GET, remover a preservação no
+POST ou trazer de volta o "ver senha".
 
 ---
 

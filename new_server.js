@@ -28,7 +28,8 @@ if (fs.existsSync(_envFile)) {
 try { await import('dotenv/config'); } catch {}
 
 import { autorizarDados, acharUsuario, assinarSessao, lerSessao, lerCookies,
-  montarCookieSessao, cookieDeSaida, ehHttps, sessaoValida, COOKIE_SESSAO } from './auth.js';
+  montarCookieSessao, cookieDeSaida, ehHttps, sessaoValida, COOKIE_SESSAO,
+  semSenhas, preservarSenhas, hashSenha, ehHash, conferirSenha } from './auth.js';
 
 // ── Autenticação (21/09/2026) ───────────────────────────────────────────────
 // ⚠️ ATÉ AQUI NÃO HAVIA NENHUMA. `GET /api/dados/<empresa>` devolvia o banco
@@ -1220,6 +1221,45 @@ function contaDeAcesso() {
       _cacheAcesso.porArquivo.get('seama')?.corte || 0);
   }
   return { usuarios: _cacheAcesso.usuarios, sessoesValidasApos: _cacheAcesso.sessoesValidasApos };
+}
+
+// Tira a senha dos usuários do documento que vai para o navegador.
+function semUsuariosComSenha(textoJson) {
+  const doc = JSON.parse(textoJson);
+  if (!doc || !Array.isArray(doc.usuarios)) return doc;
+  return { ...doc, usuarios: semSenhas(doc.usuarios) };
+}
+
+// ── Migração única: texto puro → hash ───────────────────────────────────────
+// ⚠️ RODA NA SUBIDA, UMA VEZ POR ARQUIVO, e só reescreve se achou algo em texto
+// puro. Deixar para migrar "quando alguém logar" espalharia a gravação pelo
+// horário de serviço e deixaria senha em claro no arquivo por tempo
+// indeterminado — o arquivo é justamente o que um backup copia.
+//
+// ⚠️ NÃO derruba ninguém: `conferirSenha` aceita os dois formatos, então um
+// aparelho com bundle antigo, ou um arquivo restaurado de antes, continua
+// entrando.
+function migrarSenhasParaHash() {
+  for (const emp of ['confraria', 'seama']) {
+    const arq = path.join(DADOS_DIR, `${emp}.json`);
+    let doc;
+    try { doc = JSON.parse(fs.readFileSync(arq, 'utf-8')); } catch { continue; }
+    if (!doc || !Array.isArray(doc.usuarios) || !doc.usuarios.length) continue;
+    let mudou = 0;
+    const usuarios = doc.usuarios.map((u) => {
+      const senha = typeof u?.senha === 'string' ? u.senha.trim() : '';
+      if (!senha || ehHash(senha)) return u;
+      mudou++;
+      return { ...u, senha: hashSenha(senha) };
+    });
+    if (!mudou) continue;
+    try {
+      fs.writeFileSync(arq, JSON.stringify({ ...doc, usuarios }));
+      console.log(`[auth] ${mudou} senha(s) de ${emp} migradas de texto puro para hash.`);
+    } catch (e) {
+      console.error(`[auth] não consegui migrar as senhas de ${emp}:`, e.message);
+    }
+  }
 }
 
 // A porta única dos dados. Devolve true se já respondeu 401 (o chamador para).
@@ -3317,6 +3357,29 @@ REGRAS:
     });
     return;
   }
+  // A tela de Usuários avisava "senha já em uso" comparando a lista que tinha em
+  // mãos. Ela não tem mais a lista, então pergunta.
+  //
+  // ⚠️ EXIGE SESSÃO. E não é um oráculo novo: quem pode chamar isto já podia
+  // tentar a senha em `/api/login`, que além de responder ainda entrega uma
+  // sessão — este endpoint diz estritamente menos.
+  if (req.method === 'POST' && urlPath === '/api/senha-em-uso') {
+    if (barrouDados(req, res)) return;
+    const chunks = [];
+    req.on('data', c => chunks.push(c));
+    req.on('end', () => {
+      let senha = '', exceto = '';
+      try { const b = JSON.parse(Buffer.concat(chunks).toString('utf-8')); senha = b?.senha || ''; exceto = b?.exceto || ''; } catch {}
+      const { usuarios } = contaDeAcesso();
+      const emUso = String(senha).trim()
+        ? usuarios.some(u => u?.id !== exceto && conferirSenha(u?.senha, senha))
+        : false;
+      res.setHeader('Content-Type', 'application/json');
+      res.writeHead(200);
+      res.end(JSON.stringify({ emUso }));
+    });
+    return;
+  }
   if (req.method === 'POST' && urlPath === '/api/logout') {
     res.setHeader('Set-Cookie', cookieDeSaida({ https: ehHttps(req) }));
     res.setHeader('Content-Type', 'application/json');
@@ -3474,7 +3537,15 @@ REGRAS:
       res.setHeader('Content-Type', 'application/json');
       res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
       res.writeHead(200);
-      res.end(data);
+      // ⚠️ FASE 4: A SENHA NÃO SAI DAQUI. O documento vai inteiro para quem tem
+      // sessão, então até 21/09/2026 qualquer operador logado lia a senha do
+      // administrador no JSON, pelo navegador — havia até um botão "ver senha"
+      // em duas telas. Sai `temSenha`, que é o que a tela precisa saber.
+      //
+      // ⚠️ O parse/serialize custa, então só acontece quando há `usuarios`: o
+      // resto do documento (3 MB) continua indo como texto cru, sem passar por
+      // JSON.parse a cada poll de ~100ms.
+      res.end(data.includes('"usuarios"') ? JSON.stringify(semUsuariosComSenha(data)) : data);
     } catch {
       res.setHeader('Content-Type', 'application/json');
       res.setHeader('Cache-Control', 'no-store');
@@ -3975,6 +4046,15 @@ REGRAS:
           if (existing) {
             try {
               incoming = mergeDocument(existing, incoming);
+              // ⚠️ DEPOIS DA FUSÃO, E SEMPRE. O cliente recebe os usuários SEM
+              // senha (Fase 4) e devolve o documento inteiro: sem restaurar
+              // aqui, a PRIMEIRA gravação de qualquer tela — uma venda, um item
+              // da lista, qualquer coisa — apagaria a senha de todo mundo, e o
+              // sistema ficaria sem ninguém capaz de entrar. Campo em branco
+              // quer dizer "não mexi"; senha nova vem em texto e sai em hash.
+              if (Array.isArray(incoming?.usuarios)) {
+                incoming = { ...incoming, usuarios: preservarSenhas(incoming.usuarios, existing.usuarios) };
+              }
             } catch (e) {
               console.error(`[POST ${emp}] FUSÃO FALHOU — POST recusado, arquivo preservado:`, e);
               try {
@@ -4258,6 +4338,7 @@ async function autoSyncSEFAZ() {
 }
 
 server.listen(PORT, () => {
+  migrarSenhasParaHash();
   if (APP_SESSION_SECRET_GERADO) {
     console.warn('[auth] APP_SESSION_SECRET não está no .env — um segredo aleatório foi gerado para esta execução.');
     console.warn('[auth] Consequência: cada "pm2 restart" desloga TODOS os aparelhos. Defina APP_SESSION_SECRET para parar de acontecer.');

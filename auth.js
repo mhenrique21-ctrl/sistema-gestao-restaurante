@@ -63,6 +63,98 @@ export function sessaoValida(payload, sessoesValidasApos) {
   return !corte || Number(payload.em) >= corte;
 }
 
+// ── A senha guardada NÃO é a senha ──────────────────────────────────────────
+// Fase 4 (21/09/2026). A Fase 3 tirou a lista de senhas do navegador de quem
+// NÃO está logado. Faltava o outro lado: `db.usuarios[].senha` estava em texto
+// puro dentro do documento, e o documento vai inteiro para quem TEM sessão —
+// então qualquer operador logado lia a senha do administrador no JSON, pelo
+// navegador. Havia até um botão "👁 ver senha" em duas telas.
+//
+// ⚠️ SCRYPT, NÃO SHA. Hash rápido sobre um código de 4 dígitos é resolvido por
+// força bruta em microssegundos: são 10 mil candidatos. O custo do scrypt é o
+// que transforma isso em trabalho — e é por isso que ele não pode ser "só um
+// hash qualquer".
+//
+// ⚠️ SAL POR USUÁRIO, dentro do próprio valor guardado. Com sal único, dois
+// operadores com o mesmo código teriam o mesmo hash, e olhar o JSON diria quem
+// compartilha senha com quem.
+//
+// ⚠️ O CUSTO É PAGO POR USUÁRIO A CADA LOGIN, e isso é consequência de o login
+// ser SÓ senha, sem nome: não há como saber qual registro conferir antes de
+// tentar. Com N=2^14 e poucos usuários fica em fração de segundo; se um dia a
+// lista crescer muito, o caminho é pedir o nome no login, não enfraquecer o
+// hash.
+const SCRYPT_N = 16384;
+const HASH_BYTES = 32;
+const PREFIXO_HASH = 'scrypt$';
+
+export function hashSenha(senha) {
+  const p = String(senha ?? '').trim();
+  if (!p) return '';
+  const sal = crypto.randomBytes(16);
+  const h = crypto.scryptSync(p, sal, HASH_BYTES, { N: SCRYPT_N, r: 8, p: 1 });
+  return `${PREFIXO_HASH}${SCRYPT_N}$${sal.toString('hex')}$${h.toString('hex')}`;
+}
+
+export function ehHash(v) {
+  return typeof v === 'string' && v.startsWith(PREFIXO_HASH);
+}
+
+// ⚠️ ACEITA O TEXTO PURO ANTIGO, de propósito. Migrar tudo de uma vez e recusar
+// o resto trancaria fora quem estivesse com um aparelho sem sincronizar, ou com
+// o arquivo restaurado de um backup anterior à migração. O legado é reconhecido
+// na leitura — a mesma regra do `LEGADO` do `tipoInsumo.js` — e o servidor
+// reescreve em hash quando encontra.
+export function conferirSenha(guardado, digitada) {
+  const p = String(digitada ?? '').trim();
+  if (!p || typeof guardado !== 'string' || !guardado) return false;
+  if (!ehHash(guardado)) return igual(guardado.trim(), p);
+  const partes = guardado.slice(PREFIXO_HASH.length).split('$');
+  if (partes.length !== 3) return false;
+  const [nTxt, salHex, hashHex] = partes;
+  const N = Number(nTxt);
+  if (!Number.isInteger(N) || N < 2 || (N & (N - 1)) !== 0) return false;
+  // ⚠️ O TAMANHO É FIXO, NÃO SAI DO VALOR GUARDADO. Derivando o keylen do que
+  // está gravado, um hash TRUNCADO continuava conferindo: a comparação passava
+  // a ser só sobre o prefixo que sobrou, e quanto mais curto, mais fácil.
+  try {
+    const a = Buffer.from(hashHex, 'hex');
+    if (a.length !== HASH_BYTES) return false;
+    const h = crypto.scryptSync(p, Buffer.from(salHex, 'hex'), HASH_BYTES, { N, r: 8, p: 1 });
+    return crypto.timingSafeEqual(a, h);
+  } catch { return false; }
+}
+
+// O que sai para o navegador no lugar da senha.
+//
+// ⚠️ `temSenha` NÃO É COSMÉTICO: as telas de usuário precisam distinguir
+// "usuário sem senha definida" de "senha existe e não vou te mostrar". Sem esse
+// sinal, as duas viram um campo vazio, e a pessoa não sabe se precisa preencher.
+export function semSenhas(usuarios) {
+  return (usuarios || []).map((u) => {
+    if (!u || typeof u !== 'object') return u;
+    const { senha, ...resto } = u;
+    return { ...resto, temSenha: !!(typeof senha === 'string' && senha.trim()) };
+  });
+}
+
+// ⚠️ A SENHA GUARDADA É PRESERVADA quando o incoming vem SEM ela. O cliente
+// recebe os usuários sem senha (acima) e devolve o documento inteiro no POST:
+// sem esta preservação, a PRIMEIRA gravação de qualquer tela apagaria a senha de
+// todo mundo — e o sistema ficaria sem ninguém capaz de entrar. Campo vazio
+// significa "não mexi"; para trocar, a tela manda a senha nova.
+export function preservarSenhas(usuariosFundidos, usuariosGuardados) {
+  const antes = new Map((usuariosGuardados || []).filter((u) => u?.id).map((u) => [u.id, u]));
+  return (usuariosFundidos || []).map((u) => {
+    if (!u || typeof u !== 'object') return u;
+    const { temSenha, ...limpo } = u;
+    const nova = typeof u.senha === 'string' ? u.senha.trim() : '';
+    if (nova) return { ...limpo, senha: ehHash(nova) ? nova : hashSenha(nova) };
+    const guardada = antes.get(u.id)?.senha;
+    return guardada ? { ...limpo, senha: guardada } : limpo;
+  });
+}
+
 // ── Quem é o dono desta senha ───────────────────────────────────────────────
 // ⚠️ A CONFERÊNCIA MUDOU DE LADO, e é isso que importa: antes o navegador
 // recebia a lista de usuários e comparava; agora a senha vai para o servidor e
@@ -76,10 +168,10 @@ export function acharUsuario(senha, { usuarios = [], adminSenha = '', adminLabel
   const p = String(senha ?? '').trim();
   if (!p) return null;
   for (const u of usuarios) {
-    // ⚠️ Comparação em tempo constante também aqui: com `===`, o tempo de
-    // resposta do login diz quantos dígitos do código estavam certos, e um
-    // código de 4 dígitos cai em minutos.
-    if (u && typeof u.senha === 'string' && igual(u.senha.trim(), p)) {
+    // ⚠️ `conferirSenha` compara em tempo constante e aceita o texto puro
+    // antigo: com `===`, o tempo de resposta do login diz quantos dígitos do
+    // código estavam certos, e um código de 4 dígitos cai em minutos.
+    if (u && conferirSenha(u.senha, p)) {
       return { role: u.role || 'op', label: u.nome || 'Usuário', empresa: u.empresa || undefined,
         corTexto: u.corTexto || undefined, fonte: 'cadastro' };
     }

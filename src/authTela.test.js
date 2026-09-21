@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 const raiz = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const APP = fs.readFileSync(path.join(raiz, 'src', 'App.tsx'), 'utf8');
 const SRV = fs.readFileSync(path.join(raiz, 'new_server.js'), 'utf8');
+const APP_AUTH = fs.readFileSync(path.join(raiz, 'auth.js'), 'utf8');
 
 // Trava, LENDO o código, a Fase 3 (21/09/2026). Nada disto o build acusa: é
 // código válido que devolve o banco a quem pedir.
@@ -35,8 +36,21 @@ test('o login é conferido no SERVIDOR, não no navegador', () => {
 test('as TRÊS rotas de dados exigem sessão', () => {
   // GET do documento, POST do documento e a marca de versão — a última também é
   // informação: diz que a empresa existe e quando mexeram nela.
-  assert.equal((SRV.match(/if \(barrouDados\(req, res\)\) return;/g) || []).length, 3,
-    'alguma rota de dados voltou a responder sem sessão');
+  // Ancorado nas ROTAS, não numa contagem: contar quebrava ao proteger um
+  // endpoint novo, que é o oposto do que este teste quer vigiar.
+  for (const rota of [
+    "/^\\/api\\/dados\\/[^/]+\\/versao$/.test(urlPath)",
+    "req.method === 'GET' && urlPath.startsWith('/api/dados/')",
+    "req.method === 'POST' && urlPath.startsWith('/api/dados/')",
+  ]) {
+    const i = SRV.indexOf(rota);
+    assert.ok(i > 0, `rota sumiu do servidor: ${rota}`);
+    const trecho = SRV.slice(i, i + 900);
+    assert.ok(trecho.includes('if (barrouDados(req, res)) return;'),
+      `esta rota voltou a responder sem sessão: ${rota}`);
+  }
+  assert.ok((SRV.match(/if \(barrouDados\(req, res\)\) return;/g) || []).length >= 3,
+    'o gate sumiu do servidor');
   assert.ok(SRV.includes('function barrouDados(req, res)'), 'a porta única dos dados sumiu');
 });
 
@@ -80,4 +94,62 @@ test('o servidor é a autoridade na subida, e o logout apaga o cookie', () => {
 test('o "desconectar todos" passou a ser conferido no servidor', () => {
   assert.ok(SRV.includes('sessoesValidasApos: contaDeAcesso().sessoesValidasApos'),
     'a revogação virou de novo um pedido gentil ao cliente');
+});
+
+// ── Fase 4: a senha não sai do servidor ────────────────────────────────────
+
+test('o GET não manda mais a senha dos usuários', () => {
+  // ⚠️ O documento vai INTEIRO para quem tem sessão: enquanto `senha` estava
+  // nele, qualquer operador logado lia a senha do administrador no JSON.
+  assert.ok(SRV.includes('semUsuariosComSenha(data)'), 'a senha voltou a sair no GET');
+  assert.ok(SRV.includes('function semUsuariosComSenha'), 'o filtro do GET sumiu');
+  // ⚠️ E só faz parse quando há usuários: o resto (3 MB) continua indo como
+  // texto cru, senão cada poll de ~100ms pagaria um JSON.parse completo.
+  assert.ok(SRV.includes(`data.includes('"usuarios"')`), 'o GET passou a fazer parse do documento sempre');
+});
+
+test('a senha guardada SOBREVIVE ao POST do cliente', () => {
+  // ⚠️ Sem isto, a PRIMEIRA gravação de qualquer tela — uma venda, um item da
+  // lista — apagaria a senha de todo mundo, e ninguém mais entraria.
+  assert.ok(SRV.includes('preservarSenhas(incoming.usuarios, existing.usuarios)'),
+    'a preservação da senha saiu do POST');
+  // Tem que rodar DEPOIS da fusão: antes dela, o mergeDocument sobrescreveria.
+  const iMerge = SRV.indexOf('incoming = mergeDocument(existing, incoming);');
+  const iPres = SRV.indexOf('preservarSenhas(incoming.usuarios');
+  assert.ok(iMerge > 0 && iPres > iMerge, 'a preservação foi para antes da fusão');
+});
+
+test('as senhas viram HASH, e o legado continua entrando', () => {
+  assert.ok(SRV.includes('function migrarSenhasParaHash()'), 'a migração para hash sumiu');
+  assert.ok(SRV.includes('migrarSenhasParaHash();'), 'a migração deixou de rodar na subida');
+  // ⚠️ Recusar o texto puro antigo trancaria fora quem restaurasse um backup
+  // anterior à migração.
+  assert.ok(APP_AUTH.includes('if (!ehHash(guardado)) return igual(guardado.trim(), p);'),
+    'o formato antigo deixou de ser aceito na leitura');
+});
+
+test('o botão "ver senha" saiu das DUAS telas', () => {
+  // Ele mostrava a senha de qualquer usuário, em texto, para quem abrisse a
+  // tela — e só funcionava porque a senha vinha no JSON.
+  assert.ok(!APP.includes('showSenha'), 'o revelador de senha voltou');
+  assert.ok(!/\$\{u\.senha\}/.test(APP), 'alguma tela voltou a imprimir a senha');
+  assert.equal((APP.match(/senha definida/g) || []).length, 2, 'o selo de senha sumiu de uma das telas');
+});
+
+test('em branco na edição é "manter", nunca "apagar"', () => {
+  // As duas telas: cadastro novo exige senha, edição não.
+  assert.ok(APP.includes('if(!editId&&!senha)return alert("Informe a senha.");'), 'tela 1 voltou a exigir senha na edição');
+  assert.ok(APP.includes('if(!editUserId&&!senha)return alert("Informe a senha.");'), 'tela 2 voltou a exigir senha na edição');
+  assert.equal((APP.match(/\.\.\.\(senha\?\{senha\}:\{\}\)/g) || []).length, 2,
+    'alguma tela voltou a gravar senha vazia por cima da guardada');
+});
+
+test('a duplicata é perguntada ao servidor, e falha de rede não bloqueia', () => {
+  // A tela não tem mais a lista para conferir sozinha. E recusar o cadastro por
+  // causa de uma checagem de conveniência seria pior que aceitar a duplicata.
+  assert.ok(APP.includes('const senhaJaEmUso=async'), 'a checagem de duplicata sumiu');
+  assert.ok(/catch\{return false;\}/.test(APP.slice(APP.indexOf('const senhaJaEmUso=async'), APP.indexOf('const senhaJaEmUso=async') + 700)),
+    'falha de rede passou a bloquear o cadastro');
+  assert.ok(SRV.includes("urlPath === '/api/senha-em-uso'"), 'o endpoint sumiu');
+  assert.ok(/senha-em-uso'\) \{\n\s*if \(barrouDados/.test(SRV), 'o endpoint deixou de exigir sessão');
 });
