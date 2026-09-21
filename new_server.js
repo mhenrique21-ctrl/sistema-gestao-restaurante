@@ -27,6 +27,24 @@ if (fs.existsSync(_envFile)) {
 }
 try { await import('dotenv/config'); } catch {}
 
+import { autorizarDados, acharUsuario, assinarSessao, lerSessao, lerCookies,
+  montarCookieSessao, cookieDeSaida, ehHttps, sessaoValida, COOKIE_SESSAO } from './auth.js';
+
+// ── Autenticação (21/09/2026) ───────────────────────────────────────────────
+// ⚠️ ATÉ AQUI NÃO HAVIA NENHUMA. `GET /api/dados/<empresa>` devolvia o banco
+// inteiro a quem soubesse a URL — folha, clientes, fornecedores — e o POST
+// aceitava sobrescrever tudo. A senha de admin viajava dentro do bundle.
+//
+// ⚠️ SEM SEGREDO, GERA UM E AVISA ALTO. As duas alternativas são piores: falhar
+// fechado brica o sistema num deploy que esqueceu o `.env` (restaurante em
+// serviço, ninguém entra), e falhar aberto deixa a porta escancarada exatamente
+// como estava. Gerado na subida, o sistema funciona e cada `pm2 restart`
+// desloga todo mundo — incômodo o bastante para alguém configurar.
+const APP_SESSION_SECRET = process.env.APP_SESSION_SECRET || crypto.randomBytes(32).toString('hex');
+const APP_SESSION_SECRET_GERADO = !process.env.APP_SESSION_SECRET;
+const APP_ADMIN_SENHA = process.env.APP_ADMIN_SENHA || '';
+const APP_ADMIN_LABEL = process.env.APP_ADMIN_LABEL || 'Administrativo';
+
 const PORT = process.env.PORT || 3000;
 const API_KEY = process.env.ANTHROPIC_API_KEY || '';
 
@@ -1166,6 +1184,58 @@ function iaComplete({ system, userText, maxTokens = 2048 }) {
 }
 
 // ---- HTTP Server ----
+
+// Usuários e carimbo de revogação, lidos dos DOIS arquivos de empresa.
+//
+// ⚠️ CACHEADO POR mtime, e não é otimização prematura: o gate roda em TODA
+// chamada de `/api/dados/*`, que o app consulta a cada ~100ms em cada aparelho.
+// Fazer `readFileSync` de 3 MB ali é exatamente o que travava o event loop antes
+// (ver o comentário da rota `/versao`). `statSync` custa ~40 bytes.
+//
+// ⚠️ E nada disto vai para o navegador: a lista de senhas fica no servidor.
+const _cacheAcesso = { porArquivo: new Map(), usuarios: [], sessoesValidasApos: 0 };
+function contaDeAcesso() {
+  let mudou = false;
+  for (const emp of ['confraria', 'seama']) {
+    const arq = path.join(DADOS_DIR, `${emp}.json`);
+    let marca = '';
+    try { const st = fs.statSync(arq); marca = `${st.mtimeMs}-${st.size}`; } catch { marca = 'ausente'; }
+    if (_cacheAcesso.porArquivo.get(emp)?.marca !== marca) {
+      let usuarios = [], corte = 0;
+      try {
+        const d = JSON.parse(fs.readFileSync(arq, 'utf-8'));
+        usuarios = Array.isArray(d?.usuarios) ? d.usuarios : [];
+        corte = Number(d?.config?.sessoesValidasApos) || 0;
+      } catch {}
+      _cacheAcesso.porArquivo.set(emp, { marca, usuarios, corte });
+      mudou = true;
+    }
+  }
+  if (mudou) {
+    _cacheAcesso.usuarios = [...(_cacheAcesso.porArquivo.get('confraria')?.usuarios || []),
+      ...(_cacheAcesso.porArquivo.get('seama')?.usuarios || [])];
+    // ⚠️ O MAIOR dos dois: "desconectar todos" gravado numa empresa tem que
+    // derrubar o aparelho que está na outra — é o mesmo aparelho e a mesma ordem.
+    _cacheAcesso.sessoesValidasApos = Math.max(_cacheAcesso.porArquivo.get('confraria')?.corte || 0,
+      _cacheAcesso.porArquivo.get('seama')?.corte || 0);
+  }
+  return { usuarios: _cacheAcesso.usuarios, sessoesValidasApos: _cacheAcesso.sessoesValidasApos };
+}
+
+// A porta única dos dados. Devolve true se já respondeu 401 (o chamador para).
+function barrouDados(req, res) {
+  const r = autorizarDados(req, {
+    secret: APP_SESSION_SECRET,
+    serviceSecret: process.env.SEAMA_SERVICE_SECRET || '',
+    sessoesValidasApos: contaDeAcesso().sessoesValidasApos,
+  });
+  if (r.ok) return false;
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Cache-Control', 'no-store');
+  res.writeHead(401);
+  res.end(JSON.stringify({ erro: 'Sessão necessária.', motivo: r.motivo }));
+  return true;
+}
 
 const server = http.createServer((req, res) => {
   // Sistema interno: fora de qualquer buscador. Vai em TODA resposta, não só
@@ -3218,9 +3288,62 @@ REGRAS:
   //
   // Precisa vir ANTES do handler de /api/dados/ abaixo: aquele usa startsWith e
   // capturaria esta rota, devolvendo o documento inteiro.
+  // ── LOGIN / SESSÃO ────────────────────────────────────────────────────────
+  if (req.method === 'POST' && urlPath === '/api/login') {
+    const chunks = [];
+    req.on('data', c => chunks.push(c));
+    req.on('end', () => {
+      res.setHeader('Content-Type', 'application/json');
+      let senha = '';
+      try { senha = JSON.parse(Buffer.concat(chunks).toString('utf-8'))?.senha || ''; } catch {}
+      const { usuarios } = contaDeAcesso();
+      const quem = acharUsuario(senha, { usuarios, adminSenha: APP_ADMIN_SENHA, adminLabel: APP_ADMIN_LABEL });
+      if (!quem) {
+        // ⚠️ A resposta não diz SE a senha existe nem de quem é: "usuário não
+        // encontrado" contra "senha errada" entrega metade do trabalho.
+        // O atraso tira a graça de varrer 4 dígitos por força bruta.
+        setTimeout(() => { res.writeHead(401); res.end(JSON.stringify({ erro: 'Senha não reconhecida.' })); }, 400);
+        if (!usuarios.length && !APP_ADMIN_SENHA) {
+          console.error('[auth] LOGIN IMPOSSÍVEL: não há usuários cadastrados e APP_ADMIN_SENHA não está no .env.');
+        }
+        return;
+      }
+      const { senha: _s, ...semSenha } = quem;
+      const payload = { ...semSenha, em: Date.now() };
+      const cookie = assinarSessao(payload, APP_SESSION_SECRET);
+      res.setHeader('Set-Cookie', montarCookieSessao(cookie, { https: ehHttps(req) }));
+      res.writeHead(200);
+      res.end(JSON.stringify({ login: payload }));
+    });
+    return;
+  }
+  if (req.method === 'POST' && urlPath === '/api/logout') {
+    res.setHeader('Set-Cookie', cookieDeSaida({ https: ehHttps(req) }));
+    res.setHeader('Content-Type', 'application/json');
+    res.writeHead(200);
+    res.end(JSON.stringify({ ok: true }));
+    return;
+  }
+  // Quem sou eu? O cliente pergunta na subida em vez de confiar no localStorage:
+  // o cookie é a autoridade, e ele pode ter expirado ou sido revogado.
+  if (req.method === 'GET' && urlPath === '/api/sessao') {
+    const cookies = lerCookies(req.headers.cookie);
+    const payload = lerSessao(cookies[COOKIE_SESSAO], APP_SESSION_SECRET);
+    const { sessoesValidasApos } = contaDeAcesso();
+    const ok = payload && sessaoValida(payload, sessoesValidasApos);
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Cache-Control', 'no-store');
+    res.writeHead(200);
+    res.end(JSON.stringify({ login: ok ? payload : null }));
+    return;
+  }
+
   if (req.method === 'GET' && /^\/api\/dados\/[^/]+\/versao$/.test(urlPath)) {
     const emp = (urlPath.split('/')[3] || '').toUpperCase();
     if (!['CONFRARIA','SEAMA'].includes(emp)) { res.writeHead(400); res.end('{}'); return; }
+    // Até a marca de versão é informação: ela diz que a empresa existe e quando
+    // mexeram nela por último.
+    if (barrouDados(req, res)) return;
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
     try {
@@ -3342,6 +3465,9 @@ REGRAS:
   if (req.method === 'GET' && urlPath.startsWith('/api/dados/')) {
     const emp = (urlPath.split('/')[3] || '').toUpperCase();
     if (!['CONFRARIA','SEAMA'].includes(emp)) { res.writeHead(400); res.end('null'); return; }
+    // ⚠️ ERA AQUI O BURACO: esta rota devolvia o banco inteiro — vendas, folha,
+    // clientes com endereço, fornecedores com CNPJ — a quem soubesse a URL.
+    if (barrouDados(req, res)) return;
     const file = path.join(DADOS_DIR, `${emp.toLowerCase()}.json`);
     try {
       const data = fs.readFileSync(file, 'utf-8');
@@ -3816,6 +3942,8 @@ REGRAS:
   if (req.method === 'POST' && urlPath.startsWith('/api/dados/')) {
     const emp = (urlPath.split('/')[3] || '').toUpperCase();
     if (!['CONFRARIA','SEAMA'].includes(emp)) { res.writeHead(400); res.end('{}'); return; }
+    // ⚠️ E aqui dava para SOBRESCREVER o banco inteiro, também sem pedir nada.
+    if (barrouDados(req, res)) return;
     const file = path.join(DADOS_DIR, `${emp.toLowerCase()}.json`);
     // Acumula os chunks como Buffer bruto e só decodifica UTF-8 UMA VEZ no
     // final. Fazer `body += chunk` decodifica cada chunk isoladamente — se um
@@ -4130,6 +4258,14 @@ async function autoSyncSEFAZ() {
 }
 
 server.listen(PORT, () => {
+  if (APP_SESSION_SECRET_GERADO) {
+    console.warn('[auth] APP_SESSION_SECRET não está no .env — um segredo aleatório foi gerado para esta execução.');
+    console.warn('[auth] Consequência: cada "pm2 restart" desloga TODOS os aparelhos. Defina APP_SESSION_SECRET para parar de acontecer.');
+  }
+  if (!APP_ADMIN_SENHA && !contaDeAcesso().usuarios.length) {
+    console.error('[auth] ATENÇÃO: nenhum usuário cadastrado e APP_ADMIN_SENHA ausente — NINGUÉM consegue entrar.');
+    console.error('[auth] Defina APP_ADMIN_SENHA no .env e reinicie.');
+  }
   console.log(`Servidor: http://localhost:${PORT}`);
   console.log(`IA: ${IA_PROVIDER}/${IA_MODEL_ATIVO} — ${IA_KEY ? '✅ chave configurada' : `❌ ${IA_ENV_VAR} AUSENTE (IA desabilitada)`}`);
   for (const emp of ['CONFRARIA', 'SEAMA']) {

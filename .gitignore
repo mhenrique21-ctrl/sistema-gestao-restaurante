@@ -1,6 +1,12 @@
 node_modules/
 dist/
 dados.json
+# A pasta REAL do banco (dados/confraria.json, dados/seama.json). Só
+# "dados.json" estava ignorado, e ele não é o nome de nenhum arquivo em uso:
+# um `git add -A` rodado na VPS, ou um backup restaurado na árvore, mandaria o
+# banco inteiro — folha, clientes com endereço, senhas em texto puro — para um
+# repositório público. Conferido em 21/09/2026: nunca chegou ao histórico.
+dados/
 *.local
 .env
 certs/

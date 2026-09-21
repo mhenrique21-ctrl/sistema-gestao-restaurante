@@ -1464,27 +1464,48 @@ function LogoEmpresa({empresa}) {
 }
 
 // ===================== LOGIN =====================
-const LOGINS:{[pwd:string]:{role:"admin"|"op"|"op_lista"|"op_producao",label:string,empresa?:string}}={
-  "172839":{role:"admin",label:"Administrativo"},
-  "1234":  {role:"op",   label:"Op. Lista SEAMA",    empresa:"SEAMA"},
-  "4321":  {role:"op",   label:"Op. Lista CONFRARIA", empresa:"CONFRARIA"},
-};
+// ⚠️ AS SENHAS SAÍRAM DAQUI em 21/09/2026, e não era só o repositório público:
+// este arquivo VIRA O BUNDLE que o navegador baixa. Qualquer pessoa que abrisse
+// gestao.confrariacafe.com e olhasse o fonte tinha o código de administrador —
+// tornar o repositório privado não teria mudado nada. A lista de usuários, com
+// as senhas em texto puro, também vinha dentro do JSON de `/api/dados/*`, que
+// respondia sem pedir nada.
+//
+// Agora a senha vai para `POST /api/login`, é conferida no SERVIDOR (contra
+// `db.usuarios` e o `APP_ADMIN_SENHA` do `.env`) e só a identidade volta.
+// **Não recrie uma lista de senhas neste arquivo** — `src/authTela.test.js`
+// reprova quem tentar.
 
-function LoginScreen({onLogin,usuarios}:{onLogin:(info:any)=>void,usuarios:any[]}){
+function LoginScreen({onLogin}:{onLogin:(info:any)=>void}){
   const [pwd,setPwd]=useState("");
-  const [erro,setErro]=useState(false);
+  const [erro,setErro]=useState("");
   const [shake,setShake]=useState(false);
+  const [indo,setIndo]=useState(false);
 
-  const tentar=()=>{
+  // ⚠️ QUEM CONFERE É O SERVIDOR. Antes esta função comparava a senha digitada
+  // com `db.usuarios`, que o navegador tinha em mãos — a lista de senhas inteira
+  // estava no aparelho, e o `LOGINS` de reserva estava no bundle. Agora só a
+  // senha sobe e só a identidade volta.
+  const tentar=async()=>{
     const p=pwd.trim();
-    // Verifica usuários dinâmicos (fallback para LOGINS hardcoded se lista vazia)
-    const usuarios_=usuarios.length>0?usuarios:Object.entries(LOGINS).map(([s,v])=>({id:s,nome:v.label,senha:s,role:v.role,empresa:(v as any).empresa}));
-    const u=usuarios_.find((u:any)=>u.senha===p);
-    if(u){onLogin({role:u.role,label:u.nome,empresa:u.empresa||undefined,corTexto:u.corTexto||"#e8eaf0"});}
-    else{
-      setErro(true);setShake(true);setPwd("");
+    if(!p||indo)return;
+    setIndo(true);setErro("");
+    try{
+      const r=await fetch("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({senha:p})});
+      const d=await r.json().catch(()=>({}));
+      if(r.ok&&d?.login){onLogin(d.login);return;}
+      // A mensagem do servidor não diz se a senha existe — dizer "usuário não
+      // encontrado" contra "senha errada" entregaria metade do trabalho.
+      setErro(d?.erro||"Senha não reconhecida.");
+      setShake(true);setPwd("");
       setTimeout(()=>setShake(false),500);
-    }
+    }catch{
+      // Sem rede não se entra, e é importante dizer QUE É A REDE: senão a pessoa
+      // fica tentando a senha certa achando que errou.
+      setErro("Sem conexão com o servidor. Confira a internet e tente de novo.");
+      setShake(true);
+      setTimeout(()=>setShake(false),500);
+    }finally{setIndo(false);}
   };
 
   return(
@@ -1508,11 +1529,11 @@ function LoginScreen({onLogin,usuarios}:{onLogin:(info:any)=>void,usuarios:any[]
             autoFocus
             style={{width:"100%",background:"#FFFFFF",border:`1.5px solid ${erro?"var(--btnDanger)":"#E5E7EB"}`,borderRadius:12,color:"#1F2937",padding:"14px 16px",fontSize:18,letterSpacing:4,textAlign:"center",boxSizing:"border-box",marginBottom:12,outline:"none",fontFamily:"inherit"}}
           />
-          {erro&&<div style={{color:"var(--btnDanger)",fontSize:13,textAlign:"center",marginBottom:12}}>Senha incorreta. Tente novamente.</div>}
+          {erro&&<div style={{color:"var(--btnDanger)",fontSize:13,textAlign:"center",marginBottom:12}}>{erro}</div>}
           <button
-            onClick={tentar}
-            style={{width:"100%",background:"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)",border:"none",borderRadius:12,padding:"14px",fontSize:16,fontWeight:700,cursor:"pointer",letterSpacing:0.5}}>
-            Entrar
+            onClick={tentar} disabled={indo||!pwd.trim()}
+            style={{width:"100%",background:indo||!pwd.trim()?"#CBD5E1":"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)",border:"none",borderRadius:12,padding:"14px",fontSize:16,fontWeight:700,cursor:indo||!pwd.trim()?"default":"pointer",letterSpacing:0.5}}>
+            {indo?"Entrando...":"Entrar"}
           </button>
         </div>
       </div>
@@ -1790,15 +1811,19 @@ const migrateDb=(m:any)=>{
     if(!m[e].listaDeletedIds)m[e].listaDeletedIds=[];
     if(!m[e].usuarios)m[e].usuarios=[];
     if(!m[e].usuariosSeedDone){
-      const ids=["usr-admin","usr-op-seama","usr-op-confraria"];
-      if(!m[e].usuarios.some((u:any)=>ids.includes(u.id))){
-        m[e].usuarios=[
-          {id:"usr-admin",    nome:"Administrativo",      senha:"172839",role:"admin"},
-          {id:"usr-op-seama", nome:"Op. Lista SEAMA",     senha:"1234",  role:"op",empresa:"SEAMA"},
-          {id:"usr-op-cfr",   nome:"Op. Lista CONFRARIA", senha:"4321",  role:"op",empresa:"CONFRARIA"},
-          ...m[e].usuarios,
-        ];
-      }
+      // ⚠️ ESTE SEED PLANTAVA TRÊS USUÁRIOS COM SENHA FIXA NO CÓDIGO, e era a
+      // SEGUNDA porta pela qual elas chegavam ao bundle: tirar o `LOGINS` lá em
+      // cima não bastou, porque os mesmos códigos estavam escritos aqui. Num
+      // repositório público, eram senhas conhecidas.
+      //
+      // Quem já rodou o seed CONTINUA com os usuários dele (o flag abaixo impede
+      // rodar de novo), então ninguém é trancado fora por esta mudança — mas
+      // essas senhas precisam ser trocadas em Configurações → Usuários, porque
+      // elas estão no histórico do git.
+      //
+      // Instalação nova não nasce mais com usuário nenhum: a primeira entrada é
+      // pelo `APP_ADMIN_SENHA` do `.env`, e o servidor grita na subida se não
+      // houver nem um nem outro.
       m[e].usuariosSeedDone=true;
     }
     if(!m[e].listaCatOrdemV2){
@@ -2247,10 +2272,21 @@ const mergeFromServer=(prev:any,updates:any)=>{
 // Com o abort, a promessa sempre termina (resolve ou rejeita), o finally
 // sempre roda e o polling sempre volta ao ar no ciclo seguinte.
 const SYNC_TIMEOUT_MS=15000;
+// ⚠️ 401 NÃO PODE SER SÓ UM ERRO DE REDE. Com a sessão exigida no servidor, um
+// cookie expirado faz TODA sincronização falhar — e, sem tratar, o app seguiria
+// mostrando o estado local, aceitando lançamento e não gravando nada: a
+// armadilha nº 0 (§3) de novo, agora pela porta da autenticação. `fetchSync` é o
+// ponto único por onde as chamadas de `/api/dados` passam, então é aqui que a
+// queda de sessão é detectada UMA vez.
+let _aoPerderSessao:(()=>void)|null=null;
+const registrarQuedaDeSessao=(fn:(()=>void)|null)=>{_aoPerderSessao=fn;};
 const fetchSync=(url:string,opts:any={},ms=SYNC_TIMEOUT_MS)=>{
   const ctrl=new AbortController();
   const t=setTimeout(()=>ctrl.abort(),ms);
-  return fetch(url,{...opts,signal:ctrl.signal}).finally(()=>clearTimeout(t));
+  return fetch(url,{...opts,signal:ctrl.signal}).then(r=>{
+    if(r.status===401&&_aoPerderSessao)_aoPerderSessao();
+    return r;
+  }).finally(()=>clearTimeout(t));
 };
 
 export default function App() {
@@ -2554,12 +2590,37 @@ export default function App() {
     if(info.role==="op_enc")setTab("agenda");
   };
   const doLogout=()=>{
+    // O cookie é do servidor: apagar só o localStorage deixaria a sessão viva
+    // para qualquer chamada seguinte deste aparelho.
+    fetch("/api/logout",{method:"POST"}).catch(()=>{});
     localStorage.removeItem("app_login");
     _listaDeletados.clear();
     setLogin(null);
     setTab("dashboard");
     window.location.href="https://confrariacafe.com/";
   };
+  // ⚠️ O SERVIDOR É A AUTORIDADE. O `localStorage` continua sendo o caminho
+  // rápido (a tela não pisca na senha a cada abertura), mas na subida o app
+  // pergunta quem ele é: o cookie pode ter expirado, ou o admin pode ter
+  // desconectado todos enquanto este aparelho estava fechado.
+  useEffect(()=>{
+    let vivo=true;
+    fetch("/api/sessao",{cache:"no-store"}).then(r=>r.json()).then(d=>{
+      if(!vivo)return;
+      if(d?.login){
+        localStorage.setItem("app_login",JSON.stringify({...d.login,criadoEm:d.login.em||Date.now(),exp:(d.login.em||Date.now())+SESSAO_HORAS*3600*1000}));
+        setLogin((atual:any)=>atual||d.login);
+      }else{
+        localStorage.removeItem("app_login");
+        setLogin(null);
+      }
+    }).catch(()=>{/* sem rede: segue com o que está salvo, e o 401 derruba depois */});
+    return()=>{vivo=false;};
+  },[]);
+  useEffect(()=>{
+    registrarQuedaDeSessao(()=>{localStorage.removeItem("app_login");setLogin(null);});
+    return()=>registrarQuedaDeSessao(null);
+  },[]);
 
   // "Desconectar todos": o admin grava um carimbo e todo aparelho cuja sessão
   // começou ANTES dele cai na tela de senha no poll seguinte.
@@ -2617,7 +2678,7 @@ export default function App() {
     return ()=>{vivo=false;clearInterval(t);};
   },[]);
 
-  if(!login)return <LoginScreen onLogin={doLogin} usuarios={state.CONFRARIA?.usuarios||[]}/>;
+  if(!login)return <LoginScreen onLogin={doLogin}/>;
 
   const menuStructure:{id:string,label:string,icon:string,children?:{id:string,label:string,icon:string,sub?:string}[]}[]=[
     {id:"dashboard",label:"Dashboard",icon:"📊"},

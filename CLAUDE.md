@@ -31,6 +31,7 @@ src/PainelTV.tsx      painel ao vivo para TV
 src/CardapioTV.tsx    cardápio em loop para TV
 src/ConfigPanel.tsx   configuração visual
 new_server.js         API Node (sem framework), serve o build e faz proxy pros PDVs
+auth.js               sessão assinada, login no servidor, a porta dos dados (com testes)
 mergeDocument.js      fusão de documento no servidor (com testes)
 mergeListaCompras.js  fusão específica da Lista de Compras (com testes)
 iaGemini.js           tradução Anthropic ↔ Gemini para o Cupom IA (com testes)
@@ -2703,7 +2704,106 @@ devolvem cor usadas nas duas pontas — substituição cega quebra a impressão.
 
 ---
 
+## 10.1 Autenticação — `auth.js` (com testes)
+
+**Até 21/09/2026 não existia nenhuma.** O `new_server.js` tinha um comentário
+que dizia exatamente isso: *"quem protege o sistema é a tela de senha"* — e
+aquela tela era client-side.
+
+| o que estava aberto | consequência |
+|---|---|
+| `GET /api/dados/<empresa>` | devolvia **o banco inteiro** a quem soubesse a URL: vendas, compras, fornecedores com CNPJ, **folha e faltas**, clientes com nome/telefone/endereço |
+| `POST /api/dados/<empresa>` | aceitava **sobrescrever tudo**, também sem pedir nada |
+| `const LOGINS` no `App.tsx` | a senha de admin viajava **dentro do bundle** servido ao navegador |
+| o seed de `usuarios` no `migrateDb` | **segunda porta** para as mesmas senhas chegarem ao bundle — tirar o `LOGINS` não bastou |
+| `db.usuarios[].senha` | a lista de senhas em texto puro vinha dentro do JSON público |
+
+⚠️ **TORNAR O REPOSITÓRIO PRIVADO NÃO RESOLVERIA NADA DISSO.** A senha ia no
+JavaScript que o navegador baixa, e as rotas de dados não olhavam quem chamava.
+
+### Como é agora
+
+`POST /api/login` confere a senha **no servidor** (contra `db.usuarios` e o
+`APP_ADMIN_SENHA` do `.env`) e devolve só a identidade. `GET /api/sessao` diz
+quem o aparelho é; `POST /api/logout` apaga o cookie. As **três** rotas de dados
+(GET, POST e `/versao`) passam por `barrouDados`.
+
+⚠️ **A SESSÃO É ASSINADA, NÃO GUARDADA.** Uma tabela em memória esvazia a cada
+`pm2 restart` — e restart é o passo final de todo deploy, o que derrubaria a loja
+no meio do serviço a cada publicação. Assinada (HMAC-SHA256), ela sobrevive ao
+restart.
+
+⚠️ **QUEM REVOGA É O `sessoesValidasApos`** que o botão "Desconectar todos os
+aparelhos" já gravava (§6): ele deixou de ser um pedido gentil ao cliente e
+passou a ser **conferido no servidor**. Vence o MAIOR dos dois arquivos — a ordem
+dada numa empresa derruba o aparelho que está na outra.
+
+⚠️ **O CARIMBO É LIDO COM CACHE POR `mtime`.** O gate roda em TODA chamada de
+`/api/dados/*`, que o app consulta a cada ~100ms em cada aparelho: `readFileSync`
+de 3 MB ali travaria o event loop — é o defeito que a rota `/versao` já
+documenta. `statSync` custa ~40 bytes.
+
+⚠️ **O SEGREDO DE SERVIÇO CONTINUA VALENDO** como alternativa à sessão. Os
+agentes (Eclética, impressora) e os PDVs irmãos não têm navegador para guardar
+cookie: exigir sessão deles cortaria a ponte do caixa sem ninguém ligar uma coisa
+à outra. E a revogação **não** os derruba.
+
+⚠️ **SEM `APP_SESSION_SECRET`, O SERVIDOR GERA UM E AVISA ALTO.** As duas
+alternativas são piores: falhar fechado **brica** o sistema num deploy que
+esqueceu o `.env` (restaurante em serviço, ninguém entra), e falhar aberto deixa
+a porta como estava. Gerado na subida, cada `pm2 restart` desloga todo mundo —
+incômodo o bastante para alguém configurar.
+
+⚠️ **COMPARAÇÃO EM TEMPO CONSTANTE** no MAC e na senha. Com `===`, o tempo de
+resposta diz quantos caracteres estavam certos, e um código de 4 dígitos cai em
+minutos.
+
+⚠️ **401 DERRUBA A SESSÃO NO CLIENTE**, em `fetchSync`, que é o ponto único por
+onde as chamadas de dados passam. Sem isso o app seguiria mostrando o estado
+local, aceitando lançamento e não gravando nada — **a armadilha nº 0 (§3) pela
+porta da autenticação**.
+
+⚠️ **A resposta do login não diz se a senha existe** ("usuário não encontrado"
+contra "senha errada" entrega metade do trabalho) e atrasa 400 ms.
+
+⚠️ **Instalação nova não nasce com usuário nenhum.** O seed de três usuários com
+senha fixa foi removido; quem já rodou continua com os dele (o flag
+`usuariosSeedDone` impede rodar de novo), então ninguém é trancado fora — **mas
+aquelas senhas estão no histórico do git e precisam ser trocadas**.
+
+⚠️ **`dados/` entrou no `.gitignore`.** Só `dados.json` estava ignorado, e esse
+não é o nome de arquivo nenhum em uso: um `git add -A` na VPS mandaria o banco
+inteiro para um repositório público. Conferido — nunca chegou ao histórico.
+
+Variáveis novas no `.env` da VPS:
+
+```
+APP_SESSION_SECRET   assina o cookie. Sem ela, gerado a cada subida (e avisa)
+APP_ADMIN_SENHA      entrada de administrador; é o que impede sistema sem acesso
+APP_ADMIN_LABEL      opcional, nome que aparece logado (padrão "Administrativo")
+```
+
+### O que AINDA falta (não foi feito nesta fase)
+
+⚠️ **As senhas continuam em texto puro em `db.usuarios[].senha`**, e o documento
+inteiro continua sendo enviado a quem tem sessão. Ou seja: um operador logado
+consegue ler a senha do administrador no JSON, pelo navegador. Fechar isso exige
+(a) não mandar `senha` no GET e (b) o merge **preservar** a senha guardada quando
+o incoming vier sem ela — senão o primeiro POST do cliente apaga todas. Ficou
+fora de propósito, para não entregar meia mudança num sistema em operação.
+
+`src/authTela.test.js` lê o `App.tsx` e o `new_server.js` e reprova quem
+reintroduzir senha no cliente, tirar o gate de alguma das três rotas, ou voltar a
+tratar 401 como erro de rede.
+
+---
+
 ## 11. Deploy
+
+⚠️ **A partir da Fase 3 o `.env` vem ANTES do `git pull`.** `APP_SESSION_SECRET`
+e `APP_ADMIN_SENHA` precisam existir quando o servidor subir com o código novo —
+na ordem inversa, a primeira subida gera um segredo aleatório e, se não houver
+usuário cadastrado, ninguém entra.
 
 ```bash
 # App Gestão
