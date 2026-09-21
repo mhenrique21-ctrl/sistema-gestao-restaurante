@@ -17,6 +17,7 @@ justamente por isso.
 | `db.config[empresa].x` | **Não existe.** O `db` JÁ é o da empresa ativa — aninhar de novo duplica |
 | Empresas são `"confraria"` / `"seama"` | São **`"CONFRARIA"`** e **`"SEAMA"`**, maiúsculas |
 | Dados nunca são compartilhados entre empresas | **`produtosLista` é compartilhado de propósito** (ver `applyBothProdutos`) |
+| "Vendas Extras" é uma modalidade à parte do Delivery | **São o MESMO campo** — `vendas[].delivery`. `legVendasExtras` era só o rótulo dele |
 | Existe `db.rh` / `db.financeiro` | Não. Folha vem de **`db.funcionarios`**; financeiro é **`db.contas`** |
 | Categoria tem campo de tipo/módulo | **Não tem campo nenhum.** São strings puras; todo vínculo é estrutura à parte, ligada por nome |
 
@@ -46,6 +47,8 @@ src/relatorioPlataforma.js  o relatório do iFood/99Food vira Vendas (com testes
 src/relatorioPeriodo.js  o período, os canais e as formas de pagamento (com testes)
 src/grupoMarcas.js    várias marcas e embalagens viram um produto só (com testes)
 src/dre.js            as fatias da barra da DRE e o aviso do CMV vazio (com testes)
+src/fechamentoVendas.js  o fechamento do dia: rótulo, taxa da plataforma, loja
+                      fechada e o progresso (com testes)
 src/qualidadeCompras.js  fornecedor duplicado, categoria obrigatória, preço por
                       unidade e o descompasso compra × venda (com testes)
 src/pdfTexto.js       tira as linhas de texto de um PDF (com testes)
@@ -207,6 +210,20 @@ mapaProdutoFicha         {foldNome(produto): {modo:"ficha"|"produto"|"auto"|"ign
                          fichaId|prodId, fichaNome|prodNome, origemAprendizado,
                          ultimaAtualizacao}}  — ver §6, "Produto vendido → compra"
 ```
+
+Campos DENTRO de `vendas[]` (não precisam de fusão própria: `mergeArrayById`
+escolhe o objeto inteiro pelo carimbo, como o `entregasClientes` já fazia):
+
+```
+delivery          delivery PRÓPRIO, sem comissão. Automático quando o
+                  delivery-backend sincroniza, digitado quando não
+recibosBalcao     recibo de venda avulso (Vendas → Emitir Recibo). Nasceu em
+                  21/09/2026 — antes somava dentro de `delivery`
+entregasClientes  recibo de pedido de produção/encomenda confirmado
+```
+
+`fechamentos[data].semMovimento` = `{por, em}` ou `null` — a declaração "loja
+fechada". Desmarcar grava **null**, não apaga a chave (união rasa, §3).
 
 ### Ponte Eclética Food (`ecletica-agent/`)
 
@@ -710,7 +727,8 @@ Lançamento diário **por canal de pagamento**, não por produto — isso limita
 feature que precise de venda por item.
 
 Campos por dia: `maquininha`, `dinheiro`, `ifood`+`ifoodTaxa`+`ifoodLiq`,
-`99food`+`nfoodTaxa`+`nfoodLiq`, `delivery`, `total`, `origem`.
+`99food`+`nfoodTaxa`+`nfoodLiq`, `delivery`, `recibosBalcao`, `entregasClientes`,
+`total`, `origem`.
 
 `origem` distingue lançamento manual, `"pdv"` (sincronizado) e `"recibo_venda"`. Os três
 coexistem no mesmo dia de propósito, e a fusão chaveia por `data+origem`.
@@ -746,6 +764,123 @@ reordenar as linhas em Ajustes. Fusão em 2 níveis nos dois lugares
 (A4)** → `gerarFechamentoCaixaHTML`: timbre de Configurações → Impressão,
 valores do dia, caixas em branco (a marcação é à caneta), conferência física do
 caixa, assinaturas — preto e branco de propósito.
+
+#### O fechamento do dia, Fase 2 — `src/fechamentoVendas.js` (com testes)
+
+⚠️ **"VENDAS EXTRAS" E "DELIVERY" SEMPRE FORAM O MESMO CAMPO** (`vendas[].delivery`),
+com `aj.legVendasExtras` de rótulo configurável — e o painel de TV já o chamava
+de "Delivery" (`CANAIS_VENDA_TV`). Uma spec pediu "remover Vendas Extras e criar
+o campo Delivery": feito ao pé da letra, isso criaria um SEXTO bucket, partiria o
+histórico em dois campos e deixaria órfão o recibo, que somava ali. **Não crie.**
+
+⚠️ **TROCAR O DEFAULT DO RÓTULO NÃO BASTA.** `setAj` grava
+`{...getVendasAjustes(d), [key]:val}`, então na primeira vez que a pessoa mexeu
+em QUALQUER ajuste o texto "Vendas Extras" foi congelado no `db`. `rotuloDelivery`
+traduz o padrão antigo na **leitura** (como o `LEGADO` do `tipoInsumo.js`), e por
+isso um rótulo realmente escolhido ("Balcão 2") sobrevive.
+
+⚠️ **O RECIBO DE BALCÃO SAIU DO `delivery`** para `recibosBalcao` (21/09/2026).
+Somados, "Delivery" no Dashboard incluía venda que não foi entregue a ninguém, e
+não havia como separar depois. **O histórico NÃO foi reclassificado** (decisão do
+dono): adivinhar quais reais antigos eram recibo é chute sobre período fechado —
+a tela avisa isso uma vez (`config.avisoDeliveryRecibosVisto`).
+
+⚠️ **O RECIBO CARIMBA EM QUAL BUCKET SOMOU** (`recibo.bucket`). Desfazer um
+recibo antigo pelo bucket novo deixaria o valor preso em `delivery` para sempre.
+Data de corte seria palpite; o carimbo é o fato. Recibo sem carimbo é anterior à
+separação e desfaz em `delivery`, que é de onde ele saiu.
+
+⚠️ **O "Total do dia" NÃO FECHAVA COM O DIA.** `vendasAutomaticas` filtrava só
+`ehOrigemPdv`, então a linha do iFood importada (`relatorio_ifood`) e a do recibo
+(`recibo_venda`) somavam no Dashboard e na DRE e sumiam justamente do número que
+a pessoa usa para conferir. Automático passou a ser **qualquer linha que não foi
+digitada ali**.
+
+⚠️ **"MANUAL" E "AUTOMÁTICO" SÃO PROPRIEDADE DO DIA, NÃO DO CANAL.** O iFood
+chega por documento importado num dia e é digitado no outro; a maquininha vem do
+PDV Eclética num dia e à mão no seguinte. Fixar o grupo por canal — como o mockup
+sugeria — deixaria a pessoa **sem campo** justamente no dia em que o automático
+não veio, que é o único dia em que ela precisa digitar.
+
+⚠️ **Canal com valor automático NÃO ganha campo ao lado**: as linhas do dia SOMAM
+no Dashboard, e um valor repetido conta o dia duas vezes. O campo fica recolhido
+em "fora do PDV" — a regra que já valia para maquininha e dinheiro.
+
+⚠️ **O CARD COM INPUT É FUNÇÃO (`cardFechamentoJsx`), NÃO COMPONENTE INLINE.**
+Componente declarado dentro do render é recriado a cada render e o React desmonta
+a árvore dele: o input perderia o foco a cada tecla. É a lição do `linhaJsx` da
+Produção do Dia, e `src/fechamentoTela.test.js` trava as duas.
+
+⚠️ **O progresso e as pendências saem do MESMO objeto** (`progressoDoDia` sobre os
+cards). Duas contas do que falta divergiriam no dia em que uma mudasse, e a barra
+diria "4/5" ao lado de uma lista de duas. Canal **desligado** em Ajustes sai da
+conta, senão "4/5" nunca chegaria a 5 numa loja que não usa 99Food.
+
+##### Loja fechada NÃO é pendência (`statusDoDia`)
+
+A Supervisão do PDV dizia, com todas as letras, *"loja fechada ou falha no envio
+do PDV"* — ela não tinha como saber. Agora:
+
+| estado | quando | cor |
+|---|---|---|
+| `fechado` | a pessoa marcou "sem movimento" no fechamento | cinza |
+| `completo` | nenhum canal ativo faltando | verde |
+| `aguardando` | falta algo, mas ainda **antes** da hora limite | neutro |
+| `vazio` | passou da hora e o dia não tem valor NENHUM | âmbar |
+| `pendente` | passou da hora e falta canal | âmbar |
+
+⚠️ **A HORA IMPORTA** (`aj.horaPendencia`, 21h): antes dela o automático
+legitimamente não chegou, e sem essa separação a tela acusaria o iFood às 9h da
+manhã todo dia. Dia **passado** é pendência independente da hora; dia **futuro**
+nunca é.
+
+⚠️ **Dia sem valor nenhum oferece o MARCADOR** em vez de listar cinco pendências:
+é o candidato a "esqueci de marcar que fechou", não a "faltou um canal".
+
+⚠️ **A bolinha do histórico e o selo do fechamento saem do MESMO `statusDoDia`** —
+duas regras de status divergiriam no dia em que uma mudasse. E o **rótulo é
+escrito** junto da bolinha: a paleta Tinta é monocromática, e a regra da §8
+("status nunca só por cor") vale na tela também, não só no papel.
+
+##### A taxa da plataforma é a mesma conta, agora travada
+
+⚠️ `taxasDePlataforma` é a fórmula que estava no JSX da DRE, **palavra por
+palavra**. Ela mora fora porque é a única parte do fechamento que, mexida, não
+aparece na tela de Vendas: aparece na linha "Taxas das plataformas" da DRE, e só
+quando alguém for olhar a margem do mês.
+
+⚠️ **`?? v.ifood` NÃO É ENFEITE.** Lançamento sem líquido gravado (taxa em
+branco) tem líquido IGUAL ao bruto, então taxa ZERO. Trocando por `|| 0`, o
+líquido viraria zero e **a DRE mostraria o faturamento do iFood como despesa**.
+
+⚠️ Um teste trava que **nenhum canal sem comissão** (delivery próprio, recibo de
+balcão, encomenda) entre nessa conta.
+
+**Conferência manual antes/depois de um deploy que mexa em Vendas:** abrir
+Financeiro → DRE no mês corrente e anotar "− Taxas das plataformas"; depois do
+deploy, o mesmo mês tem que mostrar o mesmo valor. O número é
+`Σ (bruto − líquido)` de iFood e 99Food do período, e nada mais.
+
+##### O sparkline e o histórico
+
+⚠️ **Dia sem venda entra na série como ZERO**, não sai dela: fora da série a
+linha ligaria sexta direto em domingo e o desenho mentiria sobre o ritmo da
+semana. A **média**, ao contrário, conta só os dias que venderam — incluindo os
+fechados, "média/dia" mediria quantos domingos caíram na janela. E os valores das
+duas pontas ficam **escritos**: gráfico sem escala não se confere.
+
+⚠️ **A leitura de comprovantes por IA SAIU da tela de Vendas** (decisão do dono,
+21/09/2026): lia extrato de maquininha, fechamento de iFood/99Food e cupom do
+delivery próprio e preenchia o formulário. **Não recrie por engano achando que é
+a IA de Compras** — aquela lê CUPOM DE COMPRA, continua em Compras → Cupom IA, e
+as duas só compartilhavam o endpoint `/api/scan`.
+
+⚠️ Três cópias da lista de modalidades do mix (Dashboard, DRE impressa, Relatório
+de Vendas impresso) **esqueciam `entregasClientes`**: o dinheiro do recibo de
+encomenda entrava no total e sumia do gráfico e dos dois papéis. Virou
+`MODAIS_VENDA`, uma lista só. E a `receitaBruta` da Análise de estoque somava
+**`v.nfood`, campo que não existe** (é `v["99food"]`): o 99Food valia zero no
+denominador e o CMV% saía inflado, continuando plausível.
 
 #### Vendas → Importar relatório — `src/relatorioPlataforma.js` (com testes)
 
