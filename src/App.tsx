@@ -25,7 +25,7 @@ import { mergeArrayById } from "../mergeDocument.js";
 import QRCode from "qrcode";
 import { ConfigPanel, CONFIG_PADRAO, type ConfigAppState } from "./ConfigPanel";
 import { ConfigStyleInjector, useApplyConfig } from "./ConfigApplier";
-import {garantirFornecedor,criarItemDaLista,conferirPreco,auditarPrecos,normalizarEncoding,gruposDeFornecedor,mesclarFornecedores,conciliacaoPorCategoria,pctHistoricoPorCategoria,normalizarTexto,precoPorUnidadeBase,filaSemCategoria,janelaAnterior,soDigitos} from "./qualidadeCompras.js";
+import {garantirFornecedor,criarItemDaLista,conferirPreco,auditarPrecos,normalizarEncoding,gruposDeFornecedor,mesclarFornecedores,conciliacaoPorCategoria,pctHistoricoPorCategoria,normalizarTexto,precoPorUnidadeBase,filaSemCategoria,janelaAnterior,soDigitos,linhasDaRevisao,pendenciasDaRevisao,correcoesDaRevisao,resumoDoEncoding} from "./qualidadeCompras.js";
 import {fatiasDaReceita,conferirCmv,diasNoIntervalo,mesDaData,porDia,comprasForaDoCmv,MOTIVO_FORA_CMV} from "./dre.js";
 
 // ===================== STORAGE =====================
@@ -6186,6 +6186,157 @@ function parseNFe(xmlString, db?:any) {
   return{fornecedor,itens,totalCompra:total,data,nNF,chNFe,modelo,formaPag,dVenc};
 }
 
+// ===================== REVISÃO NO ATO DA ENTRADA (categoria + preço) =========
+// As duas conferências que só servem ANTES de gravar. Depois de gravado a
+// categoria virou fila em Compras → Sem categoria e o preço virou linha na
+// Auditoria de preço — as duas telas existem porque isto não existia.
+//
+// ⚠️ ELA SÓ ABRE SE HOUVER O QUE REVISAR. Uma tela a mais em todo import, quase
+// sempre vazia, é a tela que a pessoa aprende a fechar sem ler — e aí a vez em
+// que ela tinha algo passa igual. Quem decide é `linhasDaRevisao`.
+//
+// ⚠️ A CATEGORIA BLOQUEIA; o preço exige uma RESPOSTA, que pode ser "está
+// certo". Insumo caro em quantidade pequena acontece, e bloqueio sem saída vira
+// um campo que a pessoa aprende a contornar digitando qualquer coisa. O que não
+// existe é passar calado.
+function RevisarEntradaModal({linhas,compras,onConfirm,onCancel}:
+  {linhas:any[],compras:any[],onConfirm:(escolhas:Record<string,any>)=>void,onCancel:()=>void}){
+  const [escolhas,setEscolhas]=useState<Record<string,any>>({});
+  const [textos,setTextos]=useState<Record<string,string>>({});
+  const [gravando,setGravando]=useState(false);
+  const set=(chave:string,campos:any)=>setEscolhas(e=>({...e,[chave]:{...(e[chave]||{}),...campos}}));
+  // ⚠️ O QUE SE DIGITA É TEXTO pt-BR; o módulo faz conta com NÚMERO. `Number`
+  // devolve NaN para "7,69", e NaN virava ZERO na correção: a compra entraria
+  // valendo R$ 0,00 e a conferência de preço passaria calada, porque sem preço
+  // ela não tem o que comparar. O texto fica na tela, o número vai no escolhas.
+  //
+  // ⚠️ E campo APAGADO não é zero: volta a valer o que veio na nota, senão
+  // limpar para redigitar gravaria zero no meio da digitação.
+  const setNumero=(chave:string,campo:string,txt:string)=>{
+    setTextos(t=>({...t,[`${chave}|${campo}`]:txt}));
+    set(chave,{[campo]:txt.trim()?parseMoney(txt):undefined});
+  };
+  const txt=(chave:string,campo:string,padrao:any)=>textos[`${chave}|${campo}`]??String(padrao);
+  const pend=pendenciasDaRevisao(linhas,escolhas,{compras,fold:foldNome});
+  const semCat=linhas.filter((l:any)=>l.precisaCategoria);
+  // Atalho para a nota em que tudo é da mesma família (uma caixa de bebidas):
+  // escolher sete vezes a mesma coisa é o que faz a pessoa querer pular a tela.
+  const todosMesma=(cat:string)=>setEscolhas(e=>{
+    const n={...e};
+    semCat.forEach((l:any)=>{n[l.chave]={...(n[l.chave]||{}),categoria:cat};});
+    return n;
+  });
+
+  return <div style={{position:"fixed",inset:0,background:"#000000aa",zIndex:520,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={onCancel}>
+    <div onClick={(e:any)=>e.stopPropagation()} style={{background:"var(--bg2)",width:"100%",maxWidth:560,maxHeight:"90vh",borderRadius:"16px 16px 0 0",display:"flex",flexDirection:"column",boxShadow:"0 -8px 40px #000a"}}>
+      <div style={{padding:"16px 18px 10px",borderBottom:"1px solid var(--border)"}}>
+        <div style={{fontSize:15,fontWeight:800,color:"var(--acc)"}}>🧾 Confira antes de gravar</div>
+        <div className="muted" style={{fontSize:12,marginTop:4,lineHeight:1.5}}>
+          {pend.faltaCategoria.length>0&&<>{pend.faltaCategoria.length} item(ns) sem categoria</>}
+          {pend.faltaCategoria.length>0&&linhas.some((l:any)=>l.precoFora)&&<> · </>}
+          {linhas.some((l:any)=>l.precoFora)&&<>{linhas.filter((l:any)=>l.precoFora).length} com preço fora do esperado</>}
+          . Categoria é obrigatória; o preço você pode confirmar como está.
+        </div>
+      </div>
+      <div style={{flex:1,overflowY:"auto",padding:"10px 14px"}}>
+        {semCat.length>1&&<div className="card" style={{marginBottom:10,padding:"10px 12px"}}>
+          <div style={{fontSize:11,color:"var(--text2)",marginBottom:6}}>todos os {semCat.length} sem categoria de uma vez</div>
+          <div className="chip-row">
+            {CATS_COMPRA.map((cat:string)=>(
+              <button key={cat} type="button" className="chip" onClick={()=>todosMesma(cat)}>{catIcon(cat)} {cat}</button>
+            ))}
+          </div>
+        </div>}
+        {linhas.map((l:any)=>{
+          const e=escolhas[l.chave]||{};
+          const cat=e.categoria||(l.precisaCategoria?"":l.categoria);
+          const faltando=pend.faltaCategoria.includes(l.chave);
+          const precoAberto=l.precoFora&&!e.precoOk;
+          // ⚠️ O preço mostrado é RECALCULADO do que está nos campos, não o que
+          // veio na nota: é ele que diz se a correção resolveu, e mostrar o
+          // antigo faria a pessoa corrigir sem ver o efeito.
+          const agora=precoAberto?precoPorUnidadeBase({
+            valorTotal:e.valorTotal??l.valorTotal,quantidade:e.quantidade??l.quantidade,unidade:e.unidade??l.unidade}):null;
+          const resolvido=l.precoFora&&!pend.precoNaoResolvido.includes(l.chave);
+          const med=l.preco?.referencia;
+          return <div key={l.chave} className="card" style={{marginBottom:10,border:faltando?"1px solid var(--warningText)":undefined}}>
+            <div style={{fontWeight:700,fontSize:13.5}}>{l.nome}</div>
+            <div className="muted" style={{fontSize:11,marginBottom:8,...MONO_REL}}>
+              {l.quantidade} {l.unidade} · {fmtMoney(l.valorTotal)}
+            </div>
+
+            {l.precisaCategoria&&<>
+              <div style={{fontSize:11,color:"var(--text2)",marginBottom:5}}>
+                {l.palpite
+                  ?<>palpite {l.origemPalpite==="regra"?"pela regra de limpeza":"por palavra-chave"}: <b>{l.palpite}</b> — um toque confirma</>
+                  :<>sem palpite: escolha a categoria contábil</>}
+              </div>
+              <div className="chip-row" style={{marginBottom:l.precoFora?10:0}}>
+                {CATS_COMPRA.map((c:string)=>(
+                  <button key={c} type="button" className="chip" aria-pressed={cat===c}
+                    onClick={()=>set(l.chave,{categoria:c})}
+                    style={cat===c?{background:"var(--accLight,var(--bg4))",borderColor:"var(--btnPrimary)",color:"var(--btnPrimary)",fontWeight:700}
+                      :l.palpite===c?{borderColor:"var(--infoText)",color:"var(--infoText)"}:undefined}>{catIcon(c)} {c}</button>
+                ))}
+              </div>
+            </>}
+
+            {l.precoFora&&<div style={{borderTop:l.precisaCategoria?"1px solid var(--bg4)":"none",paddingTop:l.precisaCategoria?10:0}}>
+              <div style={{fontSize:12.5,fontWeight:700,color:resolvido?"var(--successText)":"var(--danger)",marginBottom:6}}>
+                {resolvido?"✅ preço dentro do esperado":"⚠️ Confira a unidade de medida"}
+              </div>
+              {med&&<div style={{fontSize:12,lineHeight:1.6,marginBottom:8}}>
+                está entrando a <b style={MONO_REL}>{fmtMoney(l.preco.preco.preco)}/{l.preco.preco.base}</b>.
+                As {med.n} compra(s) {med.de==="item"?"anteriores deste insumo":"da mesma categoria"} têm mediana de{" "}
+                <b style={MONO_REL}>{fmtMoney(med.valor)}/{l.preco.preco.base}</b> — <b>{l.preco.acima?`${l.preco.razao.toFixed(0)}× mais`:`${(1/(l.preco.razao||1)).toFixed(0)}× menos`}</b>.
+              </div>}
+              {precoAberto&&<>
+                <div style={{display:"flex",gap:8,marginBottom:8}}>
+                  <div style={{flex:1}}>
+                    <label style={{fontSize:10,color:"var(--text3)",display:"block"}}>quantidade</label>
+                    <input value={txt(l.chave,"quantidade",l.quantidade)} onChange={(ev:any)=>setNumero(l.chave,"quantidade",ev.target.value)}
+                      className="inp" style={{fontSize:12.5,...MONO_REL}} inputMode="decimal"/>
+                  </div>
+                  <div style={{flex:1}}>
+                    <label style={{fontSize:10,color:"var(--text3)",display:"block"}}>unidade</label>
+                    <input value={e.unidade??l.unidade} onChange={(ev:any)=>set(l.chave,{unidade:ev.target.value||undefined})}
+                      className="inp" style={{fontSize:12.5}}/>
+                  </div>
+                  <div style={{flex:1}}>
+                    <label style={{fontSize:10,color:"var(--text3)",display:"block"}}>valor total</label>
+                    <input value={txt(l.chave,"valorTotal",l.valorTotal)} onChange={(ev:any)=>setNumero(l.chave,"valorTotal",ev.target.value)}
+                      className="inp" style={{fontSize:12.5,...MONO_REL}} inputMode="decimal"/>
+                  </div>
+                </div>
+                <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+                  {agora&&<span className="muted" style={{fontSize:11.5,...MONO_REL}}>dá {fmtMoney(agora.preco)}/{agora.base}</span>}
+                  <button type="button" className="chip" onClick={()=>set(l.chave,{precoOk:true})}
+                    style={{marginLeft:"auto"}}>está certo, gravar assim</button>
+                </div>
+              </>}
+              {e.precoOk&&<div style={{fontSize:11.5,color:"var(--text2)",display:"flex",gap:8,alignItems:"center"}}>
+                confirmado como está
+                <button type="button" className="chip" onClick={()=>set(l.chave,{precoOk:false})}>rever</button>
+              </div>}
+            </div>}
+          </div>;
+        })}
+      </div>
+      <div style={{padding:"12px 14px",borderTop:"1px solid var(--border)",display:"flex",gap:8,alignItems:"center"}}>
+        <button disabled={gravando} onClick={onCancel} style={{flex:"0 0 90px",background:"var(--border2)",color:"var(--text2)",border:"none",borderRadius:8,padding:"12px",fontSize:13,cursor:"pointer"}}>Cancelar</button>
+        <button disabled={!pend.podeConfirmar||gravando}
+          onClick={()=>{if(gravando)return;setGravando(true);onConfirm(escolhas);}}
+          style={{flex:1,background:pend.podeConfirmar&&!gravando?"var(--btnPrimary)":"var(--border2)",color:pend.podeConfirmar&&!gravando?"var(--onPrimary,#FFFFFF)":"var(--text3)",border:"none",borderRadius:8,padding:"12px",fontSize:13,fontWeight:700,cursor:pend.podeConfirmar?"pointer":"default"}}>
+          {gravando?"Seguindo..."
+            :pend.faltaCategoria.length?`Falta categoria em ${pend.faltaCategoria.length}`
+            :pend.precoNaoResolvido.length?`Falta responder ${pend.precoNaoResolvido.length} preço(s)`
+            :"✅ Confere, seguir"}
+        </button>
+      </div>
+    </div>
+  </div>;
+}
+
 // ===================== CONCILIAÇÃO DE PRODUTOS AO IMPORTAR (NF-e / Cupom) =====================
 // Conciliação no ato da compra (Cupom IA / NF-e / SEFAZ / fechar lista): liga
 // cada marca comprada ao produto da Lista de Compras (produtosLista), não a
@@ -7169,6 +7320,40 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
   const comprasNum=useMemo(()=>(db.compras||[]).map((c:any)=>({...c,valor:parseMoney(c.valor),quantidade:Number(c.quantidade)||0})),[db.compras]);
   const auditoriaPreco=useMemo(()=>subTab==="auditpreco"?auditarPrecos({...db,compras:comprasNum},foldNome,precoDesvio):null,
     [subTab,comprasNum,precoDesvio]);
+
+  // ── A REVISÃO NO ATO DA ENTRADA ──────────────────────────────────────────
+  // Um portão só para os CINCO caminhos de entrada (manual, Cupom IA, XML,
+  // NF-e da SEFAZ e "importar todas"). Cinco cópias da mesma conferência é
+  // como uma fica para trás — foi o que aconteceu com a regra do fornecedor.
+  const [revisao,setRevisao]=useState<null|{linhas:any[],seguir:()=>void}>(null);
+  // ⚠️ A CORREÇÃO VAI POR REF, NÃO POR ESTADO. A gravação acontece no mesmo
+  // tique em que a revisão fecha, e um `useState` ainda não aplicado faria a
+  // compra entrar com o número velho: corrigido na tela, errado no banco.
+  const correcoesRef=useRef<Record<string,any>>({});
+  const comRevisao=(itens:any[],seguir:()=>void)=>{
+    // Limpa SEMPRE, inclusive quando não há o que revisar: correção de uma
+    // importação anterior não pode vazar para a seguinte.
+    correcoesRef.current={};
+    const linhas=linhasDaRevisao(itens,{compras:comprasNum,fold:foldNome,
+      palpiteDe:(n:string)=>classificarItem(db,n)});
+    const precisa=linhas.filter((l:any)=>l.precisaCategoria||l.precoFora);
+    if(!precisa.length){seguir();return;}
+    setRevisao({linhas:precisa,seguir});
+  };
+  // O item do import já com o que a pessoa corrigiu. `nome` fica de fora: ele é
+  // a chave, e renomear aqui desligaria o item do produto que a conciliação
+  // acabou de escolher.
+  const itemRevisado=(item:any)=>{
+    const c=correcoesRef.current[foldNome(item?.nome||"")];
+    if(!c)return item;
+    const {nome,...campos}=c;
+    return {...item,...campos};
+  };
+  // A escolha da revisão vale para SEMPRE, não só para esta nota: sem aprender,
+  // a mesma pergunta voltaria na importação seguinte do mesmo insumo — e é
+  // exatamente essa repetição que ensina a pessoa a clicar sem ler.
+  const aprenderRevisao=(d:any)=>Object.values(correcoesRef.current)
+    .reduce((acc:any,c:any)=>c.categoria?aprenderClassificacao(c.nome,c.categoria)(acc):acc,d);
   // Aplica a categoria de VÁRIOS nomes numa gravação só.
   //
   // ⚠️ Ensina o dicionário E reescreve o histórico: sem a segunda parte o item
@@ -7278,15 +7463,41 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
   };
   const remItem=(id)=>setCarrinho(c=>c.filter(i=>i.id!==id));
 
+  // A ENTRADA MANUAL passa pela mesma revisão dos imports — e é ela que mais
+  // precisa: o óleo de soja a R$ 769/L nasce de "100" digitado onde eram 900, e
+  // R$ 76,90 num campo de valor é plausível.
+  //
+  // ⚠️ O CARRINHO CORRIGIDO É PASSADO POR PARÂMETRO, não regravado no estado.
+  // `setCarrinho` só vale no render seguinte, e o corpo abaixo leria o carrinho
+  // antigo do fechamento — gravando o número que a pessoa acabou de corrigir.
   const finalizarCompra=()=>{
     if(carrinho.length===0)return alert("Adicione ao menos um produto.");
     if(!fornecedor.trim())return alert("Informe o fornecedor.");
+    const paraRevisar=carrinho.map((i:any)=>({nome:i.nomeProduto,categoria:i.categoria,
+      unidade:i.unidade,quantidade:parseFloat(i.quantidade)||0,valorTotal:parseMoney(i.valorTotal)}));
+    comRevisao(paraRevisar,()=>finalizarCompraJa(carrinho.map((i:any)=>{
+      const c=correcoesRef.current[foldNome(i.nomeProduto||"")];
+      if(!c)return i;
+      // Os campos do carrinho são TEXTO (é um formulário): a correção volta
+      // como texto, senão o `parseMoney` abaixo receberia número e o
+      // `parseFloat`, string — os dois funcionam, mas um deles por acidente.
+      return {...i,
+        ...(c.categoria?{categoria:c.categoria}:{}),
+        ...(c.unidade?{unidade:c.unidade}:{}),
+        ...(c.quantidade!=null?{quantidade:String(c.quantidade)}:{}),
+        ...(c.valorTotal!=null?{valorTotal:String(c.valorTotal)}:{}),
+        ...(c.valorUnitario!=null?{valorUnit:String(c.valorUnitario)}:{})};
+    })));
+  };
+  const finalizarCompraJa=(carrinho:any[])=>{
     const totalCompraManual=carrinho.reduce((s,i)=>s+parseMoney(i.valorTotal),0);
     if(checkDuplicataCompra(db,fornecedor,totalCompraManual,dataCom)){
       if(!confirm(`⚠️ Possível duplicata: já existe uma compra de "${fornecedor}" com valor similar em ${fmtDate(dataCom)}. Deseja continuar mesmo assim?`))return;
     }
     let resultoConcilia={autoVinculados:[] as {mp:string,prod:string,mpId?:string,prodId?:string}[],pendentes:[] as {mp:string,prod:string}[]};
     (setDbAndSave||setDb)(d=>{
+      // A escolha da revisão vale para sempre, e é aprendida na mesma gravação.
+      d=aprenderRevisao(d);
       const grupoId=uid();
       const novasCompras=carrinho.map(item=>({
         id:uid(), fornecedor, nomeProduto:normalizarNome(item.nomeProduto,d.normalizacoes),
@@ -7530,6 +7741,10 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
     const dataIA=iaResult.data||today();
     let resultoConciliaIA={autoVinculados:[] as {mp:string,prod:string,mpId?:string,prodId?:string}[],pendentes:[] as {mp:string,prod:string}[]};
     (setDbAndSave||setDb)(d=>{
+      // A escolha da revisão de entrada é aprendida AQUI, na mesma gravação da
+      // compra: um `setDbAndSave` só. Dois seguidos caem na janela de 5s da
+      // armadilha nº 0 (§3), e o que se perderia é justamente o aprendizado.
+      d=aprenderRevisao(d);
       let fornecedores=[...(d.fornecedores||[])];
       // TAREFA 1 — e o CNPJ que a IA leu passa a ser GRAVADO: antes ele era
       // descartado aqui, então todo cupom do mesmo fornecedor entrava sem a
@@ -7538,7 +7753,7 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
       fornecedores=gf.fornecedores;
       const normsAtualizadas=mergeResolucoesEmNormalizacoes(d.normalizacoes||[],resolucoesNome);
       const grupoId=uid();
-      const paresCompra=(iaResult.itens||[]).filter((item:any)=>!item.removido).map((item:any)=>({
+      const paresCompra=(iaResult.itens||[]).filter((item:any)=>!item.removido).map(itemRevisado).map((item:any)=>({
         key:normalizarNome(item.nome,d.normalizacoes||[]).toLowerCase().trim(),
         compra:{
           id:uid(),fornecedor:forn?.nome||"—",nomeProduto:resolverNomeImport(item.nome,normsAtualizadas,resolucoesNome),categoria:item.categoria,
@@ -7613,9 +7828,12 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
     if(checkDuplicataCompra(db,forn?.nome||"",iaResult.totalCompra||0,dataIA)){
       if(!confirm(`⚠️ Possível duplicata: já existe uma compra de "${forn?.nome||""}" com valor similar em ${fmtDate(dataIA)}. Deseja continuar mesmo assim?`))return;
     }
-    const pend=itensNaoConciliados((iaResult.itens||[]).filter((it:any)=>!it.removido),db);
-    if(pend.length){setConciliacao({itens:pend,onConfirm:_execConfirmarIA});return;}
-    _execConfirmarIA({});
+    const itensIA=(iaResult.itens||[]).filter((it:any)=>!it.removido);
+    comRevisao(itensIA,()=>{
+      const pend=itensNaoConciliados(itensIA,db);
+      if(pend.length){setConciliacao({itens:pend,onConfirm:_execConfirmarIA});return;}
+      _execConfirmarIA({});
+    });
   };
 
   const del=(id)=>{_listaDeletados.add(id);(setDbAndSave||setDb)(d=>({...d,compras:d.compras.filter(c=>c.id!==id)}));};
@@ -7653,13 +7871,17 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
     const dataNFe=nfeResult.data||today();
     let resultoConciliaNFe={autoVinculados:[] as {mp:string,prod:string,mpId?:string,prodId?:string}[],pendentes:[] as {mp:string,prod:string}[]};
     (setDbAndSave||setDb)(d=>{
+      // A escolha da revisão de entrada é aprendida AQUI, na mesma gravação da
+      // compra: um `setDbAndSave` só. Dois seguidos caem na janela de 5s da
+      // armadilha nº 0 (§3), e o que se perderia é justamente o aprendizado.
+      d=aprenderRevisao(d);
       let fornecedores=[...(d.fornecedores||[])];
       // TAREFA 1 — ponto único; o CNPJ do XML manda.
       const gf=garantirFornecedor(fornecedores,{nome:forn?.nome,cnpj:forn?.cnpj,endereco:forn?.endereco},foldNome,uid);
       fornecedores=gf.fornecedores;
       const normsAtualizadas=mergeResolucoesEmNormalizacoes(d.normalizacoes||[],resolucoesNome);
       const grupoId=uid();
-      const paresCompra=(nfeResult.itens||[]).map((item:any)=>({
+      const paresCompra=(nfeResult.itens||[]).map(itemRevisado).map((item:any)=>({
         key:normalizarNome(item.nome,d.normalizacoes||[]).toLowerCase().trim(),
         compra:{
           id:uid(),fornecedor:forn?.nome||"—",nomeProduto:resolverNomeImport(item.nome,normsAtualizadas,resolucoesNome),categoria:item.categoria,
@@ -7730,9 +7952,11 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
     if(checkDuplicataCompra(db,forn?.nome||"",nfeResult.totalCompra||0,dataNFe)){
       if(!confirm(`⚠️ Possível duplicata: já existe uma compra de "${forn?.nome||""}" com valor similar em ${fmtDate(dataNFe)}. Deseja continuar mesmo assim?`))return;
     }
-    const pend=itensNaoConciliados(nfeResult.itens,db);
-    if(pend.length){setConciliacao({itens:pend,onConfirm:_execConfirmarNFe});return;}
-    _execConfirmarNFe({});
+    comRevisao(nfeResult.itens||[],()=>{
+      const pend=itensNaoConciliados(nfeResult.itens,db);
+      if(pend.length){setConciliacao({itens:pend,onConfirm:_execConfirmarNFe});return;}
+      _execConfirmarNFe({});
+    });
   };
 
   // ---- SEFAZ Sync ----
@@ -7995,13 +8219,17 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
     const dataSefaz=nfe.data||today();
     let resultoConciliaSefaz={autoVinculados:[] as {mp:string,prod:string,mpId?:string,prodId?:string}[],pendentes:[] as {mp:string,prod:string}[]};
     (setDbAndSave||setDb)(d=>{
+      // A escolha da revisão de entrada é aprendida AQUI, na mesma gravação da
+      // compra: um `setDbAndSave` só. Dois seguidos caem na janela de 5s da
+      // armadilha nº 0 (§3), e o que se perderia é justamente o aprendizado.
+      d=aprenderRevisao(d);
       let fornecedores=[...(d.fornecedores||[])];
       // TAREFA 1 — ponto único; o CNPJ do XML manda.
       const gf=garantirFornecedor(fornecedores,{nome:forn?.nome,cnpj:forn?.cnpj,endereco:forn?.endereco},foldNome,uid);
       fornecedores=gf.fornecedores;
       const normsAtualizadas=mergeResolucoesEmNormalizacoes(d.normalizacoes||[],resolucoesNome);
       const grupoId=uid();
-      const paresCompra=(nfe.itens||[]).map((item:any)=>({
+      const paresCompra=(nfe.itens||[]).map(itemRevisado).map((item:any)=>({
         key:normalizarNome(item.nome,d.normalizacoes||[]).toLowerCase().trim(),
         compra:{
           id:uid(),fornecedor:forn?.nome||"—",nomeProduto:resolverNomeImport(item.nome,normsAtualizadas,resolucoesNome),categoria:item.categoria,
@@ -8070,9 +8298,11 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
     if(!all&&checkDuplicataCompra(db,forn?.nome||"",nfe.totalCompra||0,dataSefaz)){
       if(!confirm(`⚠️ Possível duplicata: já existe uma compra de "${forn?.nome||""}" com valor similar em ${fmtDate(dataSefaz)}. Deseja continuar mesmo assim?`))return;
     }
-    const pend=itensNaoConciliados(nfe.itens,db);
-    if(pend.length){setConciliacao({itens:pend,onConfirm:(res,vinc)=>_execImportarNFeSefaz(nfe,all,res,vinc)});return;}
-    _execImportarNFeSefaz(nfe,all,{});
+    comRevisao(nfe.itens||[],()=>{
+      const pend=itensNaoConciliados(nfe.itens,db);
+      if(pend.length){setConciliacao({itens:pend,onConfirm:(res,vinc)=>_execImportarNFeSefaz(nfe,all,res,vinc)});return;}
+      _execImportarNFeSefaz(nfe,all,{});
+    });
   };
 
   // O diálogo de confirmação do botão só conta as NF-e "com itens" (ver
@@ -8112,9 +8342,11 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
         +(jaEntraram.length?`\n\n${jaEntraram.length} foram puladas por já terem sido importadas antes (conferido pela chave da nota).`:"")
         +`\n\nAs sem itens ficaram de fora — confira/lance manualmente se precisar.`);
     };
-    const pend=itensNaoConciliados(todosItens,db);
-    if(pend.length){setConciliacao({itens:pend,onConfirm:finalizarTodas});return;}
-    finalizarTodas({});
+    comRevisao(todosItens,()=>{
+      const pend=itensNaoConciliados(todosItens,db);
+      if(pend.length){setConciliacao({itens:pend,onConfirm:finalizarTodas});return;}
+      finalizarTodas({});
+    });
   };
 
   return <div>
@@ -9820,6 +10052,17 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
         importava a MESMA nota outra vez: compra duplicada, CMV errado, e nada
         na tela denunciando. Fechando antes de executar, esquecer deixa de ser
         possível — inclusive num caminho novo que alguém acrescente depois. */}
+    {/* A revisão vem ANTES da conciliação: categoria e preço são do item, e não
+        dependem de saber a qual produto da Lista ele pertence. */}
+    {revisao&&<RevisarEntradaModal linhas={revisao.linhas} compras={comprasNum}
+      onConfirm={(escolhas:any)=>{
+        correcoesRef.current=correcoesDaRevisao(revisao.linhas,escolhas);
+        const seguir=revisao.seguir;
+        setRevisao(null);
+        seguir();
+      }}
+      onCancel={()=>{correcoesRef.current={};setRevisao(null);}}/>}
+
     {conciliacao&&<ConciliacaoImportModal itens={conciliacao.itens} materiasPrimas={db.materiasPrimas||[]} produtosLista={db.produtosLista||[]} ruas={db.listaRuas||[]}
       onConfirm={(res,vinc)=>{const fn=conciliacao.onConfirm;setConciliacao(null);fn(res,vinc);}} onCancel={()=>setConciliacao(null)}/>}
   </div>;
@@ -22055,7 +22298,7 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
   {db:any,setDb:any,setDbAndSave?:(fn:(d:any)=>any)=>void,empresa:string,state:any,setState:any,theme:"dark"|"light",toggleTheme:()=>void,menuLayout:"bottom"|"top"|"fab",changeMenuLayout:(l:"bottom"|"top"|"fab")=>void,menuOrder:string[],changeMenuOrder:(o:string[])=>void,setConfigPanelOpen?:(v:boolean)=>void,modoDiscreto:boolean,toggleModoDiscreto:()=>void}){
 
   const [subTab,setSubTab]=useState("empresa");
-  const subTabs:[string,string][]=[["empresa","🏢 Empresa"],["cores","🎨 Cores"],["financeiro","💰 Financeiro"],["compras","🏪 Compras"],["conciliacao","🔗 Conciliação"],["pdvdestaques","🖥️ Destaques do totem"],["sefaz","📄 NF-e"],["usuarios","👥 Usuários"],["integracoes","🔗 Integrações"],["impressao","🖨️ Impressão"],["dashboardpdv","📊 Dashboard PDV"]];
+  const subTabs:[string,string][]=[["empresa","🏢 Empresa"],["cores","🎨 Cores"],["financeiro","💰 Financeiro"],["compras","🏪 Compras"],["conciliacao","🔗 Conciliação"],["pdvdestaques","🖥️ Destaques do totem"],["sefaz","📄 NF-e"],["usuarios","👥 Usuários"],["integracoes","🔗 Integrações"],["impressao","🖨️ Impressão"],["manutencao","🧹 Manutenção"],["dashboardpdv","📊 Dashboard PDV"]];
 
   // Shared helpers
   const setConfig=(key:string,val:any)=>(setDbAndSave||setDb)((d:any)=>({...d,config:{...(d.config||{}),[key]:val}}));
@@ -22745,6 +22988,111 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
         </div>
       </div>}
     </div>}
+
+
+    {/* ===== MANUTENÇÃO · NORMALIZAR TEXTO =====
+        ⚠️ O ACENTO CORROMPIDO PARTE UMA CATEGORIA EM DUAS, e as duas ficam
+        plausíveis: "Proteínas" em NFD (i + til, dois code points) e em NFC (um
+        só) são visualmente idênticas, `===` diz que são diferentes, e a DRE
+        mostra duas linhas que ninguém consegue juntar olhando a tela.
+
+        ⚠️ A PRÉVIA E A APLICAÇÃO SAEM DA MESMA FUNÇÃO. Duas contagens feitas por
+        caminhos diferentes divergem no dia em que uma muda, e a pessoa aprovaria
+        um número para receber outro. */}
+    {subTab==="manutencao"&&(()=>{
+      const r=resumoDoEncoding(db,foldNome);
+      const nada=!r.camposTocados&&!r.quebrados.length&&!r.categoriasQueJuntam.length&&!r.catsListaQueJuntam.length;
+      const aplicar=()=>{
+        const {camposTocados,quebrados,...colecoes}=r.mudanca;
+        if(!Object.keys(colecoes).length)return;
+        if(!confirm(`Normalizar ${camposTocados} campo(s) de texto em ${Object.keys(colecoes).join(", ")}?\n\n`
+          +`Só o TEXTO muda — nenhum valor, saldo ou vínculo é tocado.\n`
+          +(quebrados.length?`\nOs ${quebrados.length} campo(s) com o caractere � NÃO são consertados: ficam como estão, para correção à mão.`:"")))return;
+        // Os campos de texto são chaves de vínculo por nome (§5): categoria da
+        // compra, nome do insumo. Por isso a gravação carimba `atualizadoEm` —
+        // sem o carimbo a fusão devolve a versão antiga no poll seguinte (§3).
+        (setDbAndSave||setDb)((d:any)=>{
+          const novo=normalizarEncoding(d);
+          const {camposTocados:_ct,quebrados:_q,...cols}=novo;
+          const agora=new Date().toISOString();
+          const out:any={...d};
+          Object.entries(cols).forEach(([nome,arr]:any)=>{
+            out[nome]=arr.map((reg:any,i:number)=>reg!==(d[nome]||[])[i]?{...reg,atualizadoEm:agora}:reg);
+          });
+          return out;
+        });
+        alert(`✅ ${camposTocados} campo(s) de texto normalizado(s).`);
+      };
+      return <div>
+        <div className="card" style={{marginBottom:12}}>
+          <div style={{fontSize:13,fontWeight:700,color:"var(--acc)",marginBottom:6}}>🧹 Normalizar texto (acento e espaço)</div>
+          <div style={{fontSize:12,color:"var(--text2)",lineHeight:1.55,marginBottom:10}}>
+            Varre nome e categoria de insumo, compra, produto da lista, fornecedor e produto de
+            produção. Normaliza para <b>NFC</b> e junta o que só era diferente por causa da forma
+            do acento ou de um espaço a mais. <b>Nenhum valor, saldo ou vínculo é tocado.</b>
+          </div>
+          {nada
+            ?<div style={{textAlign:"center",padding:"14px 0"}}>
+              <div style={{fontSize:28,marginBottom:6}}>✅</div>
+              <div style={{fontWeight:700,fontSize:13}}>Nada a normalizar</div>
+              <div className="muted" style={{fontSize:11.5,marginTop:2}}>Todo texto já está em forma composta, sem espaço sobrando.</div>
+            </div>
+            :<>
+              <div style={{display:"flex",gap:10,marginBottom:10,flexWrap:"wrap"}}>
+                <div style={{flex:1,minWidth:130,background:"var(--bg4)",borderRadius:10,padding:"10px 12px"}}>
+                  <div style={{fontSize:20,fontWeight:800,...MONO_REL}}>{r.camposTocados}</div>
+                  <div className="muted" style={{fontSize:11}}>campo(s) de texto mudam</div>
+                </div>
+                <div style={{flex:1,minWidth:130,background:"var(--bg4)",borderRadius:10,padding:"10px 12px"}}>
+                  <div style={{fontSize:20,fontWeight:800,...MONO_REL}}>{r.colecoes.length}</div>
+                  <div className="muted" style={{fontSize:11}}>{r.colecoes.join(" · ")||"—"}</div>
+                </div>
+              </div>
+
+              {(r.categoriasQueJuntam.length>0||r.catsListaQueJuntam.length>0)&&<div style={{background:"var(--infoBg)",borderRadius:10,padding:"11px 13px",marginBottom:10}}>
+                <div style={{fontSize:12,fontWeight:700,color:"var(--infoText)",marginBottom:6}}>
+                  Categorias que passam a ser UMA
+                </div>
+                <div style={{fontSize:11.5,color:"var(--infoText)",lineHeight:1.6,marginBottom:6}}>
+                  Esta é a parte que muda <b>relatório</b>, não só texto: duas grafias somam em duas
+                  linhas da DRE e do Budget.
+                </div>
+                {[...r.categoriasQueJuntam.map((g:any)=>({...g,onde:"Compras"})),
+                  ...r.catsListaQueJuntam.map((g:any)=>({...g,onde:"Lista"}))].map((g:any)=>(
+                  <div key={g.onde+g.chave} style={{fontSize:11.5,color:"var(--infoText)",marginTop:3}}>
+                    <b>{g.onde}:</b> {g.variantes.map((v:string,i:number)=><span key={i}>{i>0?" + ":""}“{v}”</span>)}
+                  </div>
+                ))}
+              </div>}
+
+              {r.quebrados.length>0&&<div style={{background:"var(--warningBg)",borderRadius:10,padding:"11px 13px",marginBottom:10}}>
+                <div style={{fontSize:12,fontWeight:700,color:"var(--warningText)",marginBottom:6}}>
+                  ⚠️ {r.quebrados.length} campo(s) com o caractere “�” — NÃO são consertados
+                </div>
+                <div style={{fontSize:11.5,color:"var(--warningText)",lineHeight:1.6,marginBottom:6}}>
+                  Onde o byte se perdeu não há o que recuperar, e chutar a letra criaria um nome novo
+                  que não casa com nada. Ficam listados para você corrigir à mão, na tela de cada um.
+                </div>
+                {r.quebrados.slice(0,12).map((q:any,i:number)=>(
+                  <div key={i} style={{fontSize:11.5,color:"var(--warningText)",marginTop:3,...MONO_REL}}>
+                    {q.colecao}.{q.campo}: {q.valor}
+                  </div>
+                ))}
+                {r.quebrados.length>12&&<div className="muted" style={{fontSize:11,marginTop:4}}>… e outros {r.quebrados.length-12}.</div>}
+              </div>}
+
+              <button className="btn" disabled={!r.camposTocados} onClick={aplicar}
+                style={{width:"100%",background:r.camposTocados?"var(--btnPrimary)":"var(--border2)",color:r.camposTocados?"var(--onPrimary,#FFFFFF)":"var(--text3)",padding:"12px",fontSize:13,fontWeight:700}}>
+                {r.camposTocados?`Normalizar ${r.camposTocados} campo(s)`:"Nada para normalizar"}
+              </button>
+              <div className="muted" style={{fontSize:11,marginTop:8,lineHeight:1.5}}>
+                Os números acima são a <b>prévia da mesma função</b> que grava — não há uma segunda
+                conta que possa divergir dela.
+              </div>
+            </>}
+        </div>
+      </div>;
+    })()}
 
     {/* ===== NF-e / SEFAZ ===== */}
     {subTab==="pdvdestaques"&&<div>

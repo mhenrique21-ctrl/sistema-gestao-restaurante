@@ -556,3 +556,141 @@ export function janelaAnterior(de, dias = 180) {
   const iso = (ms) => new Date(ms).toISOString().slice(0, 10);
   return { de: iso(t - dias * 86400000), ate: iso(t - 86400000) };
 }
+
+// ── A REVISÃO NO ATO DA ENTRADA ─────────────────────────────────────────────
+// As duas conferências que só servem ANTES de gravar. Depois de gravado, a
+// categoria virou fila em "Sem categoria" e o preço virou linha na Auditoria —
+// as duas telas existem porque isto não existia.
+//
+// ⚠️ A REVISÃO SÓ ABRE SE HOUVER O QUE REVISAR. Uma tela a mais em todo
+// import, quase sempre vazia, é a tela que a pessoa aprende a fechar sem ler —
+// e aí a vez em que ela tinha algo passa igual.
+//
+// ⚠️ E ela recebe TODOS os itens da compra, não só os que a conciliação não
+// casou. A conciliação resolve "de que produto da Lista é esta marca"; isto
+// resolve "em que categoria entra" e "o preço faz sentido". Um item que casou
+// perfeitamente com o catálogo pode estar entrando com a unidade errada.
+export function linhasDaRevisao(itens, { compras, fold, palpiteDe, desvio = DESVIO_PADRAO_PRECO, semCategoria = 'Outros' } = {}) {
+  const linhas = [];
+  const vistas = new Set();
+  for (const it of itens || []) {
+    const nome = normalizarTexto(it?.nome);
+    if (!nome) continue;
+    const chave = fold(nome);
+    // Duas linhas do mesmo nome na mesma nota é uma decisão só — e duas
+    // caixinhas para a mesma pergunta é como uma fica sem resposta.
+    if (vistas.has(chave)) continue;
+    vistas.add(chave);
+
+    const categoria = it?.categoria || '';
+    const p = palpiteDe ? palpiteDe(nome) : null;
+    const temPalpite = !!(p && p.categoria && p.categoria !== semCategoria && p.origem !== 'nenhuma');
+    const preco = conferirPreco(compras || [], {
+      nomeProduto: nome, categoria, unidade: it?.unidade,
+      quantidade: it?.quantidade, valor: it?.valorTotal ?? it?.valor,
+    }, fold, desvio);
+
+    linhas.push({
+      chave, nome, categoria,
+      unidade: it?.unidade || 'un',
+      quantidade: num(it?.quantidade),
+      valorTotal: r2(num(it?.valorTotal ?? it?.valor)),
+      // ⚠️ "Sem categoria" É "Outros" TAMBÉM, e não é detalhe: nenhum caminho de
+      // importação deixa o campo vazio — todos caem em "Outros" sozinhos. Pedir
+      // só quando está vazio seria uma pergunta que nunca aparece.
+      precisaCategoria: !categoria || categoria === semCategoria,
+      palpite: temPalpite ? p.categoria : null,
+      origemPalpite: temPalpite ? p.origem : null,
+      precoFora: !preco.ok,
+      preco,
+    });
+  }
+  return linhas;
+}
+
+// Pode gravar? A categoria BLOQUEIA; o preço exige uma resposta, que pode ser
+// "está certo".
+//
+// ⚠️ O ESCAPE DO PREÇO É DE PROPÓSITO. Insumo caro em quantidade pequena
+// acontece, e bloqueio sem saída vira um campo que a pessoa aprende a
+// contornar digitando qualquer coisa. O que NÃO existe é passar calado.
+export function pendenciasDaRevisao(linhas, escolhas, { compras, fold, desvio = DESVIO_PADRAO_PRECO } = {}) {
+  const esc = escolhas || {};
+  const faltaCategoria = [];
+  const precoNaoResolvido = [];
+  for (const l of linhas || []) {
+    const e = esc[l.chave] || {};
+    const cat = e.categoria || (l.precisaCategoria ? '' : l.categoria);
+    if (!cat || cat === 'Outros') {
+      // "Outros" escolhido À MÃO passa: é uma decisão, e o item existe mesmo
+      // (frete, brinde). O que não passa é o "Outros" que ninguém escolheu.
+      if (e.categoria !== 'Outros') faltaCategoria.push(l.chave);
+    }
+    if (!l.precoFora) continue;
+    if (e.precoOk) continue;
+    // Corrigiu os números? Refaz a conta: dentro da faixa, resolvido.
+    const refeito = conferirPreco(compras || [], {
+      nomeProduto: l.nome, categoria: cat || l.categoria,
+      unidade: e.unidade ?? l.unidade,
+      quantidade: e.quantidade ?? l.quantidade,
+      valor: e.valorTotal ?? l.valorTotal,
+    }, fold, desvio);
+    // ⚠️ APAGAR O NÚMERO NÃO RESOLVE. Sem preço legível `conferirPreco` devolve
+    // `ok` (não há com o que comparar), então um campo vazio — ou um "7,69" que
+    // não virou número — faria o aviso sumir e a compra entrar valendo zero. A
+    // pendência só cai com número válido ou com o "está certo" explícito.
+    const semPreco = !refeito.preco;
+    if (!refeito.ok || semPreco) precoNaoResolvido.push(l.chave);
+  }
+  return {
+    faltaCategoria, precoNaoResolvido,
+    podeConfirmar: !faltaCategoria.length && !precoNaoResolvido.length,
+  };
+}
+
+// O que a revisão devolve para a gravação: só o que MUDOU, chaveado por nome.
+export function correcoesDaRevisao(linhas, escolhas) {
+  const esc = escolhas || {};
+  const out = {};
+  for (const l of linhas || []) {
+    const e = esc[l.chave];
+    if (!e) continue;
+    const c = { nome: l.nome };
+    if (e.categoria && e.categoria !== l.categoria) c.categoria = e.categoria;
+    if (e.unidade != null && e.unidade !== l.unidade) c.unidade = e.unidade;
+    // ⚠️ Correção numérica só entra quando é um número POSITIVO: zero aqui é
+    // quase sempre texto que não virou número ("7,69" lido por `Number`), e
+    // gravar zero destrói o lançamento em vez de corrigi-lo.
+    if (e.quantidade != null && num(e.quantidade) > 0 && num(e.quantidade) !== l.quantidade) c.quantidade = num(e.quantidade);
+    if (e.valorTotal != null && num(e.valorTotal) > 0 && r2(num(e.valorTotal)) !== l.valorTotal) c.valorTotal = r2(num(e.valorTotal));
+    // ⚠️ Mexeu na quantidade ou no valor? O UNITÁRIO tem que ser refeito. Sem
+    // isso a compra guardaria 100 ml pelo unitário de 900 e a auditoria
+    // apontaria o mesmo lançamento amanhã — corrigido na tela, errado no banco.
+    if (c.quantidade != null || c.valorTotal != null) {
+      const q = c.quantidade ?? l.quantidade;
+      const v = c.valorTotal ?? l.valorTotal;
+      if (q > 0) c.valorUnitario = r2(v / q);
+    }
+    if (Object.keys(c).length > 1) out[l.chave] = c;
+  }
+  return out;
+}
+
+// ── O que a tela de normalizar texto mostra ANTES de aplicar ────────────────
+// ⚠️ A PRÉVIA E A APLICAÇÃO SAEM DA MESMA FUNÇÃO (`normalizarEncoding`). Duas
+// contagens calculadas por caminhos diferentes divergem no dia em que uma
+// muda, e a pessoa aprovaria um número para receber outro.
+export function resumoDoEncoding(db, fold) {
+  const r = normalizarEncoding(db);
+  const colecoes = Object.keys(r).filter((k) => k !== 'camposTocados' && k !== 'quebrados');
+  return {
+    camposTocados: r.camposTocados,
+    colecoes,
+    quebrados: r.quebrados,
+    // As categorias que hoje são duas e passam a ser uma. É a parte que muda
+    // RELATÓRIO, não só texto: duas grafias somam em duas linhas da DRE.
+    categoriasQueJuntam: duplicadasPorTexto((db?.compras || []).map((c) => c?.categoria), fold),
+    catsListaQueJuntam: duplicadasPorTexto((db?.produtosLista || []).map((p) => p?.cat), fold),
+    mudanca: r,
+  };
+}

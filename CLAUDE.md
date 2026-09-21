@@ -48,7 +48,6 @@ src/grupoMarcas.js    várias marcas e embalagens viram um produto só (com test
 src/dre.js            as fatias da barra da DRE e o aviso do CMV vazio (com testes)
 src/qualidadeCompras.js  fornecedor duplicado, categoria obrigatória, preço por
                       unidade e o descompasso compra × venda (com testes)
-src/qualidadeCompras.js  fornecedor, preço/unidade, encoding e conciliação (com testes)
 src/pdfTexto.js       tira as linhas de texto de um PDF (com testes)
 src/paletas.test.js   mede o contraste das paletas LENDO o App.tsx (trava regressão)
 src/vinculoSombra.test.js  trava o normalizarNome sombreado, LENDO o App.tsx
@@ -1046,7 +1045,8 @@ Números em fonte mono tabular (`MONO`), rótulos na fonte do app
 ### Compras
 Entradas · Cupom IA · NF-e · Histórico · Fornecedores · Insumos · Consumo · Budget ·
 **Sem categoria** · Reclassificar · **Duplicados** · **Auditoria de preço** ·
-**Comprei × consumo**.
+**Comprei × consumo**. A revisão de categoria e preço acontece **no ato da
+entrada**, nos cinco caminhos (ver abaixo).
 
 #### Qualidade do dado que entra — `src/qualidadeCompras.js` (com testes)
 
@@ -1126,6 +1126,85 @@ como a Lista já funciona.
 tombstone antes da gravação, lote só com palpite, régua anterior, o `useMemo`.
 Nada disso o build ou o TypeScript acusam: é JSX válido fazendo a coisa errada.
 
+##### A revisão no ato da entrada (21/09/2026)
+
+`RevisarEntradaModal` + `linhasDaRevisao` / `pendenciasDaRevisao` /
+`correcoesDaRevisao`. As duas conferências que só servem **antes** de gravar:
+depois de gravada, a categoria virou fila em "Sem categoria" e o preço virou
+linha na Auditoria — as duas telas existem porque isto não existia.
+
+⚠️ **UM portão para os CINCO caminhos de entrada** (manual, Cupom IA, XML, NF-e
+da SEFAZ e "importar todas"). Cinco cópias da mesma conferência é como uma fica
+para trás — foi exatamente o que aconteceu com a regra do fornecedor.
+
+⚠️ **ELA SÓ ABRE SE HOUVER O QUE REVISAR.** Uma tela a mais em todo import,
+quase sempre vazia, é a tela que a pessoa aprende a fechar sem ler — e aí a vez
+em que ela tinha algo passa igual.
+
+⚠️ **E recebe TODOS os itens da compra, não só os que a conciliação não casou.**
+A conciliação resolve "de que produto da Lista é esta marca"; isto resolve "em
+que categoria entra" e "o preço faz sentido". Item que casou perfeitamente com o
+catálogo pode estar entrando com a unidade errada.
+
+⚠️ **"Outros" conta como SEM categoria.** Nenhum caminho de importação deixa o
+campo vazio — todos caem em "Outros" sozinhos. Pedir só quando está vazio é uma
+pergunta que nunca aparece, e é assim que 864 itens foram parar lá. Mas "Outros"
+**escolhido à mão** passa: frete e brinde existem, e a diferença é ter sido
+decidido.
+
+⚠️ **A CATEGORIA BLOQUEIA; o preço exige RESPOSTA, que pode ser "está certo".**
+Insumo caro em quantidade pequena acontece, e bloqueio sem saída vira um campo
+que a pessoa aprende a contornar digitando qualquer coisa. O que não existe é
+passar calado. Corrigir os números também resolve — a conta é refeita na hora.
+
+⚠️ **A CORREÇÃO VAI POR REF, não por estado.** A gravação acontece no mesmo
+tique em que a revisão fecha, e um `useState` ainda não aplicado faria a compra
+entrar com o número velho: corrigido na tela, errado no banco. A ref é limpa no
+início de **cada** entrada, senão a correção de uma nota vaza para a seguinte.
+
+⚠️ **O `nome` NÃO é sobrescrito pela correção:** ele é a chave, e renomear ali
+desligaria o item do produto que a conciliação acabou de escolher.
+
+⚠️ **Mexer na quantidade ou no valor REFAZ o unitário.** Sem isso a compra
+guardaria 900 ml pelo unitário de 100, e a auditoria apontaria amanhã o
+lançamento que a pessoa corrigiu hoje.
+
+⚠️ **A entrada manual recebe o carrinho corrigido POR PARÂMETRO**
+(`finalizarCompraJa(cart)`). `setCarrinho` só vale no render seguinte, e o corpo
+leria o carrinho antigo do fechamento — gravando justamente o número que acabou
+de ser corrigido.
+
+⚠️ **O QUE SE DIGITA É TEXTO pt-BR; o módulo faz conta com NÚMERO.** `Number`
+devolve NaN para "7,69", e NaN virava **zero** na correção: a compra entraria
+valendo R$ 0,00 e a conferência passaria calada, porque sem preço ela não tem o
+que comparar. O texto fica na tela (`parseMoney` na borda), e **apagar o campo
+não resolve a pendência** — `pendenciasDaRevisao` recusa o preço ilegível.
+
+⚠️ **A escolha é aprendida na MESMA gravação da compra** (`aprenderRevisao(d)`
+dentro do updater). Dois `setDbAndSave` seguidos caem na janela de 5s da
+armadilha nº 0 (§3), e o que se perderia é justamente o aprendizado — a mesma
+pergunta voltaria na importação seguinte, que é o que ensina a clicar sem ler.
+
+##### Configurações → 🧹 Manutenção · normalizar texto
+
+⚠️ **O acento corrompido PARTE UMA CATEGORIA EM DUAS**, e as duas ficam
+plausíveis: "Proteínas" em NFD (i + til, dois code points) e em NFC (um só) são
+visualmente idênticas, `===` diz que são diferentes, e a DRE mostra duas linhas
+que ninguém junta olhando a tela. A tela lista **as categorias que passam a ser
+uma** — é a parte que muda relatório, não só texto.
+
+⚠️ **A PRÉVIA E A APLICAÇÃO SAEM DA MESMA FUNÇÃO** (`resumoDoEncoding` embrulha
+`normalizarEncoding`). Duas contagens por caminhos diferentes divergem no dia em
+que uma muda, e a pessoa aprovaria um número para receber outro. A gravação
+recalcula sobre o **`d` do save**, não sobre a prévia do render.
+
+⚠️ **O `�` é LISTADO, nunca consertado.** Onde o byte se perdeu não há o que
+recuperar, e chutar a letra criaria um nome novo que não casa com nada.
+
+⚠️ **A gravação carimba `atualizadoEm`:** os campos de texto são chaves de
+vínculo por nome (§5), e sem o carimbo a fusão devolve a versão antiga no poll
+seguinte (§3).
+
 - Classificação automática: regras duras de limpeza > dicionário aprendido > palpite por
   palavra-chave > "Outros" (`classificarItem`)
 
@@ -1139,57 +1218,6 @@ errado, nada denunciando. `checkDuplicataCompra` não pega: ela roda ANTES da
 conciliação. O botão também trava no primeiro clique, porque o modal só some no
 render seguinte.
 - Budget por categoria com sugestão híbrida e `statusPace` ok/warn/over
-
-#### Qualidade do dado na entrada — `src/qualidadeCompras.js` (com testes)
-
-Fase 1, 21/09/2026. Quatro erros estragam o CMV em silêncio, e os quatro nascem
-na ENTRADA, não no relatório onde aparecem.
-
-⚠️ **ERAM QUATRO CÓPIAS da regra de fornecedor** — `f.nome.toLowerCase()===…`
-em cada caminho (manual, Cupom IA, XML, SEFAZ). Quatro cópias é como uma fica
-para trás: a do **Cupom IA descartava o CNPJ que a IA já tinha lido**, então
-todo cupom do mesmo fornecedor entrava sem a chave que evitaria a duplicata
-seguinte. Agora é `garantirFornecedor`, um ponto só.
-
-⚠️ **O CNPJ DECIDE; o nome SUGERE.** Identificador fiscal vence qualquer
-grafia. E ⚠️ **CNPJ diferente nos dois BARRA o nome parecido**: duas filiais
-têm razão social quase igual e CNPJ distinto — juntá-las misturaria a compra de
-duas lojas. Nome só parecido **cria** e devolve sugestão: "Boi Forte" e "Boi
-Bom" medem 0,848 e são duas empresas. Só o sufixo de razão social diferindo
-("… Ltda") reaproveita, porque `nucleoDoNome` tira o ruído — sem isso "LIDER
-LTDA" e "SENDAS LTDA" ganhariam semelhança de graça pelo fim do nome.
-
-⚠️ **Semelhança por BIGRAMA, não distância de edição:** "Comercial Santa Lucia"
-e "Santa Lucia Comercial" têm quase todos os pares de letras em comum e uma
-distância de edição enorme. Fornecedor é exatamente o campo onde a palavra
-troca de lugar.
-
-⚠️ **Mesclar REESCREVE o histórico.** `compras[].fornecedor` guarda o **nome**,
-não o id, e `materiasPrimas[].fornecedores` é uma lista de nomes: apagar o
-cadastro sem reescrever deixaria o histórico apontando para quem não existe
-mais, e o filtro por fornecedor devolveria vazio para compras que estão lá. O
-canônico **herda o CNPJ** de quem tinha — sem isso a duplicata volta na
-importação seguinte.
-
-⚠️ **PREÇO: a referência é a MEDIANA, não a média.** Uma compra já gravada com
-a unidade errada (o óleo a R$ 769/100 ml) puxaria a média e passaria a
-**absolver** o próximo erro igual — a mesma lição da taxa do plano do iFood.
-⚠️ g e ml viram kg e L **antes** de comparar, senão o alerta dispararia em todo
-item comprado em grama. ⚠️ **Sem referência não se bloqueia**: travar o
-primeiro cadastro de um insumo ensina a ignorar o aviso.
-
-⚠️ **ENCODING: normaliza para NFC, nunca "conserta" o U+FFFD.** Onde o byte se
-perdeu não há o que recuperar; chutar a letra criaria um nome novo que não casa
-com nada. Esses ficam **listados** para decisão.
-
-⚠️ **TAREFA 3 esbarra numa premissa:** `produtosLista` é **compartilhado** entre
-Confraria e Seama (§1/§3). O item criado automaticamente numa compra da
-Confraria **aparece na Seama** — é como a Lista já funciona, não uma regressão.
-Tornar a Lista por empresa é decisão de outra ordem.
-
-⚠️ **O "parecido" continua virando PENDÊNCIA, não vínculo.** Casamento por
-inclusão com 4 caracteres ligaria "leite" a "leite condensado", e o custo
-sairia do produto errado — mesma recusa do `sugerirGrupo`.
 
 #### NF-e da SEFAZ: a lista mostra só o que FALTA importar
 

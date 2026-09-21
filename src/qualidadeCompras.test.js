@@ -7,6 +7,7 @@ import {
   normalizarEncoding, duplicadasPorTexto,
   conciliacaoPorCategoria, pctHistoricoPorCategoria,
   garantirFornecedor, criarItemDaLista, filaSemCategoria, janelaAnterior,
+  linhasDaRevisao, pendenciasDaRevisao, correcoesDaRevisao, resumoDoEncoding,
 } from './qualidadeCompras.js';
 
 const fold = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -472,5 +473,202 @@ describe('a janela da régua', () => {
   test('data inválida devolve null', () => {
     assert.equal(janelaAnterior('', 180), null);
     assert.equal(janelaAnterior('2026-09-01', 0), null);
+  });
+});
+
+describe('a revisão no ato da entrada', () => {
+  // 18 compras anteriores do óleo, todas por volta de R$ 8,54/L.
+  const COMPRAS = Array.from({ length: 18 }, (_, i) => ({
+    nomeProduto: 'ÓLEO DE SOJA', categoria: 'Mercearia/Secos',
+    unidade: 'ml', quantidade: 900, valor: 7.69 + i * 0.01, data: '2026-08-01',
+  }));
+  const palpiteDe = (nome) => {
+    const n = fold(nome);
+    if (n.includes('oleo')) return { categoria: 'Mercearia/Secos', origem: 'palpite' };
+    if (n.includes('peru')) return { categoria: 'Proteínas', origem: 'palpite' };
+    return { categoria: 'Outros', origem: 'nenhuma' };
+  };
+  // O lançamento real do dono: 100 ml onde eram 900.
+  const ITENS = [
+    { nome: 'ÓLEO DE SOJA', categoria: 'Mercearia/Secos', unidade: 'ml', quantidade: 100, valorTotal: 76.9 },
+    { nome: 'MARMITA HAMBURGUEIRA', categoria: 'Outros', unidade: 'un', quantidade: 100, valorTotal: 160 },
+    { nome: 'PEITO DE PERU', categoria: '', unidade: 'kg', quantidade: 2, valorTotal: 80 },
+  ];
+  const linhas = () => linhasDaRevisao(ITENS, { compras: COMPRAS, fold, palpiteDe });
+
+  test('"Outros" conta como SEM categoria', () => {
+    // ⚠️ Nenhum caminho de importação deixa o campo vazio: todos caem em
+    // "Outros" sozinhos. Pedir só quando está vazio é uma pergunta que nunca
+    // aparece — e é assim que 864 itens foram parar lá.
+    const l = linhas();
+    assert.equal(l.find((x) => x.nome.includes('MARMITA')).precisaCategoria, true);
+    assert.equal(l.find((x) => x.nome.includes('PERU')).precisaCategoria, true);
+    assert.equal(l.find((x) => x.nome.includes('SOJA')).precisaCategoria, false);
+  });
+
+  test('o preço fora da faixa aparece com a mediana e a razão', () => {
+    const oleo = linhas().find((x) => x.nome.includes('SOJA'));
+    assert.equal(oleo.precoFora, true);
+    assert.equal(oleo.preco.preco.preco, 769);
+    assert.equal(oleo.preco.preco.base, 'l');
+    assert.ok(oleo.preco.razao > 80);
+    assert.equal(oleo.preco.acima, true);
+  });
+
+  test('o mesmo nome duas vezes na nota é UMA linha', () => {
+    const l = linhasDaRevisao([...ITENS, { nome: 'óleo  de soja', categoria: 'Mercearia/Secos', unidade: 'ml', quantidade: 100, valorTotal: 76.9 }],
+      { compras: COMPRAS, fold, palpiteDe });
+    assert.equal(l.length, 3);
+  });
+
+  test('a categoria BLOQUEIA e o preço exige resposta', () => {
+    const l = linhas();
+    const nada = pendenciasDaRevisao(l, {}, { compras: COMPRAS, fold });
+    assert.equal(nada.podeConfirmar, false);
+    assert.equal(nada.faltaCategoria.length, 2);
+    assert.equal(nada.precoNaoResolvido.length, 1);
+
+    // Escolhida a categoria dos dois, só o preço segura.
+    const comCat = {
+      [fold('MARMITA HAMBURGUEIRA')]: { categoria: 'Descartáveis de consumo do produto' },
+      [fold('PEITO DE PERU')]: { categoria: 'Proteínas' },
+    };
+    const so = pendenciasDaRevisao(l, comCat, { compras: COMPRAS, fold });
+    assert.deepEqual(so.faltaCategoria, []);
+    assert.deepEqual(so.precoNaoResolvido, [fold('ÓLEO DE SOJA')]);
+  });
+
+  test('CORRIGIR a quantidade resolve o preço sozinho — sem precisar do escape', () => {
+    // 100 → 900 ml põe o preço em R$ 85,44/L… ainda 10× a mediana. Com o valor
+    // certo (7,69 por 900 ml) fecha.
+    const l = linhas();
+    const base = {
+      [fold('MARMITA HAMBURGUEIRA')]: { categoria: 'Outros' },
+      [fold('PEITO DE PERU')]: { categoria: 'Proteínas' },
+    };
+    const meio = pendenciasDaRevisao(l, { ...base, [fold('ÓLEO DE SOJA')]: { quantidade: 900 } }, { compras: COMPRAS, fold });
+    assert.deepEqual(meio.precoNaoResolvido, [fold('ÓLEO DE SOJA')]);
+    const ok = pendenciasDaRevisao(l, { ...base, [fold('ÓLEO DE SOJA')]: { quantidade: 900, valorTotal: 7.69 } }, { compras: COMPRAS, fold });
+    assert.equal(ok.podeConfirmar, true);
+  });
+
+  test('"Outros" ESCOLHIDO à mão passa; o que ninguém escolheu não', () => {
+    // Frete e brinde existem. A diferença é ter sido decidido.
+    const l = linhas();
+    const r = pendenciasDaRevisao(l, {
+      [fold('MARMITA HAMBURGUEIRA')]: { categoria: 'Outros' },
+      [fold('PEITO DE PERU')]: { categoria: 'Proteínas' },
+      [fold('ÓLEO DE SOJA')]: { precoOk: true },
+    }, { compras: COMPRAS, fold });
+    assert.equal(r.podeConfirmar, true);
+  });
+
+  test('o escape do preço é explícito e não some com a categoria', () => {
+    const l = linhas();
+    const r = pendenciasDaRevisao(l, { [fold('ÓLEO DE SOJA')]: { precoOk: true } }, { compras: COMPRAS, fold });
+    assert.deepEqual(r.precoNaoResolvido, []);
+    assert.equal(r.faltaCategoria.length, 2);
+    assert.equal(r.podeConfirmar, false);
+  });
+
+  test('a correção REFAZ o unitário', () => {
+    // ⚠️ Sem isso a compra guardaria 900 ml pelo unitário de 100, e a auditoria
+    // apontaria amanhã o lançamento que a pessoa corrigiu hoje.
+    const c = correcoesDaRevisao(linhas(), {
+      [fold('ÓLEO DE SOJA')]: { quantidade: 900, valorTotal: 7.69 },
+      [fold('PEITO DE PERU')]: { categoria: 'Proteínas' },
+    });
+    const oleo = c[fold('ÓLEO DE SOJA')];
+    assert.equal(oleo.quantidade, 900);
+    assert.equal(oleo.valorTotal, 7.69);
+    assert.equal(oleo.valorUnitario, 0.01);
+    assert.equal(oleo.nome, 'ÓLEO DE SOJA');
+    // Só categoria: nada de unitário inventado.
+    assert.deepEqual(c[fold('PEITO DE PERU')], { nome: 'PEITO DE PERU', categoria: 'Proteínas' });
+  });
+
+  test('escolha igual ao que já estava NÃO vira correção', () => {
+    const c = correcoesDaRevisao(linhas(), { [fold('ÓLEO DE SOJA')]: { categoria: 'Mercearia/Secos', quantidade: 100 } });
+    assert.deepEqual(c, {});
+  });
+
+  test('nada a revisar devolve lista vazia — a tela não abre', () => {
+    const l = linhasDaRevisao([{ nome: 'ÓLEO DE SOJA', categoria: 'Mercearia/Secos', unidade: 'ml', quantidade: 900, valorTotal: 7.7 }],
+      { compras: COMPRAS, fold, palpiteDe });
+    assert.equal(l.filter((x) => x.precisaCategoria || x.precoFora).length, 0);
+  });
+});
+
+describe('o resumo do encoding', () => {
+  const DB = {
+    compras: [
+      { id: 'c1', nomeProduto: 'Protéina de soja', categoria: 'Protéinas' },
+      { id: 'c2', nomeProduto: 'Peito  de peru', categoria: 'Proteínas' },
+      { id: 'c3', nomeProduto: 'PRODU�ÃO IVAN', categoria: 'Outros' },
+    ],
+    // ⚠️ "A" + cedilha NÃO junta (não existe precomposto) — o fixture precisa de
+    // um "c" + cedilha, que junta em "ç". A própria NFC tem esse detalhe.
+    produtosLista: [{ id: 'p1', nome: 'Açucar', cat: 'mercearia' }],
+  };
+
+  test('conta os campos e diz de quais coleções', () => {
+    const r = resumoDoEncoding(DB, fold);
+    assert.ok(r.camposTocados >= 4);
+    assert.ok(r.colecoes.includes('compras'));
+    assert.ok(r.colecoes.includes('produtosLista'));
+  });
+
+  test('o U+FFFD é LISTADO, nunca consertado', () => {
+    // ⚠️ Onde o byte se perdeu não há o que recuperar, e chutar a letra criaria
+    // um nome novo que não casa com nada.
+    const r = resumoDoEncoding(DB, fold);
+    assert.equal(r.quebrados.length, 1);
+    assert.equal(r.quebrados[0].id, 'c3');
+    assert.ok(r.mudanca.compras.find((c) => c.id === 'c3').nomeProduto.includes('�'));
+  });
+
+  test('as categorias que passam a ser UMA aparecem', () => {
+    // É a parte que muda RELATÓRIO, não só texto: duas grafias somam em duas
+    // linhas da DRE.
+    const r = resumoDoEncoding(DB, fold);
+    assert.equal(r.categoriasQueJuntam.length, 1);
+    assert.equal(r.categoriasQueJuntam[0].variantes.length, 2);
+  });
+
+  test('a prévia e a aplicação saem da MESMA função', () => {
+    const r = resumoDoEncoding(DB, fold);
+    assert.equal(r.mudanca.camposTocados, r.camposTocados);
+  });
+});
+
+describe('o número que não virou número', () => {
+  const COMPRAS = Array.from({ length: 5 }, () => ({
+    nomeProduto: 'ÓLEO DE SOJA', categoria: 'Mercearia/Secos', unidade: 'ml', quantidade: 900, valor: 7.7, data: '2026-08-01',
+  }));
+  const LINHAS = linhasDaRevisao(
+    [{ nome: 'ÓLEO DE SOJA', categoria: 'Mercearia/Secos', unidade: 'ml', quantidade: 100, valorTotal: 76.9 }],
+    { compras: COMPRAS, fold });
+  const chave = fold('ÓLEO DE SOJA');
+
+  test('apagar o campo NÃO resolve a pendência de preço', () => {
+    // ⚠️ Sem preço legível `conferirPreco` devolve ok — não há com o que
+    // comparar. Sem esta trava, limpar o campo fazia o aviso sumir e a compra
+    // entrar valendo zero.
+    assert.equal(LINHAS[0].precoFora, true);
+    const r = pendenciasDaRevisao(LINHAS, { [chave]: { quantidade: 0 } }, { compras: COMPRAS, fold });
+    assert.deepEqual(r.precoNaoResolvido, [chave]);
+    const r2_ = pendenciasDaRevisao(LINHAS, { [chave]: { valorTotal: 0 } }, { compras: COMPRAS, fold });
+    assert.deepEqual(r2_.precoNaoResolvido, [chave]);
+  });
+
+  test('zero e NaN não viram correção', () => {
+    // Gravar zero destrói o lançamento em vez de corrigi-lo.
+    assert.deepEqual(correcoesDaRevisao(LINHAS, { [chave]: { quantidade: 0, valorTotal: Number('7,69') } }), {});
+  });
+
+  test('número válido continua corrigindo', () => {
+    const c = correcoesDaRevisao(LINHAS, { [chave]: { quantidade: 900, valorTotal: 7.7 } });
+    assert.equal(c[chave].quantidade, 900);
+    assert.equal(c[chave].valorTotal, 7.7);
   });
 });
