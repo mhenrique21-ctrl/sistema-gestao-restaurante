@@ -25,7 +25,7 @@ import { mergeArrayById } from "../mergeDocument.js";
 import QRCode from "qrcode";
 import { ConfigPanel, CONFIG_PADRAO, type ConfigAppState } from "./ConfigPanel";
 import { ConfigStyleInjector, useApplyConfig } from "./ConfigApplier";
-import {garantirFornecedor,criarItemDaLista,conferirPreco,auditarPrecos,normalizarEncoding,gruposDeFornecedor,mesclarFornecedores,conciliacaoPorCategoria,pctHistoricoPorCategoria,normalizarTexto,precoPorUnidadeBase} from "./qualidadeCompras.js";
+import {garantirFornecedor,criarItemDaLista,conferirPreco,auditarPrecos,normalizarEncoding,gruposDeFornecedor,mesclarFornecedores,conciliacaoPorCategoria,pctHistoricoPorCategoria,normalizarTexto,precoPorUnidadeBase,filaSemCategoria,janelaAnterior,soDigitos} from "./qualidadeCompras.js";
 import {fatiasDaReceita,conferirCmv,diasNoIntervalo,mesDaData,porDia,comprasForaDoCmv,MOTIVO_FORA_CMV} from "./dre.js";
 
 // ===================== STORAGE =====================
@@ -2621,8 +2621,11 @@ export default function App() {
       {id:"compras-prod",label:"Insumos",icon:"📦",sub:"produtos"},
       {id:"compras-cons",label:"Consumo",icon:"📊",sub:"consumo"},
       {id:"compras-budget",label:"Budget",icon:"🎯",sub:"budget"},
-      {id:"compras-classificar",label:"Classificar",icon:"🏷️",sub:"classificar",badge:"classificacaoPendente"},
+      {id:"compras-classificar",label:"Sem categoria",icon:"🏷️",sub:"classificar",badge:"classificacaoPendente"},
       {id:"compras-migracao",label:"Reclassificar",icon:"🔀",sub:"migracao"},
+      {id:"compras-dupforn",label:"Duplicados",icon:"🔗",sub:"dupforn"},
+      {id:"compras-preco",label:"Auditoria de preço",icon:"🔍",sub:"auditpreco"},
+      {id:"compras-vscons",label:"Comprei × consumo",icon:"⚖️",sub:"vsconsumo"},
     ]},
     {id:"lista",label:"Lista",icon:"🛒",children:[
       {id:"lista-nova",label:"Nova Lista",icon:"➕",sub:"nova"},
@@ -7146,6 +7149,51 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
   const comprasLegado=(db.compras||[]).filter((c:any)=>c.categoria&&!CATS_COMPRA.includes(c.categoria));
   const catsLegado=[...new Set(comprasLegado.map((c:any)=>c.categoria))] as string[];
   const [migracaoDestinos,setMigracaoDestinos]=useState<{[k:string]:string}>({});
+  // ── Fase 1 · estado das quatro telas de qualidade do dado ─────────────────
+  const [filaOrdem,setFilaOrdem]=useState<"valor"|"compras"|"nome">("valor");
+  const [filaMarcados,setFilaMarcados]=useState<Set<string>>(new Set());
+  const [filaMostrar,setFilaMostrar]=useState(25);
+  const [dupCanonico,setDupCanonico]=useState<{[k:string]:string}>({});
+  const [dupDispensados,setDupDispensados]=useState<Set<string>>(new Set());
+  const [precoDesvio,setPrecoDesvio]=useState(3);
+  const [vsPeriodo,setVsPeriodo]=useState<"mes"|"anterior"|"d90">("mes");
+  const [vsMargem,setVsMargem]=useState(20);
+  // ⚠️ A AUDITORIA É O(n²) SOBRE AS COMPRAS: cada lançamento é comparado com
+  // todos os outros para achar a mediana do próprio insumo. Rodando no corpo do
+  // render ela recalcularia a cada tecla digitada em qualquer campo da aba.
+  // O `subTab` entra na condição para o custo existir só na tela que a mostra.
+  // ⚠️ E o `valor` entra JÁ NUMÉRICO. O módulo usa `Number(v)`, e compra antiga
+  // pode ter o valor gravado como texto pt-BR ("1.234,56"): `Number` devolve
+  // NaN, o módulo lê zero, e o lançamento sairia da auditoria em silêncio —
+  // justamente o lançamento antigo, que é o que ninguém mais vai conferir.
+  const comprasNum=useMemo(()=>(db.compras||[]).map((c:any)=>({...c,valor:parseMoney(c.valor),quantidade:Number(c.quantidade)||0})),[db.compras]);
+  const auditoriaPreco=useMemo(()=>subTab==="auditpreco"?auditarPrecos({...db,compras:comprasNum},foldNome,precoDesvio):null,
+    [subTab,comprasNum,precoDesvio]);
+  // Aplica a categoria de VÁRIOS nomes numa gravação só.
+  //
+  // ⚠️ Ensina o dicionário E reescreve o histórico: sem a segunda parte o item
+  // continuaria em "Outros" nas compras que já existem, e portanto fora do CMV
+  // do período — foi por isso que a tela antiga já fazia as duas coisas.
+  //
+  // ⚠️ Uma gravação só, não uma por linha: `setDbAndSave` liga o save direto
+  // por até 5s (§3), e dez chamadas em sequência é exatamente a janela em que
+  // a armadilha nº 0 mordia.
+  const aplicarCategorias=(pares:{chave:string,nome:string,cat:string}[])=>{
+    const validos=pares.filter(p=>p.chave&&p.cat&&CATS_COMPRA.includes(p.cat));
+    if(!validos.length)return;
+    (setDbAndSave||setDb)((d:any)=>{
+      let out=d;
+      validos.forEach(p=>{out=aprenderClassificacao(p.nome,p.cat)(out);});
+      const mapa=new Map(validos.map(p=>[p.chave,p.cat]));
+      const agora=new Date().toISOString();
+      return {...out,compras:(out.compras||[]).map((c:any)=>{
+        const cat=c.categoria==="Outros"?mapa.get(foldNome(c.nomeProduto||"")):undefined;
+        return cat?{...c,categoria:cat,categoriaOriginal:c.categoriaOriginal||"Outros",atualizadoEm:agora}:c;
+      })};
+    });
+    setFilaMarcados(new Set());
+    setToastMsg(validos.length===1?`✅ “${validos[0].nome}” classificado como ${validos[0].cat}`:`✅ ${validos.length} insumos classificados`);
+  };
   // Reescreve a categoria das compras de UM grupo, guardando a original em
   // categoriaOriginal — a spec pede pra não perder rastreabilidade, e sem isso
   // não haveria como auditar (nem desfazer) uma reclassificação errada.
@@ -8722,53 +8770,105 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
     </div>}
 
     {/* ===== PENDENTE DE CLASSIFICAÇÃO ===== */}
+    {/* ===== A FILA DO QUE ENTROU SEM CATEGORIA =====
+        Era uma lista na ordem em que as compras apareceram, com as 7 categorias
+        em chips em cada linha. O que faltava era a ordem que diz POR ONDE
+        COMEÇAR: com centenas de nomes, a fila só encolhe se as primeiras linhas
+        forem as que mais pesam no CMV — e o que pesa é o DINHEIRO parado, não a
+        contagem de compras, que era o único número que a tela antiga mostrava. */}
     {subTab==="classificar"&&(()=>{
-      const pendentes=itensClassificacaoPendente(db);
-      return <div>
+      const fila=filaSemCategoria(db.compras||[],{
+        dicionario:db.dicionarioClassificacao||{},
+        // Quem traduz nome em categoria é o `classificarItem` daqui (regras de
+        // limpeza > dicionário > palavra-chave). O módulo recebe por parâmetro
+        // para não existir uma segunda resposta pra mesma pergunta.
+        palpiteDe:(nome:string)=>classificarItem(db,nome),
+        fold:foldNome,ordem:filaOrdem,
+      });
+      const visiveis=fila.linhas.slice(0,filaMostrar);
+      const marcadosComPalpite=fila.linhas.filter((l:any)=>l.temPalpite&&filaMarcados.has(l.chave));
+      return <div style={{paddingBottom:marcadosComPalpite.length?64:0}}>
         <BackBar label="Entradas" onClick={()=>setSubTab("novo")}/>
-        <div className="section-title">Pendente de classificação</div>
-        {!pendentes.length
+        <div className="section-title">Insumos sem categoria</div>
+        {!fila.total
           ?<div className="card" style={{textAlign:"center",padding:"28px 16px"}}>
             <div style={{fontSize:32,marginBottom:8}}>✅</div>
             <div style={{fontWeight:700,marginBottom:4}}>Nada pendente</div>
             <div className="muted" style={{fontSize:12}}>Todo item comprado já tem categoria contábil definida.</div>
           </div>
           :<>
-            <div className="card" style={{marginBottom:10,border:"1px solid #F59E0B55",background:"var(--warningBg)"}}>
-              <div style={{fontSize:13,fontWeight:700,color:"var(--warningText)",marginBottom:4}}>{pendentes.length} item(ns) sem categoria definida</div>
-              <div style={{fontSize:11.5,color:"var(--warningText)"}}>
-                Estão em “Outros”, então não contam em nenhuma categoria do CMV.
-                Classifique uma vez: toda compra futura com o mesmo nome já entra classificada sozinha.
+            <div className="card" style={{marginBottom:10}}>
+              <div style={{display:"flex",gap:10,alignItems:"baseline",flexWrap:"wrap",marginBottom:8}}>
+                <b style={{fontSize:15}}>{fila.total} insumo(s) sem categoria</b>
+                <span className="muted" style={{marginLeft:"auto",fontSize:12.5,...MONO_REL}}>{fmtMoney(fila.totalParado)} parados</span>
+              </div>
+              <div style={{fontSize:11.5,color:"var(--text2)",lineHeight:1.55,marginBottom:10}}>
+                Estão em “Outros”, então esse dinheiro não conta em nenhuma categoria do CMV.
+                Classifique uma vez: toda compra futura com o mesmo nome já entra classificada sozinha,
+                e o histórico é reescrito junto.
+              </div>
+              <div className="chip-row" style={{alignItems:"center"}}>
+                <span className="muted" style={{fontSize:11,marginRight:2}}>ordenar por</span>
+                {([["valor","valor parado"],["compras","mais comprado"],["nome","A–Z"]] as [any,string][]).map(([k,rot])=>(
+                  <button key={k} type="button" className="chip" aria-pressed={filaOrdem===k}
+                    onClick={()=>setFilaOrdem(k)}
+                    style={filaOrdem===k?{background:"var(--accLight,var(--bg4))",borderColor:"var(--btnPrimary)",color:"var(--btnPrimary)",fontWeight:700}:undefined}>{rot}</button>
+                ))}
               </div>
             </div>
-            {pendentes.map((p:any)=>(
-              <div key={p.chave} className="card" style={{marginBottom:8}}>
-                <div style={{fontWeight:700,fontSize:13.5,marginBottom:2}}>{p.nome}</div>
-                <div className="muted" style={{fontSize:11,marginBottom:8}}>
-                  {p.fornecedor?`${p.fornecedor} · `:""}{p.data?fmtDate(p.data):""}
-                  {p.sugestao.origem==="palpite"&&<span className="tag" style={{background:"var(--infoBg)",color:"var(--infoText)",fontSize:10,marginLeft:6}}>sugestão: {p.sugestao.categoria}</span>}
+            {visiveis.map((l:any)=>{
+              const marcado=filaMarcados.has(l.chave);
+              return <div key={l.chave} className="card" style={{marginBottom:8,border:marcado?"1px solid var(--btnPrimary)":undefined}}>
+                <div style={{display:"flex",gap:10,alignItems:"flex-start"}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontWeight:700,fontSize:13.5,marginBottom:2}}>{l.nome}</div>
+                    <div className="muted" style={{fontSize:11}}>
+                      <span style={MONO_REL}>{fmtMoney(l.valor)}</span> · {l.compras} compra(s)
+                      {l.ultima?` · última ${fmtDate(l.ultima)}`:""}
+                    </div>
+                  </div>
+                  {l.temPalpite
+                    ?<label style={{display:"flex",gap:6,alignItems:"center",fontSize:11,color:"var(--text2)",cursor:"pointer",whiteSpace:"nowrap"}}>
+                      <input type="checkbox" checked={marcado} onChange={e=>setFilaMarcados(s=>{
+                        const n=new Set(s);if(e.target.checked)n.add(l.chave);else n.delete(l.chave);return n;})}/>
+                      em lote
+                    </label>
+                    :<span className="tag" style={{background:"var(--warningBg)",color:"var(--warningText)",fontSize:10}}>sem palpite</span>}
                 </div>
-                <div className="chip-row">
-                  {CATS_COMPRA.map(cat=>(
-                    <button key={cat} type="button" className="chip"
-                      aria-pressed={p.sugestao.origem==="palpite"&&p.sugestao.categoria===cat}
-                      onClick={()=>{
-                        (setDbAndSave||setDb)((d:any)=>{
-                          const comAprendizado=aprenderClassificacao(p.nome,cat)(d);
-                          // Reclassifica também o que já foi comprado com esse
-                          // nome: sem isso o item continuaria em "Outros" no
-                          // histórico e seguiria fora do CMV do período.
-                          return {...comAprendizado,compras:(comAprendizado.compras||[]).map((c:any)=>
-                            (c.categoria==="Outros"&&foldNome(c.nomeProduto||"")===p.chave)
-                              ?{...c,categoria:cat,categoriaOriginal:c.categoriaOriginal||"Outros",atualizadoEm:new Date().toISOString()}
-                              :c)};
-                        });
-                        setToastMsg(`✅ “${p.nome}” classificado como ${cat}`);
-                      }}>{catIcon(cat)} {cat}</button>
+                {l.temPalpite&&<div className="muted" style={{fontSize:11,margin:"6px 0 2px"}}>
+                  palpite: <b style={{color:"var(--infoText)"}}>{l.palpite}</b>
+                  {l.origemPalpite==="regra"?" (regra de limpeza)":" (por palavra-chave)"}
+                </div>}
+                <div className="chip-row" style={{marginTop:6}}>
+                  {CATS_COMPRA.map((cat:string)=>(
+                    <button key={cat} type="button" className="chip" aria-pressed={l.palpite===cat}
+                      onClick={()=>aplicarCategorias([{chave:l.chave,nome:l.nome,cat}])}>{catIcon(cat)} {cat}</button>
                   ))}
                 </div>
+              </div>;
+            })}
+            {fila.total>visiveis.length&&<button className="btn" onClick={()=>setFilaMostrar(n=>n+50)}
+              style={{width:"100%",background:"var(--bg4)",color:"var(--text2)",padding:"10px",fontSize:12.5,marginBottom:10}}>
+              mostrar mais {Math.min(50,fila.total-visiveis.length)} (de {fila.total})
+            </button>}
+            {/* ⚠️ O LOTE SÓ PEGA QUEM TEM PALPITE. Aplicar em massa no "sem
+                palpite" mandaria tudo para uma categoria que ninguém conferiu —
+                que é exatamente como esta fila se formou. Por isso a caixinha
+                só existe na linha que tem palpite. */}
+            <div className="card" style={{background:"var(--infoBg)",border:"1px solid var(--infoText)33"}}>
+              <div style={{fontSize:11.5,color:"var(--infoText)",lineHeight:1.55}}>
+                O lote aplica <b>o palpite de cada linha marcada</b>, não uma categoria só para todas.
+                Quem está como “sem palpite” precisa de escolha nos chips — marcar em lote ali seria
+                mandar tudo para uma categoria que ninguém conferiu, e é assim que “Outros” cresce.
+                {fila.comPalpite<fila.total&&<> {fila.total-fila.comPalpite} das {fila.total} linhas estão sem palpite.</>}
               </div>
-            ))}
+            </div>
+            {marcadosComPalpite.length>0&&<div style={{position:"fixed",left:0,right:0,bottom:0,padding:"10px 14px",background:"var(--bg3)",borderTop:"1px solid var(--border2)",zIndex:40}}>
+              <button className="btn" onClick={()=>aplicarCategorias(marcadosComPalpite.map((l:any)=>({chave:l.chave,nome:l.nome,cat:l.palpite})))}
+                style={{background:"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)",width:"100%",padding:"12px",fontSize:13.5,fontWeight:700}}>
+                aplicar os {marcadosComPalpite.length} palpite(s) marcado(s)
+              </button>
+            </div>}
           </>}
       </div>;
     })()}
@@ -8830,6 +8930,16 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
         <div className="section-title" style={{margin:0}}>Fornecedores</div>
         <SortCtrl id="fornecedores" db={db} setDb={setDb} opts={[["nome-az","Nome A-Z"],["nome-za","Nome Z-A"]]}/>
       </div>
+      {/* O contador aparece AQUI, na tela onde a duplicata incomoda — quem vê
+          "SENDAS" três vezes nesta lista é quem vai querer resolver. */}
+      {(()=>{
+        const n=gruposDeFornecedor(db.fornecedores||[],foldNome).length;
+        if(!n)return null;
+        return <button className="btn" onClick={()=>setSubTab("dupforn")}
+          style={{width:"100%",marginBottom:10,background:"var(--warningBg)",color:"var(--warningText)",padding:"10px",fontSize:12.5,fontWeight:700,textAlign:"left"}}>
+          🔗 {n} grupo(s) de cadastros que parecem o mesmo fornecedor — revisar
+        </button>;
+      })()}
       {sortList(db.fornecedores||[],db,'fornecedores','nome-az').map(f=>(
         <div key={f.id} className="list-item">
           {editFornId===f.id?(
@@ -8860,6 +8970,297 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
       ))}
       {!(db.fornecedores||[]).length&&<EmptyState msg="Nenhum fornecedor cadastrado"/>}
     </div>}
+
+    {/* ===== FORNECEDORES DUPLICADOS =====
+        ⚠️ RODA SOBRE A LISTA INTEIRA, não só sobre o que acabou de entrar.
+        `garantirFornecedor` fechou a porta de onde as duplicatas vinham (as
+        quatro cópias de `nome.toLowerCase()===nome` nos caminhos de
+        importação), mas o que já está cadastrado não se desfaz sozinho — e é
+        ele que faz o Histórico mostrar o mesmo fornecedor em três linhas. */}
+    {subTab==="dupforn"&&(()=>{
+      const grupos=gruposDeFornecedor(db.fornecedores||[],foldNome).filter((g:any)=>!dupDispensados.has(g.chave));
+      // ⚠️ `compras[].fornecedor` guarda o NOME, não o id. É por isso que
+      // mesclar reescreve o histórico em vez de só apagar um cadastro: sem a
+      // reescrita as compras ficariam apontando para um nome que não existe
+      // mais em Fornecedores.
+      const statsDe=(nome:string)=>{
+        const k=foldNome(nome||"");
+        const cs=(db.compras||[]).filter((c:any)=>foldNome(c.fornecedor||"")===k);
+        return {n:cs.length,valor:cs.reduce((s:number,c:any)=>s+parseMoney(c.valor),0)};
+      };
+      const canonicoDe=(g:any)=>dupCanonico[g.chave]
+        // O padrão é quem tem CNPJ e mais compras: é o cadastro que já está
+        // certo, e mantê-lo evita reescrever a maior parte do histórico.
+        ||[...g.itens].sort((a:any,b:any)=>
+            (soDigitos(b.cnpj).length-soDigitos(a.cnpj).length)
+            ||(statsDe(b.nome).n-statsDe(a.nome).n))[0].id;
+      const mesclar=(g:any)=>{
+        const canonicoId=canonicoDe(g);
+        const idsRemovidos=g.itens.filter((f:any)=>f.id!==canonicoId).map((f:any)=>f.id);
+        const canonico=g.itens.find((f:any)=>f.id===canonicoId);
+        // ⚠️ A PRÉVIA DIZ QUANTAS LINHAS MUDAM ANTES DE CONFIRMAR. Ela sai do
+        // `db` do render (só serve pro texto); a gravação refaz a conta sobre o
+        // `d` do momento do save (§3).
+        const prev=mesclarFornecedores(db,{canonicoId,idsRemovidos});
+        if(!confirm(`Mesclar ${g.itens.length} cadastros em “${canonico.nome}”?\n\n`
+          +`• ${prev.comprasTocadas} compra(s) passam a apontar para ele\n`
+          +`• ${prev.insumosTocados} insumo(s) têm a lista de fornecedores reescrita\n`
+          +`• ${idsRemovidos.length} cadastro(s) são removidos\n\n`
+          +`Não tem desfazer em um clique: o que desfaz é separar de novo, à mão.`))return;
+        // ⚠️ O TOMBSTONE VAI ANTES DA GRAVAÇÃO. `fornecedores` é fundido por id
+        // (§3): sem marcar os removidos, o poll seguinte devolve os três.
+        idsRemovidos.forEach((id:string)=>_listaDeletados.add(id));
+        (setDbAndSave||setDb)((d:any)=>{
+          const r=mesclarFornecedores(d,{canonicoId,idsRemovidos});
+          return {...d,fornecedores:r.fornecedores,compras:r.compras,materiasPrimas:r.materiasPrimas};
+        });
+        setToastMsg(`✅ ${g.itens.length} cadastros viraram “${canonico.nome}”`);
+      };
+      const totalCadastros=grupos.reduce((s:number,g:any)=>s+g.itens.length,0);
+      return <div>
+        <BackBar label="Fornecedores" onClick={()=>setSubTab("forn")}/>
+        <div className="section-title">Fornecedores duplicados</div>
+        {!grupos.length
+          ?<div className="card" style={{textAlign:"center",padding:"28px 16px"}}>
+            <div style={{fontSize:32,marginBottom:8}}>✅</div>
+            <div style={{fontWeight:700,marginBottom:4}}>Nenhuma duplicata</div>
+            <div className="muted" style={{fontSize:12}}>Nenhum CNPJ repetido e nenhum nome parecido o bastante entre os {(db.fornecedores||[]).length} cadastros.</div>
+          </div>
+          :<>
+            <div className="card" style={{marginBottom:10}}>
+              <div style={{fontSize:13.5,fontWeight:700,marginBottom:4}}>{grupos.length} grupo(s) · {totalCadastros} cadastros viram {grupos.length}</div>
+              <div style={{fontSize:11.5,color:"var(--text2)",lineHeight:1.55}}>
+                CNPJ igual é certeza. Nome parecido é palpite — confira antes, porque
+                filial de rede tem nome quase igual e CNPJ diferente (essas o agrupamento já separa).
+              </div>
+            </div>
+            {grupos.map((g:any)=>{
+              const canonicoId=canonicoDe(g);
+              const soma=g.itens.reduce((s:number,f:any)=>{const st=statsDe(f.nome);return {n:s.n+st.n,valor:s.valor+st.valor};},{n:0,valor:0} as any);
+              return <div key={g.chave} className="card" style={{marginBottom:8}}>
+                <div style={{display:"flex",gap:8,alignItems:"baseline",flexWrap:"wrap",marginBottom:8}}>
+                  <b style={{fontSize:13.5,...(g.motivo==="cnpj"?MONO_REL:{})}}>{g.chave}</b>
+                  {g.motivo==="cnpj"
+                    ?<span className="tag" style={{background:"var(--successBg)",color:"var(--successText)",fontSize:10}}>mesmo CNPJ · certeza</span>
+                    :<span className="tag" style={{background:"var(--warningBg)",color:"var(--warningText)",fontSize:10}}>nome parecido</span>}
+                  <span className="muted" style={{marginLeft:"auto",fontSize:11.5,...MONO_REL}}>{fmtMoney(soma.valor)} · {soma.n} compra(s)</span>
+                </div>
+                {g.itens.map((f:any)=>{
+                  const st=statsDe(f.nome);
+                  return <label key={f.id} style={{display:"flex",gap:9,alignItems:"flex-start",padding:"8px 0",borderTop:"1px solid var(--bg4)",cursor:"pointer"}}>
+                    <input type="radio" name={`dup-${g.chave}`} checked={canonicoId===f.id}
+                      onChange={()=>setDupCanonico(m=>({...m,[g.chave]:f.id}))} style={{marginTop:3}}/>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontWeight:canonicoId===f.id?700:500,fontSize:13}}>{f.nome}</div>
+                      <div className="muted" style={{fontSize:11,...MONO_REL}}>
+                        {f.cnpj?`CNPJ ${f.cnpj}`:"sem CNPJ"} · {st.n} compra(s) · {fmtMoney(st.valor)}
+                      </div>
+                    </div>
+                    {canonicoId===f.id&&<span className="tag" style={{background:"var(--infoBg)",color:"var(--infoText)",fontSize:10}}>fica este</span>}
+                  </label>;
+                })}
+                <div style={{display:"flex",gap:8,marginTop:10,flexWrap:"wrap"}}>
+                  <button className="btn" onClick={()=>mesclar(g)}
+                    style={{background:"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)",flex:1,padding:"10px",fontSize:13}}>
+                    mesclar os {g.itens.length}
+                  </button>
+                  <button className="btn" onClick={()=>setDupDispensados(s=>new Set([...s,g.chave]))}
+                    style={{background:"var(--bg4)",color:"var(--text2)",padding:"10px 14px",fontSize:12.5}}>não são o mesmo</button>
+                </div>
+              </div>;
+            })}
+            <div className="card" style={{background:"var(--warningBg)",border:"1px solid var(--warningText)33"}}>
+              <div style={{fontSize:11.5,color:"var(--warningText)",lineHeight:1.55}}>
+                ⚠️ Mesclar <b>reescreve o histórico</b>: as compras e a lista de fornecedores de cada
+                insumo passam a apontar para o cadastro que ficou. O diálogo diz quantas linhas mudam
+                antes de confirmar. <b>Não tem desfazer em um clique</b> — o que desfaz é separar de novo, à mão.
+                “Não são o mesmo” só esconde o grupo desta sessão; nada é gravado.
+              </div>
+            </div>
+          </>}
+      </div>;
+    })()}
+
+    {/* ===== AUDITORIA DE PREÇO POR UNIDADE =====
+        O óleo de soja a R$ 769,00/L: 100 ml digitado onde eram 900, ou "ml"
+        onde era "un". O número no campo (R$ 76,90) é plausível; o que denuncia
+        é o preço POR UNIDADE contra o que o mesmo insumo custou antes.
+
+        ⚠️ A régua é a MEDIANA, não a média: com a média a própria linha errada
+        puxaria a referência para cima e passaria a ABSOLVER o erro seguinte. */}
+    {subTab==="auditpreco"&&(()=>{
+      const achados=auditoriaPreco||[];
+      return <div>
+        <BackBar label="Entradas" onClick={()=>setSubTab("novo")}/>
+        <div className="section-title">Auditoria de preço</div>
+        <div className="card" style={{marginBottom:10}}>
+          <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",marginBottom:6}}>
+            <b style={{fontSize:14.5}}>{achados.length} lançamento(s) fora do desvio</b>
+            <div className="chip-row" style={{marginLeft:"auto"}}>
+              {[3,5,10].map(d=>(
+                <button key={d} type="button" className="chip" aria-pressed={precoDesvio===d} onClick={()=>setPrecoDesvio(d)}
+                  style={precoDesvio===d?{background:"var(--accLight,var(--bg4))",borderColor:"var(--btnPrimary)",color:"var(--btnPrimary)",fontWeight:700}:undefined}>{d}×</button>
+              ))}
+            </div>
+          </div>
+          <div style={{fontSize:11.5,color:"var(--text2)",lineHeight:1.55}}>
+            Compara o preço por unidade-base de cada compra com a mediana das outras compras do
+            mesmo insumo (ou da categoria, quando o insumo só foi comprado uma vez).
+            g e ml viram kg e L antes de comparar.
+          </div>
+        </div>
+        {!achados.length
+          ?<div className="card" style={{textAlign:"center",padding:"28px 16px"}}>
+            <div style={{fontSize:32,marginBottom:8}}>✅</div>
+            <div style={{fontWeight:700,marginBottom:4}}>Nada fora de {precoDesvio}×</div>
+            <div className="muted" style={{fontSize:12}}>Nenhum lançamento está a {precoDesvio} vezes ou mais da mediana do próprio insumo.</div>
+          </div>
+          :achados.map((a:any)=>(
+            <div key={a.id} className="card" style={{marginBottom:8}}>
+              <div style={{display:"flex",gap:10,alignItems:"flex-start",flexWrap:"wrap"}}>
+                <div style={{flex:1,minWidth:150}}>
+                  <div style={{fontWeight:700,fontSize:13.5}}>{a.nome}</div>
+                  <div className="muted" style={{fontSize:11,...MONO_REL}}>
+                    {a.quantidade} {a.unidade||"un"} · {fmtMoney(a.valor)}
+                  </div>
+                  <div className="muted" style={{fontSize:11,marginTop:2}}>
+                    {a.data?fmtDate(a.data):"sem data"}{a.categoria?` · ${a.categoria}`:""}
+                  </div>
+                </div>
+                <div style={{textAlign:"right",...MONO_REL}}>
+                  <div style={{fontSize:13.5,fontWeight:700,color:a.acima?"var(--danger)":"var(--infoText)"}}>
+                    {fmtMoney(a.preco)}/{a.base}
+                  </div>
+                  <div className="muted" style={{fontSize:11}}>mediana {fmtMoney(a.mediana)}/{a.base}</div>
+                  <div style={{fontSize:12,fontWeight:700,color:a.acima?"var(--danger)":"var(--infoText)",marginTop:2}}>
+                    {a.acima?`${a.razao.toFixed(1)}× acima`:`${(1/(a.razao||1)).toFixed(0)}× abaixo`}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        {achados.length>0&&<div className="card" style={{background:"var(--infoBg)",border:"1px solid var(--infoText)33"}}>
+          <div style={{fontSize:11.5,color:"var(--infoText)",lineHeight:1.55}}>
+            A régua é a <b>mediana</b>, não a média: com a média a própria linha errada puxaria a
+            referência e passaria a <b>absolver</b> o erro seguinte. Esta tela <b>não corrige nada</b> —
+            o lançamento se conserta no Histórico, onde ele já pode ser editado, porque mexer em
+            quantidade e unidade daqui mudaria estoque e CMV sem a pessoa ver o resto da compra.
+          </div>
+        </div>}
+      </div>;
+    })()}
+
+    {/* ===== COMPREI × DEVIA TER CONSUMIDO =====
+        ⚠️ ISTO NÃO É MEDIDA DE PERDA — É DE DESCOMPASSO. Compra é irregular (a
+        nota chega num dia e abastece a semana) e venda é diária: num recorte
+        curto a diferença é calendário, não desperdício. É a mesma armadilha do
+        CMV vazio da DRE, e a tela tem que dizer isso em vez de deixar a pessoa
+        concluir sozinha.
+
+        ⚠️ E NÃO é o consumo teórico da ficha (`consumoTeorico.js`): aquele
+        precisa de ficha completa, e este painel existe justamente porque ela
+        não está pronta. Usa o único dado que sempre existe — comprado e
+        vendido. */}
+    {subTab==="vsconsumo"&&(()=>{
+      const hoje=today();
+      const mesAtual=hoje.slice(0,7);
+      const diasAntes=(n:number)=>new Date(Date.parse(`${hoje}T00:00:00Z`)-n*86400000).toISOString().slice(0,10);
+      const mesAnterior=(()=>{const [y,m]=mesAtual.split("-").map(Number);const d=new Date(Date.UTC(y,m-2,1));
+        const mm=d.toISOString().slice(0,7);const fim=new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth()+1,0)).getUTCDate();
+        return {de:`${mm}-01`,ate:`${mm}-${String(fim).padStart(2,"0")}`,rot:mm};})();
+      const per=vsPeriodo==="mes"?{de:`${mesAtual}-01`,ate:hoje,rot:"este mês"}
+        :vsPeriodo==="anterior"?{de:mesAnterior.de,ate:mesAnterior.ate,rot:`mês anterior (${mesAnterior.rot})`}
+        :{de:diasAntes(89),ate:hoje,rot:"últimos 90 dias"};
+      // ⚠️ A RÉGUA TERMINA NA VÉSPERA DO PERÍODO. Incluindo o período, a compra
+      // exagerada entraria no próprio percentual histórico e suavizaria o
+      // alerta sobre ela mesma — quanto mais fora da curva, menos apareceria.
+      const jan=janelaAnterior(per.de,180);
+      const regua=jan?pctHistoricoPorCategoria({compras:comprasNum,vendas:(db.vendas||[]).map((v:any)=>({...v,total:parseMoney(v.total)})),de:jan.de,ate:jan.ate}):{receita:0,pct:{}};
+      const receita=(db.vendas||[]).filter((v:any)=>v?.data&&v.data>=per.de&&v.data<=per.ate)
+        .reduce((s:number,v:any)=>s+parseMoney(v.total),0);
+      const r=conciliacaoPorCategoria({compras:comprasNum,receita,pctPorCategoria:regua.pct,de:per.de,ate:per.ate,margem:vsMargem});
+      const maiorDif=Math.max(1,...r.linhas.map((l:any)=>Math.abs(l.dif||0)));
+      return <div>
+        <BackBar label="Entradas" onClick={()=>setSubTab("novo")}/>
+        <div className="section-title">Comprei × devia ter consumido</div>
+        <div className="card" style={{marginBottom:10}}>
+          <div className="chip-row" style={{alignItems:"center",marginBottom:8}}>
+            {([["mes","este mês"],["anterior","mês anterior"],["d90","últimos 90 dias"]] as [any,string][]).map(([k,rot])=>(
+              <button key={k} type="button" className="chip" aria-pressed={vsPeriodo===k} onClick={()=>setVsPeriodo(k)}
+                style={vsPeriodo===k?{background:"var(--accLight,var(--bg4))",borderColor:"var(--btnPrimary)",color:"var(--btnPrimary)",fontWeight:700}:undefined}>{rot}</button>
+            ))}
+            <span className="muted" style={{marginLeft:"auto",fontSize:11.5,...MONO_REL}}>receita {fmtMoney(receita)}</span>
+          </div>
+          <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+            <span className="muted" style={{fontSize:11}}>avisar acima de</span>
+            {[10,20,30].map(m=>(
+              <button key={m} type="button" className="chip" aria-pressed={vsMargem===m} onClick={()=>setVsMargem(m)}
+                style={vsMargem===m?{background:"var(--accLight,var(--bg4))",borderColor:"var(--btnPrimary)",color:"var(--btnPrimary)",fontWeight:700}:undefined}>{m}%</button>
+            ))}
+            <span className="muted" style={{fontSize:11,marginLeft:"auto"}}>
+              régua: {jan?`${fmtDate(jan.de)} a ${fmtDate(jan.ate)}`:"—"}
+            </span>
+          </div>
+        </div>
+        {!receita
+          ?<div className="card" style={{textAlign:"center",padding:"28px 16px"}}>
+            <div style={{fontSize:32,marginBottom:8}}>📭</div>
+            <div style={{fontWeight:700,marginBottom:4}}>Sem venda no período</div>
+            <div className="muted" style={{fontSize:12}}>Sem receita não há o que estimar — o consumo esperado é uma fatia dela.</div>
+          </div>
+          :!regua.receita
+          ?<div className="card" style={{background:"var(--warningBg)",border:"1px solid var(--warningText)33"}}>
+            <div style={{fontSize:12.5,color:"var(--warningText)",lineHeight:1.55}}>
+              ⚠️ <b>Sem histórico antes deste período</b>, então não há régua. O percentual de cada
+              categoria sai dos 180 dias anteriores ao recorte — e ele tem que ser <b>anterior</b>,
+              senão a compra exagerada entraria na própria referência e esconderia o alerta sobre
+              ela mesma. Escolha um período mais recente ou espere acumular histórico.
+            </div>
+          </div>
+          :<>
+            {r.linhas.map((l:any)=>{
+              const larg=Math.min(100,Math.round((Math.abs(l.dif||0)/maiorDif)*100));
+              return <div key={l.cat} className="card" style={{marginBottom:8}}>
+                <div style={{display:"flex",gap:10,alignItems:"baseline",flexWrap:"wrap",marginBottom:6}}>
+                  <b style={{fontSize:13.5}}>{catIcon(l.cat)} {l.cat}</b>
+                  {l.semReferencia
+                    ?<span className="tag" style={{background:"var(--warningBg)",color:"var(--warningText)",fontSize:10}}>sem referência</span>
+                    :<span className="muted" style={{fontSize:11}}>{l.pct.toFixed(1)}% da receita, histórico</span>}
+                  <span style={{marginLeft:"auto",fontSize:12.5,fontWeight:700,color:l.alerta?"var(--danger)":"var(--text)",...MONO_REL}}>
+                    {l.pctDif==null?"—":`${l.pctDif>0?"+":""}${l.pctDif.toFixed(1)}%`}
+                  </span>
+                </div>
+                <div style={{display:"flex",gap:14,fontSize:12,marginBottom:6,...MONO_REL}}>
+                  <span>comprei <b>{fmtMoney(l.comprado)}</b></span>
+                  <span className="muted">estimado {l.estimado==null?"—":fmtMoney(l.estimado)}</span>
+                </div>
+                {/* A barra é a diferença contra a MAIOR diferença do período —
+                    comparada com o total, toda categoria pequena viraria um fio
+                    e o descompasso, que é o que a tela responde, sumiria. */}
+                {l.dif!=null&&<div style={{height:8,borderRadius:4,background:"var(--bg4)",overflow:"hidden"}}>
+                  <div style={{height:"100%",width:`${larg}%`,background:l.alerta?"#9d174d":"#4d7c0f"}}/>
+                </div>}
+              </div>;
+            })}
+            <div className="card" style={{background:"var(--warningBg)",border:"1px solid var(--warningText)33",marginBottom:8}}>
+              <div style={{fontSize:11.5,color:"var(--warningText)",lineHeight:1.55}}>
+                ⚠️ <b>Isto não é medida de perda — é de descompasso.</b> Compra é irregular (a nota
+                chega num dia e abastece a semana) e venda é diária: num recorte curto a diferença é
+                calendário, não desperdício. A causa pode ser estoque, promoção do fornecedor ou
+                quebra — com Compras + Vendas não dá para saber qual, e a tela não escolhe.
+              </div>
+            </div>
+            <div className="card" style={{background:"var(--infoBg)",border:"1px solid var(--infoText)33"}}>
+              <div style={{fontSize:11.5,color:"var(--infoText)",lineHeight:1.55}}>
+                A régua de cada categoria sai do <b>próprio histórico</b> (% sobre a receita nos 180
+                dias <b>anteriores</b> ao recorte), não de um número chutado. Categoria sem histórico
+                aparece com o comprado e <b>sem referência</b> — alertar sobre um número que ninguém
+                definiu é pior que não alertar.
+              </div>
+            </div>
+          </>}
+      </div>;
+    })()}
 
     {subTab==="consumo"&&<ConsumoInsumos db={db} setSubTab={setSubTab}/>}
 

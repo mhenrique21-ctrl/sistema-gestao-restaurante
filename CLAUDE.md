@@ -46,6 +46,8 @@ src/relatorioPlataforma.js  o relatório do iFood/99Food vira Vendas (com testes
 src/relatorioPeriodo.js  o período, os canais e as formas de pagamento (com testes)
 src/grupoMarcas.js    várias marcas e embalagens viram um produto só (com testes)
 src/dre.js            as fatias da barra da DRE e o aviso do CMV vazio (com testes)
+src/qualidadeCompras.js  fornecedor duplicado, categoria obrigatória, preço por
+                      unidade e o descompasso compra × venda (com testes)
 src/qualidadeCompras.js  fornecedor, preço/unidade, encoding e conciliação (com testes)
 src/pdfTexto.js       tira as linhas de texto de um PDF (com testes)
 src/paletas.test.js   mede o contraste das paletas LENDO o App.tsx (trava regressão)
@@ -1043,7 +1045,86 @@ Números em fonte mono tabular (`MONO`), rótulos na fonte do app
 
 ### Compras
 Entradas · Cupom IA · NF-e · Histórico · Fornecedores · Insumos · Consumo · Budget ·
-Classificar · Reclassificar.
+**Sem categoria** · Reclassificar · **Duplicados** · **Auditoria de preço** ·
+**Comprei × consumo**.
+
+#### Qualidade do dado que entra — `src/qualidadeCompras.js` (com testes)
+
+Quatro coisas estragam o CMV e a ficha em silêncio, e as quatro nascem na
+ENTRADA, não no relatório onde aparecem. O motor é função pura e mora fora do
+`App.tsx` pela razão do `folhaRh.js`: erro de conciliação não aparece na tela
+onde foi cometido — aparece no CMV, meses depois, como "margem apertada".
+
+⚠️ **`garantirFornecedor` é o ponto ÚNICO por onde fornecedor entra.** Eram
+QUATRO cópias de `f.nome.toLowerCase()===nome.toLowerCase()`, uma em cada
+caminho de importação (manual, Cupom IA, XML, SEFAZ) — e a do Cupom IA nem
+gravava o CNPJ que a IA já tinha lido, então todo cupom do mesmo fornecedor
+entrava sem a chave que evitaria a duplicata seguinte. **CNPJ decide**; o nome
+só desempata quando falta CNPJ, e **CNPJ diferente nos dois lados BARRA o
+casamento por nome** — filial de rede tem nome quase igual.
+
+⚠️ **Mesclar fornecedor NÃO tem desfazer de um clique**, e é por construção:
+`compras[].fornecedor` e `materiasPrimas[].fornecedores` guardam o **NOME**, não
+o id, então mesclar **reescreve o histórico**. O diálogo diz quantas compras e
+quantos insumos mudam **antes** de confirmar; desfazer é separar de novo, à mão.
+⚠️ O **tombstone vai antes da gravação** (`_listaDeletados`): `fornecedores` é
+fundido por id (§3) e sem ele o poll devolve os três cadastros. ⚠️ E a conta é
+**refeita sobre o `d` do save** — a prévia do render serve só para o texto.
+
+⚠️ **A fila de "Sem categoria" ordena pelo DINHEIRO PARADO**, não pela contagem
+de compras. A tela antiga listava na ordem em que as compras apareceram e
+mostrava só "N compras": com centenas de nomes, a fila só encolhe se as
+primeiras linhas forem as que mais pesam no CMV. Uma linha por **nome** —
+classificar é uma decisão só.
+
+⚠️ **O lote só pega quem TEM palpite**, e a caixinha nem existe na linha sem
+palpite. `"Outros"` com origem `nenhuma` **não é palpite**: tratá-lo como um
+mandaria a fila inteira de volta para "Outros" num clique, que é exatamente como
+ela se formou. ⚠️ E o lote é **UMA** gravação: `setDbAndSave` liga o save direto
+por até 5s (§3), e dez chamadas em sequência é a janela da armadilha nº 0.
+
+⚠️ **A auditoria de preço compara com a MEDIANA, nunca a média.** O óleo de soja
+a R$ 769,00/L (100 ml digitado onde eram 900) é plausível no campo — R$ 76,90 —
+e só o preço por unidade denuncia. Com a média, a própria linha errada puxaria a
+referência para cima e passaria a **absolver** o erro seguinte; é a lição da taxa
+do plano do iFood (§6). g e ml viram kg e L **antes** de comparar, senão o alerta
+dispararia em todo item comprado em grama. ⚠️ **Sem referência não se bloqueia:**
+o primeiro cadastro de um insumo não tem com o que ser comparado, e travar ali
+ensinaria a ignorar o aviso. ⚠️ A tela **não corrige nada** — o lançamento se
+conserta no Histórico, onde a compra inteira está à vista.
+
+⚠️ **"Comprei × devia ter consumido" mede DESCOMPASSO, não perda**, e a tela diz
+isso. Compra é irregular (a nota chega num dia e abastece a semana) e venda é
+diária: num recorte curto a diferença é calendário. Não é o consumo teórico da
+ficha (`consumoTeorico.js`) — aquele precisa de ficha completa, e este painel
+existe porque ela não está pronta.
+
+⚠️ **A RÉGUA É ANTERIOR AO PERÍODO MEDIDO** (`janelaAnterior`, 180 dias até a
+véspera). Incluindo o período, a compra exagerada entraria no próprio percentual
+histórico e **suavizaria o alerta sobre ela mesma** — quanto mais fora da curva o
+mês, menos ele apareceria. Mesma armadilha da média contra a mediana: a
+referência não pode ser contaminada pelo caso que ela julga. Sem histórico
+anterior, a tela diz que **não há régua** em vez de estimar.
+
+⚠️ **Categoria sem percentual histórico aparece "sem referência"**, com o
+comprado e sem alerta: alertar sobre um número que ninguém definiu é pior que não
+alertar.
+
+⚠️ **O `valor` entra no módulo já NUMÉRICO.** O módulo usa `Number(v)` e compra
+antiga pode ter o valor em texto pt-BR ("1.234,56"): `Number` devolve NaN, o
+módulo lê zero e o lançamento sai da auditoria em silêncio — justamente o antigo,
+que é o que ninguém mais vai conferir.
+
+⚠️ **A auditoria é O(n²) sobre as compras** e roda num `useMemo` condicionado ao
+`subTab`: no corpo do render ela recalcularia a cada tecla digitada na aba.
+
+⚠️ **O item da Lista criado pela compra aparece nas DUAS empresas**, porque
+`produtosLista` é compartilhado de propósito (§1). Não é regressão desta leva; é
+como a Lista já funciona.
+
+`src/qualidadeComprasTela.test.js` lê o `App.tsx` e trava as quatro telas —
+tombstone antes da gravação, lote só com palpite, régua anterior, o `useMemo`.
+Nada disso o build ou o TypeScript acusam: é JSX válido fazendo a coisa errada.
 
 - Classificação automática: regras duras de limpeza > dicionário aprendido > palpite por
   palavra-chave > "Outros" (`classificarItem`)

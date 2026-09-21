@@ -486,3 +486,73 @@ export function criarItemDaLista(mp, uid, agora = new Date().toISOString()) {
     criadoPor: 'compra',
   };
 }
+
+// ── A FILA do que já entrou sem categoria ───────────────────────────────────
+// A tela de Classificar já existia e listava as pendências na ordem em que
+// apareceram nas compras. O que faltava era a ordem que diz POR ONDE COMEÇAR:
+// são centenas de nomes, e a fila só encolhe se as primeiras linhas forem as
+// que mais pesam no CMV.
+//
+// ⚠️ "PARADO" É O DINHEIRO, não a contagem. Um insumo comprado 18 vezes a
+// R$ 2,00 muda menos o CMV que um comprado uma vez a R$ 1.800,00 — e é a
+// contagem que a tela antiga sugeria, porque era o que ela mostrava.
+//
+// ⚠️ UMA LINHA POR NOME, nunca por compra: classificar é uma decisão só, e a
+// mesma decisão repetida dez vezes é o que fazia a fila parecer intransponível.
+//
+// ⚠️ `palpiteDe` entra POR PARÂMETRO. Quem traduz nome em categoria é o
+// `classificarItem` do `App.tsx` (regras de limpeza > dicionário > palavra-
+// chave), e duplicar essa regra aqui criaria duas respostas para a mesma
+// pergunta — a mesma razão pela qual `fold` também é parâmetro (§5).
+export function filaSemCategoria(compras, { dicionario, palpiteDe, fold, ordem = 'valor', semCategoria = 'Outros' } = {}) {
+  const dic = dicionario || {};
+  const porNome = new Map();
+  for (const c of compras || []) {
+    if (c?.categoria !== semCategoria) continue;
+    const chave = fold(normalizarTexto(c?.nomeProduto || ''));
+    // Já ensinado: sai da fila mesmo que o histórico ainda mostre "Outros" —
+    // é o mesmo recorte do `itensClassificacaoPendente`.
+    if (!chave || dic[chave]) continue;
+    const atual = porNome.get(chave) || { chave, nome: normalizarTexto(c.nomeProduto), compras: 0, valor: 0, ultima: '' };
+    atual.compras += 1;
+    atual.valor = r2(atual.valor + num(c.valor));
+    if (String(c.data || '') > atual.ultima) atual.ultima = String(c.data || '');
+    porNome.set(chave, atual);
+  }
+
+  const linhas = [...porNome.values()].map((l) => {
+    const p = palpiteDe ? palpiteDe(l.nome) : null;
+    // ⚠️ Palpite é só o que veio de REGRA ou PALAVRA-CHAVE. "Outros" com
+    // origem "nenhuma" NÃO é palpite: tratá-lo como um mandaria a fila inteira
+    // de volta para "Outros" num clique, que é exatamente como ela se formou.
+    const temPalpite = !!(p && p.categoria && p.categoria !== semCategoria && p.origem !== 'nenhuma');
+    return { ...l, palpite: temPalpite ? p.categoria : null, origemPalpite: temPalpite ? p.origem : null, temPalpite };
+  });
+
+  const porA_Z = (a, b) => a.nome.localeCompare(b.nome, 'pt-BR');
+  if (ordem === 'nome') linhas.sort(porA_Z);
+  else if (ordem === 'compras') linhas.sort((a, b) => b.compras - a.compras || porA_Z(a, b));
+  else linhas.sort((a, b) => b.valor - a.valor || porA_Z(a, b));
+
+  return {
+    linhas,
+    total: linhas.length,
+    totalParado: r2(linhas.reduce((s, l) => s + l.valor, 0)),
+    comPalpite: linhas.filter((l) => l.temPalpite).length,
+  };
+}
+
+// ── A janela da régua do painel de conciliação ──────────────────────────────
+// ⚠️ A RÉGUA NÃO PODE INCLUIR O PERÍODO QUE ESTÁ SENDO MEDIDO. Se incluísse, a
+// compra exagerada entraria no próprio percentual histórico e SUAVIZARIA o
+// alerta sobre ela mesma — quanto mais fora da curva o mês, menos ele
+// apareceria. É a mesma armadilha da média contra a mediana do preço: a
+// referência não pode ser contaminada pelo caso que ela julga.
+//
+// A janela termina na VÉSPERA do período e olha `dias` para trás.
+export function janelaAnterior(de, dias = 180) {
+  const t = Date.parse(`${de}T00:00:00Z`);
+  if (!Number.isFinite(t) || !(dias > 0)) return null;
+  const iso = (ms) => new Date(ms).toISOString().slice(0, 10);
+  return { de: iso(t - dias * 86400000), ate: iso(t - 86400000) };
+}

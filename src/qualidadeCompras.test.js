@@ -6,7 +6,7 @@ import {
   precoPorUnidadeBase, referenciaDePreco, conferirPreco, auditarPrecos,
   normalizarEncoding, duplicadasPorTexto,
   conciliacaoPorCategoria, pctHistoricoPorCategoria,
-  garantirFornecedor, criarItemDaLista,
+  garantirFornecedor, criarItemDaLista, filaSemCategoria, janelaAnterior,
 } from './qualidadeCompras.js';
 
 const fold = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -391,5 +391,86 @@ describe('o ponto único por onde fornecedor entra', () => {
     assert.deepEqual(it.mpVinculados, ['mp1']);
     assert.ok(it.atualizadoEm);
     assert.equal(it.criadoPor, 'compra');
+  });
+});
+
+describe('a fila do que entrou sem categoria', () => {
+  const COMPRAS = [
+    { nomeProduto: 'ÓLEO DE SOJA 900ML', categoria: 'Outros', valor: 1000, data: '2026-09-01' },
+    { nomeProduto: 'oleo de soja 900ml', categoria: 'Outros', valor: 842, data: '2026-09-10' },
+    { nomeProduto: 'MARMITA HAMBURGUEIRA', categoria: 'Outros', valor: 640, data: '2026-09-05' },
+    { nomeProduto: 'PEITO DE PERU', categoria: 'Outros', valor: 963.4, data: '2026-09-03' },
+    { nomeProduto: 'QUEIJO MUSSARELA', categoria: 'Laticínios', valor: 5000, data: '2026-09-04' },
+    { nomeProduto: 'ACUCAR', categoria: 'Outros', valor: 9999, data: '2026-09-06' },
+  ];
+  // O palpite do App: palavra-chave, e "sem palpite" volta com origem "nenhuma".
+  const palpiteDe = (nome) => {
+    const n = fold(nome);
+    if (n.includes('oleo') || n.includes('acucar')) return { categoria: 'Mercearia/Secos', origem: 'palpite' };
+    if (n.includes('peru')) return { categoria: 'Proteínas', origem: 'palpite' };
+    return { categoria: 'Outros', origem: 'nenhuma' };
+  };
+  // "ACUCAR" já foi ensinado: some da fila mesmo tendo compra em "Outros".
+  const dicionario = { [fold('ACUCAR')]: { categoria: 'Mercearia/Secos' } };
+
+  test('UMA linha por nome, com o dinheiro somado', () => {
+    const r = filaSemCategoria(COMPRAS, { dicionario, palpiteDe, fold });
+    const oleo = r.linhas.find((l) => l.nome.includes('SOJA'));
+    assert.equal(oleo.compras, 2);
+    assert.equal(oleo.valor, 1842);
+    assert.equal(oleo.ultima, '2026-09-10');
+  });
+
+  test('a ordem padrão é o DINHEIRO PARADO, não a contagem', () => {
+    // ⚠️ É a ordem que diz por onde começar: a fila só encolhe se as primeiras
+    // linhas forem as que mais pesam no CMV.
+    const r = filaSemCategoria(COMPRAS, { dicionario, palpiteDe, fold });
+    assert.deepEqual(r.linhas.map((l) => l.nome), ['ÓLEO DE SOJA 900ML', 'PEITO DE PERU', 'MARMITA HAMBURGUEIRA']);
+    assert.equal(r.totalParado, 3445.4);
+    assert.equal(r.total, 3);
+  });
+
+  test('quem já foi ensinado sai da fila, e quem tem categoria nunca entrou', () => {
+    const r = filaSemCategoria(COMPRAS, { dicionario, palpiteDe, fold });
+    assert.ok(!r.linhas.some((l) => fold(l.nome).includes('acucar')));
+    assert.ok(!r.linhas.some((l) => fold(l.nome).includes('mussarela')));
+  });
+
+  test('"Outros" com origem "nenhuma" NÃO é palpite', () => {
+    // ⚠️ Tratá-lo como palpite mandaria a fila inteira de volta para "Outros"
+    // num clique — que é exatamente como ela se formou.
+    const r = filaSemCategoria(COMPRAS, { dicionario, palpiteDe, fold });
+    const marmita = r.linhas.find((l) => l.nome.includes('MARMITA'));
+    assert.equal(marmita.temPalpite, false);
+    assert.equal(marmita.palpite, null);
+    assert.equal(r.comPalpite, 2);
+  });
+
+  test('as outras duas ordens', () => {
+    const porNome = filaSemCategoria(COMPRAS, { dicionario, palpiteDe, fold, ordem: 'nome' });
+    assert.deepEqual(porNome.linhas.map((l) => l.nome), ['MARMITA HAMBURGUEIRA', 'ÓLEO DE SOJA 900ML', 'PEITO DE PERU']);
+    const porCompras = filaSemCategoria(COMPRAS, { dicionario, palpiteDe, fold, ordem: 'compras' });
+    assert.equal(porCompras.linhas[0].nome, 'ÓLEO DE SOJA 900ML');
+  });
+
+  test('sem compra nenhuma devolve fila vazia, não null', () => {
+    const r = filaSemCategoria([], { fold, palpiteDe });
+    assert.deepEqual(r.linhas, []);
+    assert.equal(r.totalParado, 0);
+  });
+});
+
+describe('a janela da régua', () => {
+  test('termina na VÉSPERA do período', () => {
+    // ⚠️ Incluindo o período, a compra exagerada entraria no próprio percentual
+    // histórico e suavizaria o alerta sobre ela mesma.
+    assert.deepEqual(janelaAnterior('2026-09-01', 180), { de: '2026-03-05', ate: '2026-08-31' });
+  });
+  test('atravessa o ano sem inventar dia', () => {
+    assert.deepEqual(janelaAnterior('2026-01-01', 30), { de: '2025-12-02', ate: '2025-12-31' });
+  });
+  test('data inválida devolve null', () => {
+    assert.equal(janelaAnterior('', 180), null);
+    assert.equal(janelaAnterior('2026-09-01', 0), null);
   });
 });
