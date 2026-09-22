@@ -37,6 +37,7 @@ auth.js               sessão assinada, login no servidor, a porta dos dados (co
 mergeDocument.js      fusão de documento no servidor (com testes)
 mergeListaCompras.js  fusão específica da Lista de Compras (com testes)
 iaGemini.js           tradução Anthropic ↔ Gemini para o Cupom IA (com testes)
+registroPdv.js        com que id a ponte de PDV grava o dia (com testes)
 src/consumoTeorico.js consumo teórico de insumos a partir das vendas (com testes)
 src/tipoInsumo.js     o que o item é e o que a venda faz com ele (com testes)
 src/movimentoEstoque.js  entrada/saída/ajuste/produção manual (com testes)
@@ -154,6 +155,24 @@ Exclusão usa o tombstone genérico `_listaDeletados` (itens com `id`) ou uma li
 
 Ao recriar algo que foi excluído, **limpe o tombstone** — senão a fusão apaga de novo.
 
+⚠️ **Quem recria é um AGENTE, não uma tela — e aí não há tombstone a limpar.**
+A ponte de PDV grava o dia com id **determinístico** (`pdv-ecletica-confraria-<data>`),
+que é o que torna reenviar idempotente. A lixeira de Vendas → Histórico apaga
+qualquer linha, a do PDV inclusive, e o id vai para o tombstone — permanente,
+unido no servidor e reenviado no POST de todo aparelho. A partir daí o endpoint
+regravava o MESMO id morto, respondia **200**, e a fusão do POST seguinte
+apagava a linha outra vez. Todo ciclo, para sempre.
+
+O sintoma é **"as vendas do Eclética não sobem e o agente está funcionando
+normalmente"** — e ele é literal: o agente mostra ✅, o log do servidor diz
+"criado", e o dia fica vazio no app. Como o id é por DIA, quebra só os dias cuja
+linha alguém apagou uma vez: *às vezes* não sobe. Ver `registroPdv.js`.
+
+⚠️ **A saída não foi limpar o tombstone**, que desfaria a exclusão e deixaria os
+dois lados brigando pela mesma linha a cada ciclo. O id morto continua morto e o
+fato novo entra com **id novo**, cunhado uma vez só — cunhar a cada envio criaria
+uma linha por ciclo, e o faturamento do dia junto.
+
 ### A armadilha do CARIMBO que falta (`produtosLista`)
 
 `mergeArrayById(servidor, local)` desempata por `updatedAt`/`atualizadoEm`. Quando **só
@@ -243,6 +262,21 @@ o que importa saber daqui:
   do fiado no `delivery-backend`
 - itens do dia alimentam Vendas → Relatório (Produtos, ABC, Margem), que antes
   liam só `recibosVenda` e nunca tinham visto a venda do balcão
+
+⚠️ **A linha do PDV é ESPELHO, não lançamento.** Apagá-la em Vendas → Histórico
+não apaga venda nenhuma no caixa, e a ponte manda o dia de novo no ciclo
+seguinte. O diálogo de exclusão diz isso antes; corrigir o valor do dia se faz
+no PDV. (Durante meses ela não voltava, e era pior — ver §3, o tombstone que
+engolia o envio.)
+
+⚠️ **"Nada mudou" é memória do AGENTE, não do servidor**, e foi isso que fez o
+problema durar. `ultimoEnvio` guarda `total|vendas` para não repetir POST
+idêntico a cada 2 min; se a linha sumir no servidor, o dia nunca mais é enviado
+— o movimento acabou, a assinatura não muda mais, e o ciclo pula para sempre
+imprimindo "· sem venda nova (total R$ …)", que tem exatamente a cara de estar
+tudo certo. Agora o pulo tem **prazo**: passados 30 min (`ECLETICA_REVALIDAR_MIN`)
+o dia vai de novo mesmo sem mudança, e o log marca **(reconferência)**. É o que
+faz um dia perdido se curar sozinho em vez de depender de alguém desconfiar.
 
 ### Ponte de impressão 99Food e iFood (`impressora-agent/`)
 

@@ -390,7 +390,7 @@ function apurarDia(dataAlvo, diag) {
   return porEmpresa;
 }
 
-async function enviar(empresa, data, acc) {
+async function enviar(empresa, data, acc, reconferencia = false) {
   const r2 = (n) => Math.round(n * 100) / 100;
   const body = {
     empresa, data,
@@ -413,7 +413,8 @@ async function enviar(empresa, data, acc) {
   });
   if (!r.ok) throw new Error(`${r.status} ${await r.text().catch(() => '')}`);
   const detalhe = FORMAS.filter((f) => body.formas[f] > 0).map((f) => `${f} ${body.formas[f].toFixed(2)}`).join(' | ');
-  log(`✅ ${empresa} ${data}: ${acc.vendas} venda(s), ${body.itens.length} produto(s), total R$ ${body.total.toFixed(2)}  →  ${detalhe}`);
+  log(`✅ ${empresa} ${data}: ${acc.vendas} venda(s), ${body.itens.length} produto(s), total R$ ${body.total.toFixed(2)}  →  ${detalhe}`
+    + (reconferencia ? '   (reconferência)' : ''));
 }
 
 // Quais dias reenviar a cada ciclo. O agente só mandava o dia corrente e nunca
@@ -439,10 +440,32 @@ function diasParaEnviar(ref = new Date()) {
   return dias;
 }
 
-// Último valor enviado por empresa+data, pra não repetir POST idêntico a cada 2
+// Último envio por empresa+data, pra não repetir POST idêntico a cada 2
 // minutos. É memória de processo: reiniciar o agente reenvia tudo uma vez, o
 // que é inofensivo (o registro é substituído) e ainda serve de reconciliação.
 const ultimoEnvio = new Map();
+
+// ⚠️ "NADA MUDOU" É MEMÓRIA DO AGENTE, NÃO DO SERVIDOR — e foi isso que fez o
+// problema durar.
+//
+// Se a linha do dia sumir lá (era o que acontecia: o id estava no tombstone e a
+// fusão descartava todo envio — ver registroPdv.js), o agente nunca mais manda
+// aquele dia: o movimento acabou, o total não muda mais, a assinatura continua
+// igual e o ciclo pula para sempre. O Gestão fica sem o dia e a janela do
+// agente mostra "· sem venda nova (total R$ …)", que é exatamente a cara de
+// "está funcionando normalmente".
+//
+// Por isso o pulo tem PRAZO: passada a janela, o dia vai de novo mesmo sem
+// mudança nenhuma. Custa um POST por dia da janela a cada meia hora, e é o que
+// faz o sistema se curar sozinho em vez de depender de alguém desconfiar.
+const REVALIDAR_MS = Math.min(Math.max(parseInt(process.env.ECLETICA_REVALIDAR_MIN, 10) || 30, 5), 720) * 60000;
+
+export function precisaEnviar(anterior, assinatura, agora, janelaMs = REVALIDAR_MS) {
+  if (!anterior) return { enviar: true, reconferencia: false };
+  if (anterior.assinatura !== assinatura) return { enviar: true, reconferencia: false };
+  if (agora - anterior.quando >= janelaMs) return { enviar: true, reconferencia: true };
+  return { enviar: false, reconferencia: false };
+}
 
 async function ciclo() {
   const dias = diasParaEnviar();
@@ -468,10 +491,12 @@ async function ciclo() {
         const chave = `${empresa}|${data}`;
         const assinatura = `${acc.total.toFixed(2)}|${acc.vendas}`;
         if (data === hoje) totalHoje = acc.total;
-        if (ultimoEnvio.get(chave) === assinatura) continue;   // nada mudou
+        const agora = Date.now();
+        const decisao = precisaEnviar(ultimoEnvio.get(chave), assinatura, agora);
+        if (!decisao.enviar) continue;
         try {
-          await enviar(empresa, data, acc);
-          ultimoEnvio.set(chave, assinatura);
+          await enviar(empresa, data, acc, decisao.reconferencia);
+          ultimoEnvio.set(chave, { assinatura, quando: agora });
           mexeu = true;
         } catch (e) { log(`❌ falha ao enviar ${empresa} ${data}: ${e.message}`); }
       }

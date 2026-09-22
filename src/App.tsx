@@ -4241,7 +4241,22 @@ function Vendas({db,setDb,setDbAndSave,state,aj,login,empresa}:{db:any,setDb:any
   const edit=(v)=>{setEditId(v.id);setForm(formDeRegistro(v));setTimeout(()=>formRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),100);};
   const del=(id)=>{
     const alvo=(db.vendas||[]).find((v:any)=>v.id===id);
-    if(!confirm(`Excluir o lançamento${alvo?` de ${fmtDate(alvo.data)}`:""}?`))return;
+    // ⚠️ A LINHA DO PDV É ESPELHO, NÃO LANÇAMENTO. Apagá-la aqui não apaga
+    // venda nenhuma no caixa — e a ponte manda o dia de novo no ciclo
+    // seguinte, então ela volta. Dizer isso ANTES é a diferença entre "o
+    // sistema tem um bug" e "isto se resolve no PDV".
+    //
+    // (Durante meses ela NÃO voltava, e era pior: o tombstone engolia todo
+    // envio daquele dia, calado, com o agente mostrando ✅. Ver registroPdv.js
+    // no servidor.)
+    const origem=alvo?origemVenda(alvo):"manual";
+    const automatica=origem!=="manual"&&origem!=="recibo_venda"&&origem!=="recibo";
+    const pergunta=automatica
+      ?`Excluir a linha ${rotuloOrigem(origem)}${alvo?` de ${fmtDate(alvo.data)}`:""}?\n\n`
+        +"Ela é o espelho do que o caixa vendeu: some agora e VOLTA no próximo envio da ponte.\n\n"
+        +"Para mudar o valor do dia, corrija no PDV — aqui não há o que apagar."
+      :`Excluir o lançamento${alvo?` de ${fmtDate(alvo.data)}`:""}?`;
+    if(!confirm(pergunta))return;
     _listaDeletados.add(id);
     setDbAndSave(d=>({...d,vendas:(d.vendas||[]).filter(v=>v.id!==id)}));
     if(editId===id){setEditId(null);setForm(emptyForm());}

@@ -10,6 +10,7 @@ import webPush from 'web-push';
 import { SignedXml } from 'xml-crypto';
 import { DOMParser } from '@xmldom/xmldom';
 import { mergeDocument } from './mergeDocument.js';
+import { idDoRegistroPdv } from './registroPdv.js';
 import { paraGemini, respostaDoGemini, erroDoGemini, valeTentarReserva } from './iaGemini.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -2121,8 +2122,27 @@ REGRAS:
         // origem:"pdv" separa o que veio daqui do que foi digitado à mão — uma
         // venda lançada manualmente na tela nunca é sobrescrita por este envio.
         const i = vendas.findIndex(v => v && v.data === data && v.origem === origem);
+
+        // ⚠️ O TOMBSTONE NÃO PODE ENGOLIR O QUE O CAIXA ACABOU DE MANDAR.
+        //
+        // O id do dia é determinístico, e é isso que torna reenviar idempotente.
+        // Só que a lixeira de Vendas → Histórico apaga QUALQUER linha, a do PDV
+        // inclusive, e a exclusão grava o id em `deletedIds` — permanente, unido
+        // no servidor e reenviado no POST de todo aparelho. A partir daí este
+        // endpoint regravava o MESMO id morto, respondia 200, e a fusão do POST
+        // seguinte apagava a linha de novo. Todo dia, para sempre, com o agente
+        // na loja mostrando ✅. Ver registroPdv.js (com testes).
+        const deletados = new Set(Array.isArray(doc.deletedIds) ? doc.deletedIds : []);
+        const marca = Date.now().toString(36);
+        const idVenda = idDoRegistroPdv({
+          prefixo: origem.replace('_', '-'), empresa: emp, data,
+          idExistente: i >= 0 ? vendas[i].id : null, deletados, marca,
+        });
+        if (idVenda.renasceu) {
+          console.warn(`[venda-pdv] ${emp} ${data} [${origem}]: a linha tinha sido apagada no app e o envio seria descartado pela fusão — entrou com id novo (${idVenda.id})`);
+        }
         const reg = {
-          id: i >= 0 ? vendas[i].id : `${origem.replace('_', '-')}-${emp.toLowerCase()}-${data}`,
+          id: idVenda.id,
           data,
           total: num(total),
           maquininha: num(maquininha),
@@ -2168,8 +2188,13 @@ REGRAS:
           if (limpos.length) {
             const lista = Array.isArray(doc.itensVendidos) ? doc.itensVendidos : [];
             const j = lista.findIndex(x => x && x.data === data && x.origem === origem);
+            // Mesma regra da linha de vendas: id morto não pode ser reusado.
+            const idItens = idDoRegistroPdv({
+              prefixo: `itens-${origem.replace('_', '-')}`, empresa: emp, data,
+              idExistente: j >= 0 ? lista[j].id : null, deletados, marca,
+            });
             const regItens = {
-              id: j >= 0 ? lista[j].id : `itens-${origem.replace('_', '-')}-${emp.toLowerCase()}-${data}`,
+              id: idItens.id,
               data, origem, itens: limpos,
               criadoEm: j >= 0 ? (lista[j].criadoEm || agora) : agora,
               atualizadoEm: agora,

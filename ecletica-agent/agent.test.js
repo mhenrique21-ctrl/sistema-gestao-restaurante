@@ -483,3 +483,34 @@ test('backfill de um período', async (t) => {
     if (envXml === undefined) delete process.env.ECLETICA_XML; else process.env.ECLETICA_XML = envXml;
   }
 });
+
+// ── Reenvio: "nada mudou" é memória do AGENTE, não do servidor ─────────────
+test('o dia volta a ser enviado depois do prazo, mesmo sem venda nova', async (t) => {
+  const { precisaEnviar } = await import('./agent.js');
+  const JANELA = 30 * 60000;
+  const t0 = 1_700_000_000_000;
+
+  await t.test('dia nunca enviado vai', () => {
+    assert.deepEqual(precisaEnviar(undefined, '100.00|3', t0, JANELA), { enviar: true, reconferencia: false });
+  });
+
+  await t.test('venda nova muda a assinatura e vai na hora', () => {
+    const antes = { assinatura: '100.00|3', quando: t0 };
+    assert.deepEqual(precisaEnviar(antes, '140.00|4', t0 + 1000, JANELA), { enviar: true, reconferencia: false });
+  });
+
+  await t.test('sem mudança e dentro do prazo, não repete o POST', () => {
+    const antes = { assinatura: '100.00|3', quando: t0 };
+    assert.equal(precisaEnviar(antes, '100.00|3', t0 + 2 * 60000, JANELA).enviar, false);
+  });
+
+  await t.test('⚠️ passado o prazo vai de novo — é o que cura o dia perdido', () => {
+    // Sem isto, um dia cuja linha sumiu no servidor NUNCA mais era enviado: o
+    // movimento acabou, o total não muda mais, e o agente pula para sempre
+    // mostrando "sem venda nova". O Gestão ficava sem o dia, calado.
+    const antes = { assinatura: '100.00|3', quando: t0 };
+    const d = precisaEnviar(antes, '100.00|3', t0 + JANELA, JANELA);
+    assert.equal(d.enviar, true);
+    assert.equal(d.reconferencia, true, 'o log precisa dizer que foi reconferência, não venda nova');
+  });
+});
