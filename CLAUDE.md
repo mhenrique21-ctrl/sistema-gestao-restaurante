@@ -2749,7 +2749,8 @@ por `iaRequest()` em `new_server.js`, que fala com UM provedor escolhido no
 | `GEMINI_API_KEY` | chave do Google AI Studio (aistudio.google.com). Tem faixa **gratuita** com limite diário de requisições |
 | `ANTHROPIC_API_KEY` | chave paga da Anthropic |
 | `IA_PROVIDER` | `gemini` ou `anthropic`. **Sem ela, entra o Gemini se `GEMINI_API_KEY` existir, senão a Anthropic** |
-| `GEMINI_MODEL` | padrão `gemini-3.8-flash` |
+| `GEMINI_MODELOS` | a FILA inteira, por vírgula. Fixa exatamente o que usar e ignora as duas de baixo |
+| `GEMINI_MODEL` | o primeiro da fila. Padrão `gemini-3.8-flash` |
 | `GEMINI_MODEL_RESERVA` | padrão `gemini-3.5-flash-lite`. Entra na hora quando o principal falha por sobrecarga (503), limite por minuto ou cota do dia — que é **por modelo** |
 | `IA_MODEL` | padrão `claude-haiku-4-5` (~1/3 do preço do Sonnet, lê cupom igual) |
 
@@ -2791,6 +2792,45 @@ graça (só se paga o que sai).
 o cupom que estourava o limite no modelo principal nunca chegava ao reserva —
 que pensa menos e dá conta. Recusa de CONTEÚDO (SAFETY/RECITATION) continua
 definitiva: trocar de modelo não muda o que o filtro achou.
+
+#### A FILA de modelos — dois não bastam
+
+⚠️ **Sobrecarga é DO MODELO, não da conta**, e na faixa gratuita ela é rotina.
+Em **22/09/2026** o `/api/ia-status` pegou o `gemini-3.8-flash` com
+`503 "This model is currently experiencing high demand"` numa terça de manhã, e
+o leitor de cupom simplesmente parou. Com a fila de **dois**, basta os dois
+congestionarem junto para não haver leitura nenhuma.
+
+Hoje são **cinco**, em ordem de qualidade (`MODELOS_PADRAO` em `iaGemini.js`):
+`3.8-flash → 3.7-flash → 3.6-flash → 3.5-flash → 3.5-flash-lite`.
+
+⚠️ **A ordem é por QUALIDADE, não por disponibilidade, de propósito.** Cupom
+lido ERRADO é pior que cupom não lido: o não lido a pessoa vê na hora; o errado
+vira compra com valor plausível e só aparece no CMV do mês. Só se desce quando o
+de cima recusa, e o **Lite fica por último** — é o mais fraco de olhar foto ruim.
+
+`GEMINI_MODEL`/`GEMINI_MODEL_RESERVA` continuam valendo e vão na **frente** da
+fila (a escolha de quem configurou vem primeiro; o padrão entra atrás como rede,
+sem repetir ninguém). `GEMINI_MODELOS` fixa a fila inteira.
+
+⚠️ **Chave errada NÃO desce a fila** — `valeTentarReserva` para em
+`authentication_error` e `invalid_request_error`. Martelar cinco modelos com uma
+chave inválida só multiplica o tempo até a tela dizer o óbvio.
+
+#### O `/api/ia-status` mentia sobre o modelo
+
+⚠️ Ele relatava sempre `IA_MODEL_ATIVO`, o PRIMEIRO da fila — então o erro do
+ÚLTIMO modelo aparecia com o nome do primeiro, e não dava para saber se a fila
+inteira caiu ou se nem foi tentada. Agora vem o modelo que **realmente**
+respondeu mais `tentados[]`, a fila percorrida:
+
+```json
+{"configured":true,"status":"error","provider":"gemini","model":"gemini-3.5-flash-lite",
+ "tentados":["gemini-3.8-flash","gemini-3.5-flash-lite"],"httpCode":503,"error":"..."}
+```
+
+É a primeira parada de quem investiga "a IA parou": não pede sessão, faz uma
+chamada real e devolve o erro cru do provedor.
 
 ⚠️ Na faixa gratuita o modelo mais novo devolve **503 "overloaded"** em horário
 de pico — no primeiro cupom real, o `gemini-3.8-flash` recusou 9 tentativas

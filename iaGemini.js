@@ -41,6 +41,39 @@ export const valeTentarReserva = (type) => !['authentication_error', 'invalid_re
 // fora do padrão não arrisca — segue sem o campo, como era antes.
 export const NIVEL_RACIOCINIO = 'LOW';
 
+// A FILA DE MODELOS, em ordem de qualidade decrescente.
+//
+// ⚠️ DOIS MODELOS NÃO BASTAM. Na faixa gratuita o Google devolve 503 "high
+// demand" no modelo da vez, e em 22/09/2026 o `/api/ia-status` pegou o
+// `gemini-3.8-flash` assim em plena terça de manhã — o leitor de cupom ficou
+// sem ler. Com a fila de dois, bastam os dois congestionarem junto para não
+// haver leitura nenhuma; com cinco, seria preciso a família inteira cair.
+//
+// ⚠️ A ORDEM É POR QUALIDADE, e não por disponibilidade, de propósito: cupom
+// lido ERRADO é pior que cupom não lido. O não lido a pessoa vê na hora; o
+// errado vira compra com valor plausível e só aparece no CMV do mês. Então só
+// se desce na fila quando o de cima recusou — e o Lite, que é o mais fraco de
+// olhar foto ruim, fica por último.
+export const MODELOS_PADRAO = [
+  'gemini-3.8-flash',
+  'gemini-3.7-flash',
+  'gemini-3.6-flash',
+  'gemini-3.5-flash',
+  'gemini-3.5-flash-lite',
+];
+
+// Monta a fila a partir do .env. `GEMINI_MODELOS` (lista por vírgula) manda
+// sozinha, para quem quiser fixar exatamente o que usar. Senão,
+// `GEMINI_MODEL`/`GEMINI_MODEL_RESERVA` continuam valendo como PRIMEIROS da
+// fila — a escolha de quem configurou vem na frente — e o padrão entra atrás
+// como rede, sem repetir ninguém.
+export function filaDeModelos({ lista, principal, reserva, padrao = MODELOS_PADRAO } = {}) {
+  const limpar = (v) => String(v || '').split(',').map((x) => x.trim()).filter(Boolean);
+  const fixa = limpar(lista);
+  if (fixa.length) return [...new Set(fixa)];
+  return [...new Set([...limpar(principal), ...limpar(reserva), ...padrao])];
+}
+
 export function aceitaNivelDeRaciocinio(model) {
   const m = /^gemini-(\d+)/.exec(String(model || '').trim().toLowerCase());
   return !!m && Number(m[1]) >= 3;

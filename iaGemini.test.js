@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { paraGemini, respostaDoGemini, erroDoGemini, valeTentarReserva, aceitaNivelDeRaciocinio, MSG_COTA_DIARIA_GEMINI, MSG_LIMITE_MINUTO_GEMINI } from './iaGemini.js';
+import { paraGemini, respostaDoGemini, erroDoGemini, valeTentarReserva, aceitaNivelDeRaciocinio, filaDeModelos, MODELOS_PADRAO, MSG_COTA_DIARIA_GEMINI, MSG_LIMITE_MINUTO_GEMINI } from './iaGemini.js';
 
 // Análise do código sob teste (iaGemini.js):
 // - Input: o pedido que o app já monta no formato da Anthropic (system,
@@ -217,4 +217,46 @@ test('resposta de verdade continua passando inteira', () => {
   assert.equal(r.error, undefined);
   assert.equal(r.content[0].text, '{"itens":[]}');
   assert.equal(r.stop_reason, 'end_turn');
+});
+
+// ── A fila de modelos ──────────────────────────────────────────────────────
+// Dois modelos não bastam: em 22/09/2026 o /api/ia-status pegou o
+// gemini-3.8-flash com 503 "high demand" numa terça de manhã e o leitor de
+// cupom ficou sem ler. Com fila de dois, basta os dois congestionarem junto.
+
+test('a fila padrão desce por QUALIDADE, com o Lite por último', () => {
+  // Cupom lido errado é pior que cupom não lido: o errado vira compra com
+  // valor plausível e só aparece no CMV do mês. Por isso só se desce quando o
+  // de cima recusa, e o Lite — o mais fraco de olhar foto ruim — fica no fim.
+  assert.equal(MODELOS_PADRAO[0], 'gemini-3.8-flash');
+  assert.equal(MODELOS_PADRAO[MODELOS_PADRAO.length - 1], 'gemini-3.5-flash-lite');
+  assert.ok(MODELOS_PADRAO.length >= 4, 'fila curta demais volta a ficar sem saída');
+  assert.deepEqual(filaDeModelos({}), MODELOS_PADRAO);
+});
+
+test('GEMINI_MODEL e GEMINI_MODEL_RESERVA seguem valendo, e vêm na FRENTE', () => {
+  // Quem configurou escolheu; o padrão entra atrás como rede, sem repetir.
+  const f = filaDeModelos({ principal: 'gemini-3.8-flash', reserva: 'gemini-3.5-flash-lite' });
+  assert.equal(f[0], 'gemini-3.8-flash');
+  assert.equal(f[1], 'gemini-3.5-flash-lite');
+  assert.equal(new Set(f).size, f.length, 'não pode repetir modelo na fila');
+  assert.ok(f.length > 2, 'a rede de trás precisa entrar');
+});
+
+test('GEMINI_MODELOS fixa a fila inteira, para quem quer travar', () => {
+  assert.deepEqual(filaDeModelos({ lista: 'gemini-3.5-flash , gemini-3.6-flash', principal: 'gemini-3.8-flash' }),
+    ['gemini-3.5-flash', 'gemini-3.6-flash']);
+});
+
+test('espaço, vírgula sobrando e vazio não viram modelo fantasma', () => {
+  assert.deepEqual(filaDeModelos({ lista: ' , , ' }), MODELOS_PADRAO, 'lista só de lixo cai no padrão');
+  assert.deepEqual(filaDeModelos({ lista: 'a,,b, ' }), ['a', 'b']);
+});
+
+test('⚠️ o 503 real de 22/09/2026 desce a fila em vez de parar', () => {
+  // Texto exato que o /api/ia-status trouxe do gemini-3.8-flash naquele dia.
+  const e = erroDoGemini(503, { error: { code: 503, status: 'UNAVAILABLE',
+    message: 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.' } });
+  assert.equal(e.error.type, 'overloaded_error');
+  assert.equal(valeTentarReserva(e.error.type), true, 'sobrecarga é DO MODELO: o seguinte da fila pode estar livre');
 });

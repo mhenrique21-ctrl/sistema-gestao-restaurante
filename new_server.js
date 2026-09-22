@@ -11,7 +11,7 @@ import { SignedXml } from 'xml-crypto';
 import { DOMParser } from '@xmldom/xmldom';
 import { mergeDocument } from './mergeDocument.js';
 import { idDoRegistroPdv } from './registroPdv.js';
-import { paraGemini, respostaDoGemini, erroDoGemini, valeTentarReserva } from './iaGemini.js';
+import { paraGemini, respostaDoGemini, erroDoGemini, valeTentarReserva, filaDeModelos } from './iaGemini.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -58,15 +58,19 @@ const API_KEY = process.env.ANTHROPIC_API_KEY || '';
 // Anthropic — colocar a chave do Gemini no .env já troca; tirar, volta.
 // Tudo é configurável pelo .env da VPS sem mexer no código.
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
-// Na faixa gratuita o modelo mais novo vive devolvendo 503 "overloaded" em
-// horário de pico, e a cota diária é POR modelo. Quando o principal falha, o
-// servidor cai na hora para este — mais leve, com muito mais capacidade livre.
-const GEMINI_MODEL_RESERVA = process.env.GEMINI_MODEL_RESERVA || 'gemini-3.5-flash-lite';
+// Na faixa gratuita o modelo da vez vive devolvendo 503 "high demand", e a cota
+// diária é POR modelo. Quando um falha, o servidor desce a fila na hora. Ver
+// filaDeModelos() em iaGemini.js: GEMINI_MODELOS fixa a fila inteira;
+// GEMINI_MODEL/GEMINI_MODEL_RESERVA continuam valendo e vão na frente dela.
+const GEMINI_MODELOS = filaDeModelos({
+  lista: process.env.GEMINI_MODELOS,
+  principal: process.env.GEMINI_MODEL,
+  reserva: process.env.GEMINI_MODEL_RESERVA,
+});
 const IA_MODEL = process.env.IA_MODEL || 'claude-haiku-4-5'; // Haiku 4.5 custa ~1/3 do Sonnet e dá conta do cupom
 const IA_PROVIDER = (process.env.IA_PROVIDER || (GEMINI_API_KEY ? 'gemini' : 'anthropic')).trim().toLowerCase() === 'gemini' ? 'gemini' : 'anthropic';
 const IA_KEY = IA_PROVIDER === 'gemini' ? GEMINI_API_KEY : API_KEY;
-const IA_MODEL_ATIVO = IA_PROVIDER === 'gemini' ? GEMINI_MODEL : IA_MODEL;
+const IA_MODEL_ATIVO = IA_PROVIDER === 'gemini' ? GEMINI_MODELOS[0] : IA_MODEL;
 const IA_ENV_VAR = IA_PROVIDER === 'gemini' ? 'GEMINI_API_KEY' : 'ANTHROPIC_API_KEY';
 const DIST = path.join(__dirname, 'dist');
 const LOGOS_DIR = path.join(__dirname, 'logos');
@@ -1099,10 +1103,12 @@ const postJson = (options, data, timeoutMs) => new Promise((resolve, reject) => 
 
 async function iaRequest({ system, messages, max_tokens, json = false }, timeoutMs) {
   if (IA_PROVIDER === 'gemini') {
-    const modelos = [...new Set([GEMINI_MODEL, GEMINI_MODEL_RESERVA].filter(Boolean))];
+    const modelos = GEMINI_MODELOS;
+    const tentados = [];
     let ultimo = null;
     for (let i = 0; i < modelos.length; i++) {
       const modelo = modelos[i];
+      tentados.push(modelo);
       // O corpo é montado POR MODELO: o nível de raciocínio só vale para
       // Gemini 3+ e mandá-lo para um anterior dá erro.
       const data = JSON.stringify(paraGemini({ system, messages, max_tokens, json, model: modelo }));
@@ -1117,28 +1123,29 @@ async function iaRequest({ system, messages, max_tokens, json = false }, timeout
         const trad = respostaDoGemini(j, modelo);
         if (!trad.error) {
           if (i > 0) console.log(`[IA] respondido pelo modelo reserva ${modelo}`);
-          return { status: 200, body: JSON.stringify(trad) };
+          return { status: 200, body: JSON.stringify(trad), modelo, tentados };
         }
         // ⚠️ 200 SEM TEXTO TAMBÉM VALE TROCAR DE MODELO. Antes devolvia 400 na
         // hora: o cupom que estourava o limite raciocinando no modelo
         // principal nunca chegava ao reserva, que pensa menos e daria conta.
-        ultimo = { status: 400, body: JSON.stringify(trad) };
+        ultimo = { status: 400, body: JSON.stringify(trad), modelo, tentados };
         if (!valeTentarReserva(trad.error.type)) break;
         if (modelos[i + 1]) console.log(`[IA] ${modelo} respondeu sem texto (${trad.error.type}) — tentando ${modelos[i + 1]}`);
         continue;
       }
       const erro = erroDoGemini(resp.status, j ?? resp.body);
-      ultimo = { status: resp.status, body: JSON.stringify(erro) };
+      ultimo = { status: resp.status, body: JSON.stringify(erro), modelo, tentados };
       if (!valeTentarReserva(erro.error.type)) break;
       if (modelos[i + 1]) console.log(`[IA] ${modelo} falhou (HTTP ${resp.status}, ${erro.error.type}) — tentando ${modelos[i + 1]}`);
     }
     return ultimo;
   }
-  return postJson({
+  const resp = await postJson({
     hostname: 'api.anthropic.com',
     path: '/v1/messages',
     headers: { 'x-api-key': API_KEY, 'anthropic-version': '2023-06-01' },
   }, JSON.stringify({ model: IA_MODEL, max_tokens, system, messages }), timeoutMs);
+  return { ...resp, modelo: IA_MODEL, tentados: [IA_MODEL] };
 }
 
 // Cota diária gratuita do Gemini: tentar de novo só faz esperar — pula o retry.
@@ -1550,15 +1557,21 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
       return;
     }
     iaRequest({ messages: [{ role: 'user', content: 'Responda apenas: OK' }], max_tokens: 50 }, 15000).then(resp => {
+      // ⚠️ O MODELO RELATADO É O QUE REALMENTE RESPONDEU, e a fila tentada vem
+      // junto. Antes saía sempre o primeiro da fila (`IA_MODEL_ATIVO`): o erro
+      // do último modelo aparecia com o nome do primeiro, e não dava pra saber
+      // se a fila inteira tinha caído ou se nem foi tentada. Foi assim que um
+      // 503 legítimo virou meia hora de investigação.
+      const fila = { model: resp?.modelo || IA_MODEL_ATIVO, tentados: resp?.tentados || [] };
       if (resp.status === 200) {
         res.writeHead(200);
-        res.end(JSON.stringify({ configured: true, status: 'ok', provider: IA_PROVIDER, model: IA_MODEL_ATIVO }));
+        res.end(JSON.stringify({ configured: true, status: 'ok', provider: IA_PROVIDER, ...fila }));
       } else {
         let errDetail = '';
         try { errDetail = JSON.parse(resp.body)?.error?.message || resp.body.slice(0, 200); } catch { errDetail = resp.body.slice(0, 200); }
-        console.log(`[IA-TEST] Falha (${IA_PROVIDER}): HTTP ${resp.status} — ${errDetail}`);
+        console.log(`[IA-TEST] Falha (${IA_PROVIDER}, ${fila.tentados.join(' → ')}): HTTP ${resp.status} — ${errDetail}`);
         res.writeHead(200);
-        res.end(JSON.stringify({ configured: true, status: 'error', provider: IA_PROVIDER, model: IA_MODEL_ATIVO, httpCode: resp.status, error: errDetail }));
+        res.end(JSON.stringify({ configured: true, status: 'error', provider: IA_PROVIDER, ...fila, httpCode: resp.status, error: errDetail }));
       }
     }).catch(err => {
       const timeout = err.message === 'TIMEOUT';
