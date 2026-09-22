@@ -2763,6 +2763,35 @@ cupom: fornecedor, CNPJ, itens, valores) para melhorar os produtos dele — est�
 escrito na página de preços. Foi uma escolha consciente pelo custo zero; se isso
 mudar de ideia, basta `IA_PROVIDER=anthropic`.
 
+#### O raciocínio que comia a resposta — "parou de ler os cupons"
+
+⚠️ **Os tokens de raciocínio contam DENTRO do `maxOutputTokens`**, e os modelos
+Gemini 3 raciocinam por padrão em nível **médio**. A doc do Google é literal:
+o limite "atua como um limite rígido sem mudar como o modelo aloca o orçamento
+de raciocínio — se atingir esse limite durante o raciocínio, ele para com
+status incomplete e devolve saída **truncada ou VAZIA**". Num cupom com muitos
+itens era o que acontecia: **200 OK com zero texto**.
+
+⚠️ E a tradução **entregava isso como sucesso**: só a AUSÊNCIA de `parts` virava
+erro; um `parts: []` (ou só com partes de raciocínio) passava e virava
+`content:[{text:""}]`. A tela recebia um cupom "lido" **em branco**, sem erro
+nenhum — o sintoma exato de "o leitor de cupom não está lendo os cupons".
+Hoje **texto vazio é erro** (`sem_resposta_error`), com o motivo e os tokens de
+raciocínio na mensagem.
+
+⚠️ A alavanca é o **nível de raciocínio, não o teto de tokens** — a doc diz isso
+com todas as letras. Ler cupom é extração, não raciocínio: vai
+`thinkingConfig.thinkingLevel: "LOW"`. **LOW e não MINIMAL** (o 3.8 Flash aceita
+baixo/médio/alto e recusa mínimo), e **só em Gemini 3+** — mandar o campo para
+modelo anterior dá erro, então `aceitaNivelDeRaciocinio()` lê a versão do nome e
+quem não casa segue sem o campo. O teto subiu de 8k para 16k junto, que é de
+graça (só se paga o que sai).
+
+⚠️ **200 sem texto também vale trocar de modelo.** Antes devolvia 400 na hora, e
+o cupom que estourava o limite no modelo principal nunca chegava ao reserva —
+que pensa menos e dá conta. Recusa de CONTEÚDO (SAFETY/RECITATION) continua
+definitiva: trocar de modelo não muda o que o filtro achou.
+
 ⚠️ Na faixa gratuita o modelo mais novo devolve **503 "overloaded"** em horário
 de pico — no primeiro cupom real, o `gemini-3.8-flash` recusou 9 tentativas
 seguidas enquanto o Flash-Lite estava livre. Por isso `iaRequest()` percorre

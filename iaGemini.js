@@ -24,6 +24,28 @@ export const MSG_LIMITE_MINUTO_GEMINI = 'Muitas leituras ao Gemini em pouco temp
 // modelo na faixa gratuita) e modelo inexistente mudam de um para o outro.
 export const valeTentarReserva = (type) => !['authentication_error', 'invalid_request_error'].includes(type);
 
+// ⚠️ O RACIOCÍNIO CABE DENTRO DO maxOutputTokens, E FOI O QUE PAROU DE LER
+// CUPOM. Os modelos Gemini 3 raciocinam por padrão em nível MÉDIO, e a doc do
+// Google é explícita: o max_output_tokens "atua como um limite rígido sem mudar
+// a forma como o modelo aloca o orçamento de raciocínio — se o modelo atingir
+// esse limite durante o raciocínio, ele para com status incomplete e devolve
+// saída TRUNCADA OU VAZIA". Num cupom com muitos itens é exatamente o que
+// acontecia: 200 OK, zero texto, e a tela recebia um cupom "lido" em branco.
+//
+// A própria doc diz qual é a alavanca: "para reduzir custo ou latência sem
+// truncar as respostas, diminua thinking_level em vez de definir um
+// max_output_tokens pequeno". Ler cupom é extração, não raciocínio.
+//
+// ⚠️ LOW, não MINIMAL: o 3.8 Flash aceita baixo/médio/alto e recusa mínimo.
+// ⚠️ E só em Gemini 3+: mandar thinkingLevel para modelo anterior dá ERRO. Nome
+// fora do padrão não arrisca — segue sem o campo, como era antes.
+export const NIVEL_RACIOCINIO = 'LOW';
+
+export function aceitaNivelDeRaciocinio(model) {
+  const m = /^gemini-(\d+)/.exec(String(model || '').trim().toLowerCase());
+  return !!m && Number(m[1]) >= 3;
+}
+
 function blocosParaParts(content) {
   if (typeof content === 'string') return [{ text: content }];
   return (content || []).map(b => {
@@ -38,7 +60,7 @@ function blocosParaParts(content) {
 // Pedido no formato da Anthropic ({ system, messages, max_tokens }) → corpo do
 // generateContent. `json: true` liga o modo JSON do Gemini: a resposta vem sem
 // cerca de markdown nem texto solto, que é o que os prompts de cupom pedem.
-export function paraGemini({ system, messages, max_tokens, json = false }) {
+export function paraGemini({ system, messages, max_tokens, json = false, model = '' }) {
   const body = {
     contents: (messages || []).map(m => ({
       role: m.role === 'assistant' ? 'model' : 'user',
@@ -46,9 +68,13 @@ export function paraGemini({ system, messages, max_tokens, json = false }) {
     })),
     // No Gemini os tokens de raciocínio contam dentro do maxOutputTokens: com o
     // limite baixo ele pensa, estoura e devolve vazio. O piso é só um teto (não
-    // custa nada a mais), então vale para qualquer pedido.
-    generationConfig: { maxOutputTokens: Math.max(max_tokens || 0, 8192) },
+    // custa nada a mais, porque só se paga o que sai), então vale para qualquer
+    // pedido — e subiu para 16k porque 8k não cobria cupom longo + raciocínio.
+    generationConfig: { maxOutputTokens: Math.max(max_tokens || 0, 16384) },
   };
+  if (aceitaNivelDeRaciocinio(model)) {
+    body.generationConfig.thinkingConfig = { thinkingLevel: NIVEL_RACIOCINIO };
+  }
   if (system) body.systemInstruction = { parts: [{ text: system }] };
   if (json) body.generationConfig.responseMimeType = 'application/json';
   return body;
@@ -57,16 +83,32 @@ export function paraGemini({ system, messages, max_tokens, json = false }) {
 // Resposta 200 do Gemini → corpo no formato da Anthropic. Quando o Gemini
 // bloqueia (filtro de segurança) ou estoura o limite sem devolver texto, sai um
 // `error` no mesmo formato, para o servidor tratar como qualquer outro erro.
+// Bloqueio de conteúdo não muda trocando de modelo; truncar, sim — e são os
+// dois caminhos que chegam aqui sem texto.
+const BLOQUEIO = /SAFETY|BLOCK|PROHIBITED|RECITATION|LANGUAGE/i;
+
 export function respostaDoGemini(j, model) {
   const cand = j?.candidates?.[0];
-  const parts = cand?.content?.parts;
-  if (!cand || !Array.isArray(parts)) {
-    const motivo = j?.promptFeedback?.blockReason || cand?.finishReason || 'sem resposta';
-    return { error: { type: 'invalid_request_error', message: `O Gemini não devolveu resposta (${motivo}).` } };
-  }
+  const parts = Array.isArray(cand?.content?.parts) ? cand.content.parts : [];
   // `thought: true` são resumos de raciocínio (só vêm se pedidos) — não são a resposta.
   const text = parts.filter(p => typeof p.text === 'string' && !p.thought).map(p => p.text).join('');
-  const u = j.usageMetadata || {};
+  const u = j?.usageMetadata || {};
+
+  // ⚠️ SEM TEXTO É ERRO, NUNCA RESPOSTA VAZIA. Antes só a AUSÊNCIA de `parts`
+  // virava erro; um `parts` que existe mas não tem texto nenhum — o caso do
+  // raciocínio que estourou o limite, e o que fez o leitor "parar de ler os
+  // cupons" — passava como sucesso, e a tela recebia 200 com um cupom em
+  // branco. Erro em silêncio é o que este arquivo existe para não ter.
+  if (!text.trim()) {
+    const motivo = j?.promptFeedback?.blockReason || cand?.finishReason || 'sem resposta';
+    const pensados = u.thoughtsTokenCount || 0;
+    if (BLOQUEIO.test(String(motivo))) {
+      return { error: { type: 'invalid_request_error', message: `O Gemini recusou a imagem (${motivo}).` } };
+    }
+    return { error: { type: 'sem_resposta_error', message: motivo === 'MAX_TOKENS' || pensados
+      ? `O Gemini gastou o limite de saída raciocinando e não sobrou resposta (${motivo}${pensados ? `, ${pensados} tokens de raciocínio` : ''}).`
+      : `O Gemini não devolveu resposta (${motivo}).` } };
+  }
   return {
     type: 'message',
     role: 'assistant',

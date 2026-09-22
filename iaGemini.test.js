@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { paraGemini, respostaDoGemini, erroDoGemini, valeTentarReserva, MSG_COTA_DIARIA_GEMINI, MSG_LIMITE_MINUTO_GEMINI } from './iaGemini.js';
+import { paraGemini, respostaDoGemini, erroDoGemini, valeTentarReserva, aceitaNivelDeRaciocinio, MSG_COTA_DIARIA_GEMINI, MSG_LIMITE_MINUTO_GEMINI } from './iaGemini.js';
 
 // Análise do código sob teste (iaGemini.js):
 // - Input: o pedido que o app já monta no formato da Anthropic (system,
@@ -30,7 +30,7 @@ describe('paraGemini', () => {
       { inline_data: { mime_type: 'image/jpeg', data: 'AAAA' } },
       { text: 'Leia o cupom' },
     ]);
-    assert.deepEqual(body.generationConfig, { maxOutputTokens: 8192, responseMimeType: 'application/json' });
+    assert.deepEqual(body.generationConfig, { maxOutputTokens: 16384, responseMimeType: 'application/json' });
   });
 
   test('conteúdo em string simples (rotas de conciliação) vira uma part de texto', () => {
@@ -38,8 +38,8 @@ describe('paraGemini', () => {
     assert.deepEqual(body.contents[0].parts, [{ text: 'Responda apenas: OK' }]);
     assert.equal(body.systemInstruction, undefined);
     assert.equal(body.generationConfig.responseMimeType, undefined);
-    // piso de 8192: o raciocínio do Gemini conta dentro do limite
-    assert.equal(body.generationConfig.maxOutputTokens, 8192);
+    // piso de 16384: o raciocínio do Gemini conta dentro do limite
+    assert.equal(body.generationConfig.maxOutputTokens, 16384);
   });
 
   test('várias imagens na mesma mensagem (fechamento combinado) são todas preservadas', () => {
@@ -149,4 +149,72 @@ describe('valeTentarReserva', () => {
     assert.equal(valeTentarReserva('authentication_error'), false);
     assert.equal(valeTentarReserva('invalid_request_error'), false);
   });
+});
+
+// ── O raciocínio que comia a resposta ──────────────────────────────────────
+// Os modelos Gemini 3 raciocinam por padrão em nível MÉDIO, e os tokens de
+// raciocínio contam DENTRO do maxOutputTokens. Num cupom com muitos itens o
+// modelo estourava o limite pensando e devolvia 200 com zero texto — e a
+// tradução entregava isso como resposta VAZIA de sucesso. O sintoma na loja:
+// "o leitor de cupom parou de ler os cupons", sem erro nenhum na tela.
+
+test('o pedido pede raciocínio BAIXO nos modelos Gemini 3', () => {
+  const g = paraGemini({ messages: [], model: 'gemini-3.8-flash' }).generationConfig;
+  assert.equal(g.thinkingConfig.thinkingLevel, 'LOW');
+});
+
+test('⚠️ modelo anterior ao 3 NÃO recebe thinkingLevel — lá isso é erro', () => {
+  assert.equal(paraGemini({ messages: [], model: 'gemini-2.5-flash' }).generationConfig.thinkingConfig, undefined);
+  assert.equal(paraGemini({ messages: [] }).generationConfig.thinkingConfig, undefined, 'sem nome de modelo, não arrisca');
+  assert.equal(paraGemini({ messages: [], model: 'gemini-omni-1.1-flash' }).generationConfig.thinkingConfig, undefined);
+});
+
+test('aceitaNivelDeRaciocinio lê a versão do nome', () => {
+  assert.equal(aceitaNivelDeRaciocinio('gemini-3.5-flash-lite'), true);
+  assert.equal(aceitaNivelDeRaciocinio('gemini-3-flash-preview'), true);
+  assert.equal(aceitaNivelDeRaciocinio('gemini-2.5-flash'), false);
+  assert.equal(aceitaNivelDeRaciocinio(''), false);
+});
+
+test('o teto de saída cobre cupom longo + raciocínio', () => {
+  assert.equal(paraGemini({ messages: [], max_tokens: 1000 }).generationConfig.maxOutputTokens, 16384);
+  assert.equal(paraGemini({ messages: [], max_tokens: 40000 }).generationConfig.maxOutputTokens, 40000);
+});
+
+test('⚠️ 200 sem texto é ERRO, não cupom em branco', () => {
+  // `parts: []` é um array — passava pela checagem antiga e virava
+  // content:[{text:""}], que a tela lia como um cupom sem nenhum item.
+  const r = respostaDoGemini({
+    candidates: [{ content: { parts: [] }, finishReason: 'MAX_TOKENS' }],
+    usageMetadata: { thoughtsTokenCount: 8192 },
+  }, 'gemini-3.8-flash');
+  assert.equal(r.error.type, 'sem_resposta_error');
+  assert.match(r.error.message, /raciocinando/);
+  assert.match(r.error.message, /8192/);
+});
+
+test('parte só de raciocínio também não é resposta', () => {
+  const r = respostaDoGemini({
+    candidates: [{ content: { parts: [{ text: 'deixa eu ver...', thought: true }] }, finishReason: 'MAX_TOKENS' }],
+  }, 'm');
+  assert.equal(r.error.type, 'sem_resposta_error');
+});
+
+test('⚠️ truncar vale trocar de modelo; recusa de conteúdo, não', () => {
+  // É a diferença entre tentar o reserva (que pensa menos) e parar de vez.
+  const truncado = respostaDoGemini({ candidates: [{ content: { parts: [] }, finishReason: 'MAX_TOKENS' }] }, 'm');
+  assert.equal(valeTentarReserva(truncado.error.type), true);
+  const recusado = respostaDoGemini({ candidates: [{ content: { parts: [] }, finishReason: 'SAFETY' }] }, 'm');
+  assert.equal(recusado.error.type, 'invalid_request_error');
+  assert.equal(valeTentarReserva(recusado.error.type), false);
+});
+
+test('resposta de verdade continua passando inteira', () => {
+  const r = respostaDoGemini({
+    candidates: [{ content: { parts: [{ text: 'pensei', thought: true }, { text: '{"itens":[]}' }] }, finishReason: 'STOP' }],
+    usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5 },
+  }, 'gemini-3.8-flash');
+  assert.equal(r.error, undefined);
+  assert.equal(r.content[0].text, '{"itens":[]}');
+  assert.equal(r.stop_reason, 'end_turn');
 });

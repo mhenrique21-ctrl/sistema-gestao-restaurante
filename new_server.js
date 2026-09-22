@@ -1099,11 +1099,13 @@ const postJson = (options, data, timeoutMs) => new Promise((resolve, reject) => 
 
 async function iaRequest({ system, messages, max_tokens, json = false }, timeoutMs) {
   if (IA_PROVIDER === 'gemini') {
-    const data = JSON.stringify(paraGemini({ system, messages, max_tokens, json }));
     const modelos = [...new Set([GEMINI_MODEL, GEMINI_MODEL_RESERVA].filter(Boolean))];
     let ultimo = null;
     for (let i = 0; i < modelos.length; i++) {
       const modelo = modelos[i];
+      // O corpo é montado POR MODELO: o nível de raciocínio só vale para
+      // Gemini 3+ e mandá-lo para um anterior dá erro.
+      const data = JSON.stringify(paraGemini({ system, messages, max_tokens, json, model: modelo }));
       const resp = await postJson({
         hostname: 'generativelanguage.googleapis.com',
         path: `/v1beta/models/${modelo}:generateContent`,
@@ -1113,9 +1115,17 @@ async function iaRequest({ system, messages, max_tokens, json = false }, timeout
       try { j = JSON.parse(resp.body); } catch {}
       if (resp.status === 200) {
         const trad = respostaDoGemini(j, modelo);
-        if (i > 0 && !trad.error) console.log(`[IA] respondido pelo modelo reserva ${modelo}`);
-        // 200 sem texto (bloqueio de segurança etc.) vira 400: definitivo, sem retry.
-        return { status: trad.error ? 400 : 200, body: JSON.stringify(trad) };
+        if (!trad.error) {
+          if (i > 0) console.log(`[IA] respondido pelo modelo reserva ${modelo}`);
+          return { status: 200, body: JSON.stringify(trad) };
+        }
+        // ⚠️ 200 SEM TEXTO TAMBÉM VALE TROCAR DE MODELO. Antes devolvia 400 na
+        // hora: o cupom que estourava o limite raciocinando no modelo
+        // principal nunca chegava ao reserva, que pensa menos e daria conta.
+        ultimo = { status: 400, body: JSON.stringify(trad) };
+        if (!valeTentarReserva(trad.error.type)) break;
+        if (modelos[i + 1]) console.log(`[IA] ${modelo} respondeu sem texto (${trad.error.type}) — tentando ${modelos[i + 1]}`);
+        continue;
       }
       const erro = erroDoGemini(resp.status, j ?? resp.body);
       ultimo = { status: resp.status, body: JSON.stringify(erro) };
@@ -1412,6 +1422,8 @@ Se algum campo estiver ilegível, use 0 ou "". Nunca invente valores.`;
             else if (semCredito(errObj)) errMsg = MSG_SEM_CREDITO;
             else if (errType === 'rate_limit_error') errMsg = 'Limite de requisições excedido. Aguarde alguns minutos e tente novamente.';
             else if (errType === 'overloaded_error' || lastStatus === 529) errMsg = 'Servidor da IA sobrecarregado. Tente novamente em alguns minutos.';
+            else if (errType === 'sem_resposta_error') errMsg = `A IA não devolveu a leitura do cupom. ${errText}`
+              + ' Tente de novo; se repetir, fotografe o cupom em partes ou cole o texto abaixo.';
             else if (errType === 'invalid_request_error') errMsg = `Requisição inválida: ${errText}`;
             else errMsg = errText;
             definitivo = erroDefinitivo(lastStatus, errObj);
