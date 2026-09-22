@@ -140,8 +140,15 @@ export function planoDeMigracao({ listaCompras = [], produtosLista = [], listaRu
   const itens = [...listaCompras, ...produtosLista];
 
   // Os valores de "rua" que existem de fato, com quantos itens dependem de cada.
+  //
+  // ⚠️ ITEM QUE JÁ TEM `localId` SAI DA FILA, e é isso que faz a migração
+  // TERMINAR. O `rua` antigo continua gravado de propósito (é o registro de
+  // onde o número veio, e apagar não teria volta) — contando por ele, a tela
+  // diria "24 corredores para resolver" para sempre, mesmo depois de tudo
+  // resolvido, e fila que não zera é fila que ninguém lê.
   const usoRua = new Map();
   for (const i of itens) {
+    if (String(i?.localId ?? '').trim()) continue;
     const v = String(i?.rua ?? '').trim();
     if (!v) continue;
     usoRua.set(v, (usoRua.get(v) || 0) + 1);
@@ -190,6 +197,58 @@ export function planoDeMigracao({ listaCompras = [], produtosLista = [], listaRu
     categoriasOk: categoriasOk.sort(porItens),
     categoriasPendentes: categoriasPendentes.sort(porItens),
     totalItens: itens.length,
+  };
+}
+
+// ── A migração dos corredores, de uma vez ───────────────────────────────────
+// `planoDeMigracao` se RECUSA a adivinhar de qual loja é "Rua 7" (§ o comentário
+// do `classificarRua`), e está certa: adivinhar mandaria o item para o mercado
+// errado. Mas quando a PESSOA responde a pergunta — "os corredores são todos do
+// Assaí" —, resolver item por item seria trabalho manual sobre centenas de
+// registros, que é como metade da lista fica pela metade.
+//
+// ⚠️ SÓ O QUE É CORREDOR ANDA. Rua que é nome de loja ("Santa Lucia") fica como
+// está: ela é uma pergunta diferente, e arrastá-la junto mandaria para o Assaí
+// um item que é comprado noutro lugar — o erro que a recusa de adivinhar existia
+// para evitar.
+//
+// ⚠️ ITEM QUE JÁ TEM `localId` NÃO É TOCADO. Quem já foi escolhido à mão foi
+// escolhido à mão; passar por cima é apagar decisão de gente com um botão.
+//
+// ⚠️ O `rua` ANTIGO CONTINUA GRAVADO. É de onde o número veio, e é o que
+// permite conferir a migração depois. Quem lê a tela lê `localId`+`corredor`.
+export function migrarCorredoresParaLocal({
+  listaCompras = [], produtosLista = [], localId,
+  agora = new Date().toISOString(), ts = Date.now(),
+} = {}) {
+  const numeros = new Set();
+  const alvo = (i) => {
+    if (!i || String(i.localId ?? '').trim()) return null;
+    const c = classificarRua(i.rua);
+    return c.tipo === 'corredor' ? c.numero : null;
+  };
+
+  let itensLista = 0, itensCatalogo = 0;
+  const lista = (listaCompras || []).map((i) => {
+    const n = alvo(i);
+    if (!n) return i;
+    numeros.add(n); itensLista++;
+    return { ...i, localId, corredor: n, updatedAt: ts };
+  });
+  const catalogo = (produtosLista || []).map((p) => {
+    const n = alvo(p);
+    if (!n) return p;
+    numeros.add(n); itensCatalogo++;
+    // ⚠️ `produtosLista` CARIMBA `atualizadoEm` (§3): a fusão desempata por
+    // timestamp, e sem o carimbo a versão do servidor — que TEM carimbo de uma
+    // gravação anterior — vence no poll e desfaz a migração inteira.
+    return { ...p, localId, corredor: n, atualizadoEm: agora };
+  });
+
+  return {
+    listaCompras: lista, produtosLista: catalogo,
+    itensLista, itensCatalogo, itens: itensLista + itensCatalogo,
+    corredores: [...numeros].sort((a, b) => Number(a) - Number(b)),
   };
 }
 

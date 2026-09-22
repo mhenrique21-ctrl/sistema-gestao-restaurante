@@ -2,7 +2,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   CATS_LISTA, categoriaFechada, classificarRua, novoLocal, locaisAtivos,
-  localPorId, planoDeMigracao, contabilDaLista,
+  localPorId, planoDeMigracao, contabilDaLista, migrarCorredoresParaLocal,
 } from './listaCompras.js';
 
 describe('a taxonomia fechada da Lista', () => {
@@ -197,5 +197,82 @@ describe('a ponte da Lista para Compras', () => {
     assert.equal(contabilDaLista(null), 'Outros');
     assert.equal(contabilDaLista(''), 'Outros');
     assert.equal(contabilDaLista('categoria que não existe'), 'Outros');
+  });
+});
+
+describe('a migração dos corredores para um local só', () => {
+  const base = () => ({
+    listaCompras: [
+      { id: 'a', nome: 'arroz', rua: 'Rua 7' },
+      { id: 'b', nome: 'sabão', rua: 'Santa Lucia' },
+      { id: 'c', nome: 'leite', rua: 'corredor 12' },
+      { id: 'd', nome: 'café', rua: '' },
+    ],
+    produtosLista: [
+      { id: 'p1', nome: 'arroz', rua: 'Rua 7' },
+      { id: 'p2', nome: 'queijo', rua: 'Rua 3', localId: 'sendas', corredor: '3' },
+    ],
+  });
+
+  test('só o que é CORREDOR anda; loja e vazio ficam como estavam', () => {
+    // ⚠️ Arrastar "Santa Lucia" junto mandaria para o Assaí um item comprado
+    // noutro lugar — o erro que a recusa de adivinhar existia para evitar.
+    const r = migrarCorredoresParaLocal({ ...base(), localId: 'assai' });
+    assert.equal(r.listaCompras[0].localId, 'assai');
+    assert.equal(r.listaCompras[0].corredor, '7');
+    assert.equal(r.listaCompras[1].localId, undefined);
+    assert.equal(r.listaCompras[2].corredor, '12');
+    assert.equal(r.listaCompras[3].localId, undefined);
+    assert.equal(r.itensLista, 2);
+    assert.equal(r.itensCatalogo, 1);
+    assert.equal(r.itens, 3);
+    assert.deepEqual(r.corredores, ['7', '12']);
+  });
+
+  test('item que já tem local NÃO é tocado — escolha à mão não se apaga com um botão', () => {
+    const r = migrarCorredoresParaLocal({ ...base(), localId: 'assai' });
+    assert.equal(r.produtosLista[1].localId, 'sendas');
+    assert.equal(r.produtosLista[1].corredor, '3');
+    assert.equal(r.produtosLista[1].atualizadoEm, undefined);
+  });
+
+  test('o `rua` antigo continua gravado — é de onde o número veio', () => {
+    const r = migrarCorredoresParaLocal({ ...base(), localId: 'assai' });
+    assert.equal(r.listaCompras[0].rua, 'Rua 7');
+  });
+
+  test('produtosLista CARIMBA atualizadoEm — sem ele a fusão desfaz a migração', () => {
+    // §3, a armadilha do carimbo que falta: o registro do servidor tem carimbo
+    // de uma gravação anterior e vence a edição local no poll seguinte.
+    const r = migrarCorredoresParaLocal({ ...base(), localId: 'assai', agora: 'CARIMBO', ts: 42 });
+    assert.equal(r.produtosLista[0].atualizadoEm, 'CARIMBO');
+    assert.equal(r.listaCompras[0].updatedAt, 42);
+  });
+
+  test('não muda o objeto original — a gravação sai do `d` do save', () => {
+    const b = base();
+    const r = migrarCorredoresParaLocal({ ...b, localId: 'assai' });
+    assert.equal(b.listaCompras[0].localId, undefined);
+    assert.notEqual(r.listaCompras, b.listaCompras);
+  });
+
+  test('depois de migrar, a fila de corredores do plano ZERA', () => {
+    // ⚠️ É isto que faz a migração terminar. Contando pelo `rua`, que continua
+    // gravado, a tela diria "corredores para resolver" para sempre.
+    const b = base();
+    assert.ok(planoDeMigracao(b).corredores.length > 0);
+    const r = migrarCorredoresParaLocal({ ...b, localId: 'assai' });
+    const depois = planoDeMigracao({ listaCompras: r.listaCompras, produtosLista: r.produtosLista });
+    assert.equal(depois.corredores.length, 0);
+    // A rua que é LOJA continua pendente: é outra pergunta.
+    assert.deepEqual(depois.locais.map((l) => l.valor), ['Santa Lucia']);
+  });
+
+  test('rodar duas vezes não muda nada na segunda', () => {
+    const b = base();
+    const r1 = migrarCorredoresParaLocal({ ...b, localId: 'assai' });
+    const r2 = migrarCorredoresParaLocal({ ...r1, localId: 'assai' });
+    assert.equal(r2.itens, 0);
+    assert.deepEqual(r2.corredores, []);
   });
 });

@@ -25,7 +25,7 @@ import { mergeArrayById } from "../mergeDocument.js";
 import QRCode from "qrcode";
 import { ConfigPanel, CONFIG_PADRAO, type ConfigAppState } from "./ConfigPanel";
 import { ConfigStyleInjector, useApplyConfig } from "./ConfigApplier";
-import {CATS_LISTA,categoriaFechada,classificarRua,novoLocal,locaisAtivos,localPorId,planoDeMigracao,contabilDaLista} from "./listaCompras.js";
+import {CATS_LISTA,categoriaFechada,classificarRua,novoLocal,locaisAtivos,localPorId,planoDeMigracao,contabilDaLista,migrarCorredoresParaLocal} from "./listaCompras.js";
 import {rotuloDelivery,ROTULO_RECIBOS,LEGADO_ROTULO_DELIVERY,BUCKET_RECIBO_BALCAO,BUCKET_RECIBO_ENCOMENDA,taxasDePlataforma,statusDoDia,progressoDoDia,serieDosDias,mediaDaSerie,HORA_PENDENCIA_PADRAO} from "./fechamentoVendas.js";
 import {garantirFornecedor,criarItemDaLista,conferirPreco,auditarPrecos,normalizarEncoding,gruposDeFornecedor,mesclarFornecedores,conciliacaoPorCategoria,pctHistoricoPorCategoria,normalizarTexto,precoPorUnidadeBase,filaSemCategoria,janelaAnterior,soDigitos,linhasDaRevisao,pendenciasDaRevisao,correcoesDaRevisao,resumoDoEncoding} from "./qualidadeCompras.js";
 import {fatiasDaReceita,conferirCmv,diasNoIntervalo,mesDaData,porDia,comprasForaDoCmv,MOTIVO_FORA_CMV} from "./dre.js";
@@ -10900,6 +10900,50 @@ function ListaComprasPanel({db,setDb,isAdmin,onNavigate,onLogout,setState,login,
     // Sem toast aqui: este painel não recebe `setToastMsg`, e o local aparece
     // na lista logo abaixo no mesmo render — o retorno visual é ele mesmo.
   };
+  // ---- Os corredores, todos de um local só ---------------------------------
+  // ⚠️ A MIGRAÇÃO SE RECUSA A ADIVINHAR de qual loja é "Rua 7", e está certa.
+  // Isto NÃO é um palpite: é a resposta do dono ("os corredores são todos do
+  // Assaí") virando um gesto só. Sem ele, responder a pergunta significaria
+  // abrir centenas de itens um a um — que é como metade fica pela metade.
+  const [migDestino,setMigDestino]=useState("");
+  const [migNome,setMigNome]=useState("Assaí");
+  const locaisComCorredor=locais.filter((l:any)=>l.corredores?.length||l.temCorredor);
+  const migrarCorredores=()=>{
+    const nums=plano.corredores.map((c:any)=>c.numero);
+    if(!nums.length)return alert("Não há corredor nenhum para migrar.");
+    const destino=migDestino?localPorId(locais,migDestino):null;
+    const nome=destino?destino.nome:migNome.trim();
+    if(!nome)return alert("Informe o nome do local.");
+    if(!destino&&locais.some((l:any)=>foldNome(l.nome)===foldNome(nome)))
+      return alert(`Já existe um local chamado "${nome}" — escolha ele na lista acima.`);
+    const n=plano.corredores.reduce((a:number,c:any)=>a+c.itens,0);
+    if(!confirm(`Mandar ${n} item(ns) com corredor para "${nome}"?\n\n`
+      +`Corredores: ${nums.map((x:string)=>"Rua "+x).join(", ")}\n\n`
+      +`Rua que é nome de LOJA (ex.: "Santa Lucia") não se mexe — é outra pergunta.\n`
+      +`Item que você já mandou para um local à mão também fica como está.`))return;
+    // O id nasce AQUI, fora das duas gravações: `listaCompras` sai por
+    // `setDbAndSave` e `produtosLista` por `applyBothProd` (§3, o catálogo é
+    // compartilhado entre as empresas). Gerado dentro de cada uma, os dois
+    // lados apontariam para locais diferentes.
+    const alvoId=destino?destino.id:uid();
+    (setDbAndSave||setDb)((d:any)=>{
+      // ⚠️ A conta é refeita sobre o `d` da gravação, nunca sobre o `plano` do
+      // render: item que outro operador acabou de adicionar entraria de fora.
+      const r=migrarCorredoresParaLocal({listaCompras:d.listaCompras||[],localId:alvoId});
+      const arr=[...(d.locaisCompra||[])];
+      const i=arr.findIndex((l:any)=>l.id===alvoId);
+      // Os números do catálogo entram junto: a segunda gravação não mexe no
+      // cadastro do local, e um corredor que só existe lá ficaria de fora.
+      const todos=[...new Set([...(i>=0?arr[i].corredores||[]:[]),...nums])]
+        .sort((a:string,b:string)=>Number(a)-Number(b));
+      if(i>=0)arr[i]=novoLocal({...arr[i],temCorredor:true,corredores:todos});
+      else arr.push(novoLocal({id:alvoId,nome,temCorredor:true,corredores:todos}));
+      return{...d,locaisCompra:arr,listaCompras:r.listaCompras};
+    });
+    applyBothProd((d:any)=>({...d,
+      produtosLista:migrarCorredoresParaLocal({produtosLista:d.produtosLista||[],localId:alvoId}).produtosLista}));
+    setMigDestino("");
+  };
   const showCatMgmt=subTab==="categorias";
   const setShowCatMgmt=(v:boolean)=>setSubTab(v?"categorias":"nova");
   const showProdMgmt=subTab==="produtos";
@@ -12252,13 +12296,40 @@ function ListaComprasPanel({db,setDb,isAdmin,onNavigate,onLogout,setState,login,
               style={{background:"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)",padding:"6px 10px",fontSize:11.5}}>criar com corredores</button>
           </div>
         ))}
-        {plano.corredores.length>0&&<div style={{fontSize:11.5,color:"var(--text2)",marginTop:10,lineHeight:1.55,borderTop:"1px solid var(--bg4)",paddingTop:8}}>
-          ⚠️ Há <b>{plano.corredores.length} corredor(es)</b> em uso (
-          {plano.corredores.slice(0,8).map((c:any)=>`Rua ${c.numero}`).join(", ")}
-          {plano.corredores.length>8?"…":""}). Eles pertencem a um dos locais <b>com
-          corredores</b> — use “criar com corredores” no atacadista certo, e os números
-          entram lá.
-        </div>}
+      </div>}
+
+      {/* ---- Os corredores viram local + corredor, de uma vez ---- */}
+      {plano.corredores.length>0&&<div className="card" style={{marginBottom:12}}>
+        <div className="section-title" style={{margin:"0 0 6px"}}>🛤️ Os corredores pertencem a qual local?</div>
+        <div style={{fontSize:11.5,color:"var(--text2)",marginBottom:10,lineHeight:1.55}}>
+          Há <b>{plano.corredores.length} corredor(es)</b> em uso (
+          {plano.corredores.slice(0,10).map((c:any)=>`Rua ${c.numero}`).join(", ")}
+          {plano.corredores.length>10?"…":""}), em{" "}
+          <b>{plano.corredores.reduce((a:number,c:any)=>a+c.itens,0)} item(ns)</b>.
+          {" "}Responda uma vez e todos vão junto, com o corredor de cada um.
+        </div>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+          <select value={migDestino} onChange={e=>setMigDestino(e.target.value)} className="inp"
+            style={{marginBottom:0,flex:"1 1 160px",fontSize:12.5}}>
+            <option value="">— criar um local novo —</option>
+            {locais.map((l:any)=><option key={l.id} value={l.id}>{l.nome}</option>)}
+          </select>
+          {!migDestino&&<input value={migNome} onChange={e=>setMigNome(e.target.value)}
+            placeholder="Nome do local" className="inp" style={{marginBottom:0,flex:"1 1 140px",fontSize:12.5}}/>}
+          <button className="btn" onClick={migrarCorredores}
+            style={{background:"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)",padding:"8px 14px",fontSize:12.5}}>
+            🛤️ mandar os corredores para cá
+          </button>
+        </div>
+        {/* ⚠️ O que NÃO anda fica escrito: contador que encolhe sem explicação
+            faz a pessoa procurar o item que sumiu. */}
+        <div style={{fontSize:11,color:"var(--text3)",marginTop:9,lineHeight:1.55,borderTop:"1px solid var(--bg4)",paddingTop:8}}>
+          Rua que é <b>nome de loja</b> (“Santa Lucia”) não vem junto — ela é a outra
+          pergunta, logo acima. Item que já foi mandado para um local à mão também fica
+          como está. O valor antigo do campo Rua continua guardado em cada registro.
+          {locaisComCorredor.length>0&&<> Locais que já têm corredor:{" "}
+            <b>{locaisComCorredor.map((l:any)=>l.nome).join(", ")}</b>.</>}
+        </div>
       </div>}
 
       {/* ---- Cadastro ---- */}

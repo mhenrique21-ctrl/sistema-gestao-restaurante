@@ -106,3 +106,35 @@ test('locaisCompra está nas DUAS fusões', () => {
   const SRV = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'mergeDocument.js'), 'utf8');
   assert.ok(SRV.includes("'locaisCompra',"), 'falta no servidor');
 });
+
+test('a migração dos corredores grava nos DOIS caminhos, com o mesmo id', () => {
+  // ⚠️ `produtosLista` é COMPARTILHADO entre as empresas e sai por
+  // `applyBothProd`; `listaCompras` é por empresa e sai por `setDbAndSave`
+  // (§3). Gravar os dois no mesmo lugar poria o catálogo de uma empresa dentro
+  // da outra — e gerar o id do local dentro de cada gravação faria os dois
+  // lados apontarem para locais diferentes.
+  assert.ok(LISTA.includes('const migrarCorredores='), 'o botão da migração sumiu');
+  assert.ok(/const alvoId=destino\?destino\.id:uid\(\);/.test(LISTA),
+    'o id do local deixou de nascer fora das duas gravações');
+  assert.ok(LISTA.includes('migrarCorredoresParaLocal({listaCompras:d.listaCompras||[]'),
+    'a lista parou de ser migrada a partir do `d` da gravação');
+  assert.ok(LISTA.includes('applyBothProd((d:any)=>({...d,\n      produtosLista:migrarCorredoresParaLocal('),
+    'o catálogo parou de sair por applyBothProd');
+  // ⚠️ E a conta é refeita sobre o `d` do save, nunca sobre o `plano` do render:
+  // item que outro operador acabou de adicionar entraria de fora.
+  assert.ok(!/migrarCorredoresParaLocal\(\{listaCompras:db\./.test(LISTA),
+    'a migração passou a ler o db do render');
+});
+
+test('o motor da migração não decide nada sozinho', () => {
+  const MOD = fs.readFileSync(
+    path.join(path.dirname(fileURLToPath(import.meta.url)), 'listaCompras.js'), 'utf8');
+  // ⚠️ Item que já tem local é decisão de gente: passar por cima é apagá-la
+  // com um botão. E é o mesmo `localId` que tira o item da fila do plano —
+  // sem isso a tela diria "corredores para resolver" para sempre, porque o
+  // `rua` antigo continua gravado de propósito.
+  assert.ok(MOD.includes("if (!i || String(i.localId ?? '').trim()) return null;"),
+    'a migração passou a sobrescrever local escolhido à mão');
+  assert.ok(MOD.includes("if (String(i?.localId ?? '').trim()) continue;"),
+    'o plano voltou a contar item já migrado — a fila nunca zeraria');
+});

@@ -2400,6 +2400,37 @@ tela em branco sem erro nenhum (a armadilha do `ABA_REL_ANTIGA`).
 ⚠️ **`db.listaRuas` e `db.ruaCatMap` NÃO foram apagados do banco**: são a fonte
 que a migração lê para propor os locais. Some a tela, fica o dado.
 
+##### Responder a pergunta UMA vez (`migrarCorredoresParaLocal`, com testes)
+
+A migração se recusa a adivinhar de qual loja é "Rua 7" — e está certa. Mas
+quando a pessoa responde ("os corredores são **todos do Assaí**"), resolver item
+por item seria trabalho manual sobre centenas de registros, que é como metade da
+lista fica pela metade. O card **🛤️ Os corredores pertencem a qual local?** em
+Lista → Locais escolhe o local (ou cria) e manda todos de uma vez, cada um com o
+corredor que já estava no campo Rua.
+
+⚠️ **SÓ O QUE É CORREDOR ANDA.** Rua que é nome de loja ("Santa Lucia") fica
+como está — é outra pergunta, e arrastá-la junto mandaria para o Assaí um item
+comprado noutro lugar, que é exatamente o erro que a recusa de adivinhar existe
+para evitar. Item que já tem `localId` também não é tocado: escolha à mão não se
+apaga com um botão.
+
+⚠️ **O `rua` ANTIGO CONTINUA GRAVADO** — é de onde o número veio e é o que
+permite conferir a migração depois. Por isso quem sai da fila do
+`planoDeMigracao` é quem tem **`localId`**, não quem perdeu o `rua`: contando
+pelo campo antigo, a tela diria "corredores para resolver" para sempre, e fila
+que não zera é fila que ninguém lê.
+
+⚠️ **O id do local nasce FORA das duas gravações.** `listaCompras` sai por
+`setDbAndSave` e `produtosLista` por `applyBothProd` (§3, o catálogo é
+compartilhado): gerado dentro de cada uma, os dois lados apontariam para locais
+diferentes. E os números entram no cadastro do local na **primeira** gravação,
+com os do catálogo junto — a segunda não mexe no local, e um corredor que só
+existisse lá ficaria de fora.
+
+⚠️ **A conta é refeita sobre o `d` do save**, nunca sobre o `plano` do render: o
+render serve ao texto da confirmação.
+
 #### Os locais
 
 ⚠️ **INATIVAR, NUNCA EXCLUIR.** Item antigo aponta para o local pelo **id**:
