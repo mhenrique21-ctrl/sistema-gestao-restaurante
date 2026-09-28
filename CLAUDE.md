@@ -2502,7 +2502,15 @@ carga (**mesmo id**, nunca um novo — cunhar id por empresa foi o erro do
 mantém selecionado um `localId` que não resolve, e os TRÊS formulários — catálogo,
 item novo e edição embutida — oferecem o local (dois deles ainda liam `listaRuas`,
 cuja tela foi apagada em 21/09: um local criado depois nunca aparecia neles).
-`listaTela.test.js` trava os três.
+
+⚠️ **E na loja `locaisCompra` estava VAZIO** — a união não tinha o que unir. A
+migração exigia ir a Lista → Locais e clicar "criar" em cada loja, e ninguém fez;
+"Assaí" e "Casa do Pescado" seguiam no campo Rua antigo, que o select novo não lê.
+Hoje a **rua que é loja aparece no "Onde comprar" como "criar local"**, e é a escolha
+da pessoa que cria o cadastro (nas duas empresas) e liga o item, num gesto — o
+corredor do próprio item ("Rua 12") vai junto para o local. Nada é decidido sozinho:
+"Rua 7" continua não dizendo de qual loja é; quem diz é quem escolhe.
+`listaTela.test.js` trava os quatro.
 
 #### "Tem na Loja" continua digitado à mão — e isso foi uma decisão
 

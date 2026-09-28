@@ -10772,8 +10772,8 @@ function SwipeRow({onRight,onLeft,disabled,rowStyle,children}:{onRight:()=>void,
 // Componente de nivel superior (nao definido dentro de ListaComprasPanel) para que o
 // React preserve a identidade do input entre re-renders -- se fosse uma função criada
 // de novo a cada render do painel pai, o campo perderia o foco a cada letra digitada.
-function InlineEditItem({form,setF,isAdmin,editId,cancelEdit,del,saveItem,prodsCatalog,locais}:
-  {form:any,setF:(k:string,v:any)=>void,isAdmin?:boolean,editId:string|null,cancelEdit:()=>void,del:(id:string)=>void,saveItem:()=>void,prodsCatalog:any[],locais:any[]}){
+function InlineEditItem({form,setF,isAdmin,editId,cancelEdit,del,saveItem,prodsCatalog,locais,ruasLoja=[],escolherLocal}:
+  {form:any,setF:(k:string,v:any)=>void,isAdmin?:boolean,editId:string|null,cancelEdit:()=>void,del:(id:string)=>void,saveItem:()=>void,prodsCatalog:any[],locais:any[],ruasLoja?:string[],escolherLocal?:(valor:string,ruaDoItem:string)=>{localId:string,corredor:string}|null}){
   const [showSugg,setShowSugg]=useState(false);
   const suggestions:any[]=form.nome.trim().length>=1
     ?prodsCatalog.filter((p:any)=>p.nome.toLowerCase().includes(form.nome.trim().toLowerCase())).slice(0,8)
@@ -10831,10 +10831,13 @@ function InlineEditItem({form,setF,isAdmin,editId,cancelEdit,del,saveItem,prodsC
         corredor cadastrado — num mercadinho sem corredor numerado, o campo seria
         uma pergunta sem resposta. */}
     {isAdmin&&<div style={{display:"flex",gap:8,marginBottom:8}}>
-      <select value={form.localId||""} onChange={e=>{setF("localId",e.target.value);setF("corredor","");}}
+      <select value={form.localId||""} onChange={e=>{const r=escolherLocal?escolherLocal(e.target.value,form.rua||""):{localId:e.target.value,corredor:""};if(!r)return;setF("localId",r.localId);setF("corredor",r.corredor);}}
         className="inp" style={{marginBottom:0,flex:2}}>
         <option value="">Onde comprar — não definido</option>
         {locaisAtivos(locais).map((l:any)=><option key={l.id} value={l.id}>🏪 {l.nome}</option>)}
+        {/* As lojas que ainda vivem no campo Rua antigo: escolher cria o local. */}
+        {ruasLoja.filter(n=>!locais.some((l:any)=>foldNome(l.nome)===foldNome(n))).map(n=><option key={"rua:"+n} value={"rua:"+n}>🏪 {n} — criar local</option>)}
+        {escolherLocal&&<option value="novo">➕ Outro local…</option>}
         {/* ⚠️ Vínculo que este aparelho não conhece continua SELECIONADO, nunca
             some: sem esta opção o select caía em "não definido" e o Salvar
             gravava "" por cima de uma escolha feita noutra empresa. */}
@@ -10996,13 +10999,43 @@ function ListaComprasPanel({db,setDb,isAdmin,onNavigate,onLogout,setState,login,
     locaisCompra:(d.locaisCompra||[]).map((l:any)=>l.id===id?novoLocal({...l,ativo:l.ativo===false}):l)}));
   // Cria o local a partir de um valor que estava no campo Rua. NÃO mexe em item
   // nenhum: ligar os itens é um segundo gesto, explícito.
-  const criarLocalDaRua=(nome:string,comCorredor:boolean)=>{
-    if(locais.some((l:any)=>foldNome(l.nome)===foldNome(nome)))return;
-    const corredores=comCorredor?plano.corredores.map((c:any)=>c.numero):[];
+  const criarLocalDaRua=(nome:string,comCorredor:boolean,corredoresExtra:string[]=[]):string=>{
+    const existente=locais.find((l:any)=>foldNome(l.nome)===foldNome(nome));
+    if(existente)return existente.id;
+    const corredores=[...new Set([...(comCorredor?plano.corredores.map((c:any)=>c.numero):[]),...corredoresExtra])]
+      .sort((a:string,b:string)=>Number(a)-Number(b));
+    // O id nasce AQUI, antes da gravação: quem chama precisa dele para ligar o
+    // item na hora (escolherLocal), sem esperar o poll devolver o cadastro.
+    const id=uid();
     applyBothProd((d:any)=>({...d,
-      locaisCompra:[...(d.locaisCompra||[]),novoLocal({id:uid(),nome,temCorredor:comCorredor,corredores})]}));
+      locaisCompra:[...(d.locaisCompra||[]),novoLocal({id,nome,temCorredor:comCorredor||corredores.length>0,corredores})]}));
+    return id;
     // Sem toast aqui: este painel não recebe `setToastMsg`, e o local aparece
     // na lista logo abaixo no mesmo render — o retorno visual é ele mesmo.
+  };
+  // ⚠️ A RUA QUE É LOJA ENTRA NO "ONDE COMPRAR", E ESCOLHER CRIA O LOCAL.
+  //
+  // Na loja, `locaisCompra` estava VAZIO: a migração exige ir a Lista → Locais e
+  // clicar "criar" em cada loja, e ninguém fez — enquanto isso "Assaí" e "Casa
+  // do Pescado" continuavam no campo antigo (`listaRuas`/`rua`), que o select
+  // novo não lê. O usuário abria "Onde comprar", via só "não definido" e a
+  // conclusão era "a opção de Assaí sumiu" (28/09/2026). Nada é decidido
+  // sozinho: a rua-que-é-loja aparece como opção "criar local", e é a ESCOLHA
+  // da pessoa que cria o cadastro (nas duas empresas) e liga o item, num gesto.
+  //
+  // O corredor do próprio item vai junto: "Filé Mignon" está em "Rua 12"; a
+  // pessoa disse que ele é do Assaí, então a Rua 12 desse item é do Assaí. Vira
+  // corredor do local e corredor do item — sem isso o número se perdia.
+  const ruasLoja:string[]=ruasPendentes.map((r:any)=>r.valor);
+  const escolherLocal=(valor:string,ruaDoItem:string):{localId:string,corredor:string}|null=>{
+    let nome="";
+    if(valor==="novo"){nome=(prompt("Nome do local (mercado, atacadista, fornecedor):")||"").trim();if(!nome)return null;}
+    else if(valor.startsWith("rua:"))nome=valor.slice(4);
+    else return {localId:valor,corredor:""};
+    const c=classificarRua(ruaDoItem);
+    const corredor=c.tipo==="corredor"?c.numero:"";
+    const localId=criarLocalDaRua(nome,false,corredor?[corredor]:[]);
+    return {localId,corredor};
   };
   // ---- Os corredores, todos de um local só ---------------------------------
   // ⚠️ A MIGRAÇÃO SE RECUSA A ADIVINHAR de qual loja é "Rua 7", e está certa.
@@ -12554,9 +12587,11 @@ function ListaComprasPanel({db,setDb,isAdmin,onNavigate,onLogout,setState,login,
             21/09, então "Assaí", criado em Lista → Locais, nunca aparecia
             aqui. Era isto: "ao editar produto sem rua a opção de Assaí não
             aparece". `rua` continua gravada (é o registro de origem). */}
-        <select value={prodForm.localId||""} onChange={e=>setProdForm(f=>({...f,localId:e.target.value,corredor:""}))} className="inp" style={{flex:"1 1 110px",marginBottom:0}}>
+        <select value={prodForm.localId||""} onChange={e=>{const r=escolherLocal(e.target.value,prodForm.rua||"");if(!r)return;setProdForm(f=>({...f,localId:r.localId,corredor:r.corredor}));}} className="inp" style={{flex:"1 1 110px",marginBottom:0}}>
           <option value="">Onde comprar</option>
           {locaisAtivos(locais).map((l:any)=><option key={l.id} value={l.id}>🏪 {l.nome}</option>)}
+          {ruasLoja.filter(n=>!locais.some((l:any)=>foldNome(l.nome)===foldNome(n))).map(n=><option key={"rua:"+n} value={"rua:"+n}>🏪 {n} — criar local</option>)}
+          <option value="novo">➕ Outro local…</option>
           {prodForm.localId&&!locais.some((l:any)=>l.id===prodForm.localId)&&<option value={prodForm.localId}>🏪 (local não encontrado)</option>}
         </select>
         {(()=>{const loc=localPorId(locais,prodForm.localId);if(!loc?.corredores?.length)return null;
@@ -12881,9 +12916,11 @@ function ListaComprasPanel({db,setDb,isAdmin,onNavigate,onLogout,setState,login,
         <div style={{flex:1}}>
           <div style={{fontSize:11,color:"#888",fontWeight:600,marginBottom:4}}>Onde comprar</div>
           <div style={{display:"flex",gap:6}}>
-            <select value={form.localId||""} onChange={e=>{setF("localId",e.target.value);setF("corredor","");}} className="inp" style={{marginBottom:0,flex:2}}>
+            <select value={form.localId||""} onChange={e=>{const r=escolherLocal(e.target.value,form.rua||"");if(!r)return;setF("localId",r.localId);setF("corredor",r.corredor);}} className="inp" style={{marginBottom:0,flex:2}}>
               <option value="">Não definido</option>
               {locaisAtivos(locais).map((l:any)=><option key={l.id} value={l.id}>🏪 {l.nome}</option>)}
+              {ruasLoja.filter(n=>!locais.some((l:any)=>foldNome(l.nome)===foldNome(n))).map(n=><option key={"rua:"+n} value={"rua:"+n}>🏪 {n} — criar local</option>)}
+              <option value="novo">➕ Outro local…</option>
               {form.localId&&!locais.some((l:any)=>l.id===form.localId)&&<option value={form.localId}>🏪 (local não encontrado)</option>}
             </select>
             {(()=>{const loc=localPorId(locais,form.localId);if(!loc?.corredores?.length)return null;
@@ -12993,7 +13030,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onNavigate,onLogout,setState,login,
           const estoqueRef=item.estoqueQtd!=null&&item.estoqueQtd!==""?parseFloat(item.estoqueQtd):0;
           const isEditing=editId===item.id;
           const mpPreco=precoUnitMp(getMpByName(item.nome));
-          if(isEditing)return <InlineEditItem key={item.id} form={form} setF={setF} isAdmin={isAdmin} editId={editId} cancelEdit={cancelEdit} del={del} saveItem={saveItem} prodsCatalog={prodsCatalog} locais={locais}/>;
+          if(isEditing)return <InlineEditItem key={item.id} form={form} setF={setF} isAdmin={isAdmin} editId={editId} cancelEdit={cancelEdit} del={del} saveItem={saveItem} prodsCatalog={prodsCatalog} locais={locais} ruasLoja={ruasLoja} escolherLocal={escolherLocal}/>;
           return(
           <div key={item.id}>
           <SwipeRow disabled={travandoIds.has(item.id)}
@@ -13059,7 +13096,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onNavigate,onLogout,setState,login,
           const estoqueRef=item.estoqueQtd!=null&&item.estoqueQtd!==""?parseFloat(item.estoqueQtd):0;
           const isEditing=editId===item.id;
           const mpPreco=precoUnitMp(getMpByName(item.nome));
-          if(isEditing)return <InlineEditItem key={item.id} form={form} setF={setF} isAdmin={isAdmin} editId={editId} cancelEdit={cancelEdit} del={del} saveItem={saveItem} prodsCatalog={prodsCatalog} locais={locais}/>;
+          if(isEditing)return <InlineEditItem key={item.id} form={form} setF={setF} isAdmin={isAdmin} editId={editId} cancelEdit={cancelEdit} del={del} saveItem={saveItem} prodsCatalog={prodsCatalog} locais={locais} ruasLoja={ruasLoja} escolherLocal={escolherLocal}/>;
           return(
           <div key={item.id}>
           <SwipeRow disabled={travandoIds.has(item.id)}

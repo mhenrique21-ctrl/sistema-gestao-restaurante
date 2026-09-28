@@ -60,8 +60,12 @@ test('o corredor só aparece quando o local TEM corredor', () => {
   // resposta — e "Rua 7" existe em mais de uma loja, então ele nunca fica solto.
   assert.ok(FORM.includes('if(!loc?.corredores?.length)return null;'),
     'o corredor voltou a aparecer sempre');
-  assert.ok(FORM.includes('setF("localId",e.target.value);setF("corredor","")'),
+  // Trocar de local passa por escolherLocal: local já existente volta com
+  // corredor "" (limpa), e rua-que-é-loja volta com o corredor do próprio item.
+  assert.ok(FORM.includes('setF("localId",r.localId);setF("corredor",r.corredor)'),
     'trocar de local parou de limpar o corredor — ficaria a Rua 7 de outra loja');
+  assert.ok(APP.includes('else return {localId:valor,corredor:""};'),
+    'escolher um local já existente tem que limpar o corredor');
 });
 
 test('a migração NÃO converte nada sozinha', () => {
@@ -172,4 +176,19 @@ test('o formulário de item novo também oferece o LOCAL, não a rua legada', ()
   assert.ok(!APP.includes('<select value={form.rua}'), 'o select de rua legada voltou ao formulário de item novo');
   const n = (APP.match(/value=\{form\.localId\|\|""\}/g) || []).length;
   assert.ok(n >= 2, 'faltou Onde comprar no formulário do topo ou na edição embutida: ' + n);
+});
+
+test('⚠️ a rua que é LOJA aparece em "Onde comprar", e escolher cria o local', () => {
+  // Na loja `locaisCompra` estava vazio: a migração exigia ir a Lista → Locais
+  // e clicar "criar" em cada loja. Enquanto isso "Assaí" seguia no campo Rua
+  // antigo, que o select novo não lê — "a opção de Assaí sumiu" (28/09/2026).
+  const n = (APP.match(/value=\{"rua:"\+n\}/g) || []).length;
+  assert.equal(n, 3, 'os três selects (embutido, topo, catálogo) têm que oferecer as ruas-loja: ' + n);
+  const ini = APP.indexOf('const criarLocalDaRua=');
+  const bloco = APP.slice(ini, APP.indexOf('const escolherLocal=', ini));
+  assert.ok(/const id=uid\(\);[^]*?return id;/.test(bloco), 'criarLocalDaRua tem que devolver o id, gerado ANTES da gravação');
+  assert.ok(bloco.includes('if(existente)return existente.id;'), 'nome já cadastrado tem que reaproveitar o local, não duplicar');
+  const esc = APP.slice(APP.indexOf('const escolherLocal='), APP.indexOf('const escolherLocal=') + 900);
+  assert.ok(esc.includes('classificarRua(ruaDoItem)'), 'o corredor do item ("Rua 12") tem que ir junto para o local escolhido');
+  assert.ok(APP.includes('ruasLoja={ruasLoja} escolherLocal={escolherLocal}'), 'a edição embutida não recebe as ruas-loja');
 });
