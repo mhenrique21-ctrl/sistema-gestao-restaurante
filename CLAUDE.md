@@ -2512,6 +2512,17 @@ corredor do próprio item ("Rua 12") vai junto para o local. Nada é decidido so
 "Rua 7" continua não dizendo de qual loja é; quem diz é quem escolhe.
 `listaTela.test.js` trava os quatro.
 
+⚠️ **A união roda em TODA fusão (`migrateDb`) e por isso é estável por CONTEÚDO**
+(`unirLocaisDasEmpresas`, com testes): a primeira versão comparava por identidade de
+objeto, e como cada empresa tem o seu objeto para o mesmo local, uma delas recebia
+referência nova a cada fusão. O auto-save decide "mudou" por referência
+(`state[e]!==prev[e]`): referência nova sem mudança real é POST de ~4 MB por ação
+do usuário. Foi suspeita de derrubar o servidor em 28/09/2026 (tela branca após o
+deploy) — **não era**: com fetch instrumentado, 41 s na Lista deram 0 POSTs, e
+`decidirAutoSave` ignora o eco do poll. A tela branca era o servidor entregando o
+bundle a ~13 KB/s (`/api/versao` levava 1–4,5 s), i.e., a VPS ocupada logo após o
+deploy — não código quebrando. A regra ficou porque vale de qualquer jeito.
+
 #### "Tem na Loja" continua digitado à mão — e isso foi uma decisão
 
 ⚠️ **Chegou a virar saldo automático e foi DESFEITO no mesmo dia** (21/09/2026,

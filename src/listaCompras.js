@@ -127,6 +127,46 @@ export function localPorId(locais, id) {
   return (locais || []).find((l) => l?.id === id) || null;
 }
 
+// ── Os locais são UM cadastro para as duas empresas ─────────────────────────
+// `produtosLista` é compartilhado e guarda `localId`; se `locaisCompra` ficar
+// numa empresa só, a outra abre o mesmo produto como "não definido". A união
+// roda em toda fusão com o servidor (migrateDb), então ela tem uma regra que
+// não é detalhe:
+//
+// ⚠️ ESTÁVEL POR CONTEÚDO, NUNCA POR REFERÊNCIA. A primeira versão comparava
+// `porId.get(id)===l` (identidade de objeto): as duas empresas têm o MESMO
+// local em objetos DIFERENTES (cada JSON.parse cria o seu), então uma delas
+// perdia a comparação em toda fusão e recebia um `{...empresa, locaisCompra}`
+// novo. O auto-save decide "mudou" por referência (`state[e]!==prev[e]`):
+// referência nova sem mudança real é um POST de ~4 MB por ação do usuário —
+// e foi suspeita de derrubar o servidor em 28/09/2026 (não era; o experimento
+// com fetch instrumentado deu 0 POSTs em 41 s — mas a regra vale igual).
+//
+// Devolve a MESMA referência de entrada quando nada precisa mudar.
+const assinaturaLocal = (l) => JSON.stringify([l.id, l.nome, l.ativo !== false, l.temCorredor === true, l.corredores || [], l.atualizadoEm || '']);
+
+export function unirLocaisDasEmpresas(porEmpresa) {
+  const porId = new Map();
+  const quando = (l) => Date.parse(l?.atualizadoEm || '') || 0;
+  for (const lista of Object.values(porEmpresa)) {
+    for (const l of lista || []) {
+      if (!l?.id) continue;
+      const atual = porId.get(l.id);
+      if (!atual || quando(l) >= quando(atual)) porId.set(l.id, l);
+    }
+  }
+  const todos = [...porId.values()];
+  const alvo = todos.map(assinaturaLocal).sort().join('|');
+  const saida = {};
+  let mudou = false;
+  for (const [emp, lista] of Object.entries(porEmpresa)) {
+    const minha = (lista || []).map(assinaturaLocal).sort().join('|');
+    if (minha === alvo) { saida[emp] = lista; continue; }   // mesmo conteúdo: mesma referência
+    saida[emp] = todos; mudou = true;
+  }
+  return { locais: saida, mudou };
+}
+
 // ── O plano de migração ─────────────────────────────────────────────────────
 // Lê o que existe HOJE e diz o que vira o quê. Não grava nada: é o que a tela
 // mostra antes de a pessoa confirmar — mesma divisão de papéis da

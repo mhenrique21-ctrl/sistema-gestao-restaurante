@@ -25,7 +25,7 @@ import { mergeArrayById } from "../mergeDocument.js";
 import QRCode from "qrcode";
 import { ConfigPanel, CONFIG_PADRAO, type ConfigAppState } from "./ConfigPanel";
 import { ConfigStyleInjector, useApplyConfig } from "./ConfigApplier";
-import {CATS_LISTA,categoriaFechada,classificarRua,novoLocal,locaisAtivos,localPorId,planoDeMigracao,contabilDaLista,migrarCorredoresParaLocal} from "./listaCompras.js";
+import {CATS_LISTA,categoriaFechada,classificarRua,novoLocal,locaisAtivos,localPorId,planoDeMigracao,contabilDaLista,migrarCorredoresParaLocal,unirLocaisDasEmpresas} from "./listaCompras.js";
 import {rotuloDelivery,ROTULO_RECIBOS,LEGADO_ROTULO_DELIVERY,BUCKET_RECIBO_BALCAO,BUCKET_RECIBO_ENCOMENDA,taxasDePlataforma,statusDoDia,progressoDoDia,serieDosDias,mediaDaSerie,HORA_PENDENCIA_PADRAO} from "./fechamentoVendas.js";
 import {garantirFornecedor,criarItemDaLista,conferirPreco,auditarPrecos,normalizarEncoding,gruposDeFornecedor,mesclarFornecedores,conciliacaoPorCategoria,pctHistoricoPorCategoria,normalizarTexto,precoPorUnidadeBase,filaSemCategoria,janelaAnterior,soDigitos,linhasDaRevisao,pendenciasDaRevisao,correcoesDaRevisao,resumoDoEncoding} from "./qualidadeCompras.js";
 import {fatiasDaReceita,conferirCmv,diasNoIntervalo,mesDaData,porDia,comprasForaDoCmv,MOTIVO_FORA_CMV} from "./dre.js";
@@ -1896,23 +1896,13 @@ const migrateDb=(m:any)=>{
   // ⚠️ MESMO id, nunca um novo: foi cunhar id por empresa (produtosSyncV1,
   // `toAdd`) que deixou 218 produtos com identidade dupla. Roda em toda carga
   // — é barato e cura também o que um bundle antigo gravar num lado só.
+  // ⚠️ Estável por CONTEÚDO: empresa cujo cadastro já é igual mantém a MESMA
+  // referência — o auto-save decide "mudou" por referência, e migrateDb roda em
+  // toda fusão. Ver unirLocaisDasEmpresas em listaCompras.js (com testes).
   {
-    const porId=new Map<string,any>();
-    const quando=(l:any)=>Date.parse(l?.atualizadoEm||"")||0;
-    ["CONFRARIA","SEAMA"].forEach(e=>(m[e]?.locaisCompra||[]).forEach((l:any)=>{
-      if(!l?.id)return;
-      const atual=porId.get(l.id);
-      if(!atual||quando(l)>=quando(atual))porId.set(l.id,l);
-    }));
-    if(porId.size){
-      const todos=[...porId.values()];
-      ["CONFRARIA","SEAMA"].forEach(e=>{
-        if(!m[e]||typeof m[e]!=="object")return;
-        const meus=m[e].locaisCompra||[];
-        const iguais=meus.length===todos.length&&meus.every((l:any)=>porId.get(l.id)===l);
-        if(!iguais)m[e]={...m[e],locaisCompra:todos};
-      });
-    }
+    const emps=["CONFRARIA","SEAMA"].filter(e=>m[e]&&typeof m[e]==="object");
+    const r=unirLocaisDasEmpresas(Object.fromEntries(emps.map(e=>[e,m[e].locaisCompra||[]])));
+    if(r.mudou)emps.forEach(e=>{if(r.locais[e]!==(m[e].locaisCompra||[]))m[e]={...m[e],locaisCompra:r.locais[e]};});
   }
   if(!m.CONFRARIA?.produtosSyncV1||!m.SEAMA?.produtosSyncV1){
     const allProds=new Map<string,any>();

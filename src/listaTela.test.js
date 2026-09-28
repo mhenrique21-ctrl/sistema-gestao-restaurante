@@ -153,8 +153,9 @@ test('⚠️ locaisCompra é UM cadastro para as duas empresas — grava pelo ca
   assert.ok(escritores.length >= 4, 'sumiram escritores de locaisCompra: ' + escritores.length);
   assert.ok(escritores.every((e) => e === 'applyBothProd'),
     'locaisCompra gravado por setDbAndSave (uma empresa só): ' + escritores.join(','));
-  assert.ok(APP.includes('const porId=new Map<string,any>();') && APP.includes('locaisCompra:todos'),
+  assert.ok(APP.includes('unirLocaisDasEmpresas(Object.fromEntries('),
     'a união dos locais na carga sumiu — id criado num lado não chega ao outro');
+  assert.ok(!APP.includes('porId.get(l.id)===l'), 'a união voltou a comparar por REFERÊNCIA — POST extra a cada ação');
   assert.ok(!/locaisCompra[^\n]*id:Math\.random/.test(APP), 'local com id novo por empresa é a identidade dupla de novo');
 });
 

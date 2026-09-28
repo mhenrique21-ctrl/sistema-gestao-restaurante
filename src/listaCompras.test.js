@@ -4,6 +4,7 @@ import {
   CATS_LISTA, categoriaFechada, classificarRua, novoLocal, locaisAtivos,
   localPorId, planoDeMigracao, contabilDaLista, migrarCorredoresParaLocal,
 } from './listaCompras.js';
+import { unirLocaisDasEmpresas } from './listaCompras.js';
 
 describe('a taxonomia fechada da Lista', () => {
   test('as 19 antigas caem nas 10 novas', () => {
@@ -275,4 +276,41 @@ describe('a migração dos corredores para um local só', () => {
     assert.equal(r2.itens, 0);
     assert.deepEqual(r2.corredores, []);
   });
+});
+
+// ── unirLocaisDasEmpresas ─────────────────────────────────────────────────────
+// Roda em TODA fusão com o servidor. O que importa é o que ela NÃO faz.
+const loc = (id, nome, extra = {}) => ({ id, nome, ativo: true, temCorredor: false, corredores: [], atualizadoEm: '2026-09-28T10:00:00.000Z', ...extra });
+
+test('local criado numa empresa chega à outra, com o MESMO id', () => {
+  const r = unirLocaisDasEmpresas({ CONFRARIA: [], SEAMA: [loc('a', 'Assaí')] });
+  assert.equal(r.mudou, true);
+  assert.deepEqual(r.locais.CONFRARIA.map((l) => l.id), ['a']);
+});
+
+test('⚠️ mesmo conteúdo em objetos DIFERENTES não é mudança — devolve a mesma referência', () => {
+  // Cada empresa tem o seu objeto (JSON.parse de cada arquivo). Comparar por
+  // identidade fazia uma delas "mudar" em toda fusão — e o auto-save decide
+  // por referência: referência nova sem mudança real é POST de 4 MB à toa.
+  const c = [loc('a', 'Assaí')], s = [loc('a', 'Assaí')];
+  const r = unirLocaisDasEmpresas({ CONFRARIA: c, SEAMA: s });
+  assert.equal(r.mudou, false);
+  assert.equal(r.locais.CONFRARIA, c, 'referência da CONFRARIA tinha que ser a mesma');
+  assert.equal(r.locais.SEAMA, s, 'referência da SEAMA tinha que ser a mesma');
+});
+
+test('é idempotente: a segunda passada não muda nada', () => {
+  const r1 = unirLocaisDasEmpresas({ CONFRARIA: [loc('a', 'Assaí')], SEAMA: [loc('b', 'Casa do Pescado')] });
+  assert.equal(r1.mudou, true);
+  const r2 = unirLocaisDasEmpresas(r1.locais);
+  assert.equal(r2.mudou, false);
+  assert.equal(r2.locais.CONFRARIA, r1.locais.CONFRARIA);
+});
+
+test('a versão mais recente do mesmo id vence', () => {
+  const velho = loc('a', 'Assai', { atualizadoEm: '2026-09-01T00:00:00.000Z' });
+  const novo = loc('a', 'Assaí', { atualizadoEm: '2026-09-28T00:00:00.000Z', corredores: ['12'] });
+  const r = unirLocaisDasEmpresas({ CONFRARIA: [velho], SEAMA: [novo] });
+  assert.equal(r.locais.CONFRARIA[0].nome, 'Assaí');
+  assert.deepEqual(r.locais.CONFRARIA[0].corredores, ['12']);
 });
