@@ -363,7 +363,25 @@ let _rascunhoCompras:any[]=[];
 export const poremRascunhoCompras=(itens:any[])=>{_rascunhoCompras=itens||[];};
 export const tomarRascunhoCompras=()=>{const r=_rascunhoCompras;_rascunhoCompras=[];return r;};
 
+// ⚠️ O CATÁLOGO PASSA PELO MESMO PROTOCOLO DO setDbAndSave. Esta função era um
+// SEGUNDO escritor sem coordenação: fazia o próprio GET→funde→POST das duas
+// empresas sem ligar `directSaveRef`, então nem o poll (800ms na Lista) nem o
+// auto-save genérico recuavam — três atores lendo e gravando o mesmo arquivo em
+// janelas de ~100ms, e quem gravasse por último com uma leitura velha apagava a
+// edição. E o `atualizado` era lido fora de `flushSync`: sob batching do React
+// o updater roda depois do `if`, o POST é pulado e ninguém fica sabendo.
+//
+// Sintoma na loja: "edito o produto e não salva" — só nos produtos que o
+// produtosSyncV1 criou com id DIFERENTE em cada empresa (os sem rua), porque
+// neles a edição por nome precisa vencer a disputa nas DUAS gravações. Ver
+// carimbos.test.js.
+//
+// O App registra aqui, ao montar, o `salvarAmbas` (trava + flushSync + funde
+// antes de gravar, por empresa). O caminho antigo só sobrevive como reserva
+// para uma chamada antes do mount, que não existe hoje.
+const _salvarAmbasRef:{current:((fn:(d:any)=>any)=>void)|null}={current:null};
 const applyBothProdutos = (setState:any, setDb:any, fn:(d:any)=>any) => {
+  if (setState && _salvarAmbasRef.current) { _salvarAmbasRef.current(fn); return; }
   if (setState) {
     setState((prev:any) => {
       const nx = { ...prev };
@@ -2604,6 +2622,41 @@ export default function App() {
     })();
   };
   flushRef.current=setDbAndSave;
+  // O setDbAndSave das DUAS empresas: mesmo protocolo, aplicado a toda empresa
+  // que tem catálogo. `mergeWithServerBeforePost` já roda em flushSync, então
+  // o documento fundido nunca chega null aqui — é o que o caminho antigo do
+  // applyBothProdutos não garantia.
+  const salvarAmbas=(fn:(d:any)=>any)=>{
+    directSaveRef.current=true;
+    const safety=setTimeout(()=>{directSaveRef.current=false;directSaveEndRef.current=Date.now();},5000);
+    let emps:string[]=[];
+    flushSync(()=>{
+      setState(prev=>{
+        const next={...prev};
+        emps=Object.keys(next).filter(e=>next[e]&&typeof next[e]==="object"&&"produtosLista" in next[e]);
+        emps.forEach(e=>{next[e]=fn(next[e]);});
+        saveSeqRef.current++;
+        clearTimeout(syncTimer.current);
+        syncTimer.current=null;
+        return next;
+      });
+    });
+    setSyncStatus("sync");
+    (async()=>{
+      try{
+        await Promise.all(emps.map(async emp=>{
+          const merged=await mergeWithServerBeforePost(emp);
+          let body="";
+          flushSync(()=>{setState(prev=>{body=JSON.stringify(withDeletedIds(merged??prev[emp]));return prev;});});
+          const r=await fetchSync(`/api/dados/${emp}`,{method:"POST",headers:{"Content-Type":"application/json"},body});
+          if(!r.ok)throw new Error(r.status+"");
+        }));
+        setSyncStatus("ok");
+      }catch{setSyncStatus("erro");}
+      finally{clearTimeout(safety);directSaveRef.current=false;directSaveEndRef.current=Date.now();}
+    })();
+  };
+  _salvarAmbasRef.current=salvarAmbas;
 
   const isOp=login?.role==="op"||login?.role==="op_lista"||login?.role==="op_producao"||login?.role==="op_enc";
   const isAdmin=login?.role==="admin";

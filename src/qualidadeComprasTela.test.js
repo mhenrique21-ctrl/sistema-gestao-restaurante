@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 // errada — a mesma classe de bug do `agruparMarcasTela.test.js` e do
 // `vinculoSombra.test.js`.
 const APP = fs.readFileSync(
-  path.join(path.dirname(fileURLToPath(import.meta.url)), 'App.tsx'), 'utf8');
+  path.join(path.dirname(fileURLToPath(import.meta.url)), 'App.tsx'), 'utf8').replace(/\r\n/g, '\n');
 
 const bloco = (marcador) => {
   const i = APP.indexOf(marcador);

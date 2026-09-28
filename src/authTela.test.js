@@ -5,9 +5,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const raiz = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-const APP = fs.readFileSync(path.join(raiz, 'src', 'App.tsx'), 'utf8');
-const SRV = fs.readFileSync(path.join(raiz, 'new_server.js'), 'utf8');
-const APP_AUTH = fs.readFileSync(path.join(raiz, 'auth.js'), 'utf8');
+const APP = fs.readFileSync(path.join(raiz, 'src', 'App.tsx'), 'utf8').replace(/\r\n/g, '\n');
+const SRV = fs.readFileSync(path.join(raiz, 'new_server.js'), 'utf8').replace(/\r\n/g, '\n');
+const APP_AUTH = fs.readFileSync(path.join(raiz, 'auth.js'), 'utf8').replace(/\r\n/g, '\n');
 
 // Trava, LENDO o código, a Fase 3 (21/09/2026). Nada disto o build acusa: é
 // código válido que devolve o banco a quem pedir.

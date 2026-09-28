@@ -192,6 +192,20 @@ compartilhado entre as duas empresas (§1) e `applyBothProdutos` é quem salva p
 própria. Cinco telas de rua gravavam com `setState` puro — mudança local que dependia do
 auto-save genérico e caía na armadilha nº 0.
 
+⚠️ **E `applyBothProdutos` não pode ser um SEGUNDO escritor.** Ele fazia o próprio
+GET→funde→POST das duas empresas **sem ligar `directSaveRef`**: o poll (800ms na
+Lista) e o auto-save genérico não recuavam, e três atores liam e gravavam o mesmo
+arquivo em janelas de ~100ms — quem gravasse por último com leitura velha apagava a
+edição. E o documento fundido era lido **fora de `flushSync`**: sob batching do React
+o updater roda depois do `if`, e o POST é pulado sem erro nenhum. Sintoma
+(25/09/2026): *"edito o produto sem rua e não salva"* — só nos produtos que o
+`produtosSyncV1` criou com **id diferente em cada empresa** (os sem rua), porque neles
+a edição por nome precisa vencer a disputa nas DUAS gravações; os que o dono já tinha
+tocado tinham o mesmo id dos dois lados e passavam. Hoje o App registra `salvarAmbas`
+em `_salvarAmbasRef` ao montar: **o mesmo protocolo do `setDbAndSave`** (trava +
+`flushSync` + funde antes de gravar), para toda empresa que tem catálogo.
+`carimbos.test.js` reprova quem voltar ao caminho antigo.
+
 ---
 
 ## 4. Estrutura do `db` (por empresa)
@@ -2957,6 +2971,10 @@ devolvem cor usadas nas duas pontas — substituição cega quebra a impressão.
 - `MoneyInput` para dinheiro; `parseMoney` / `fmtMoney` para converter.
 - Antes de commitar: `node --check new_server.js && npm run build && npm test`.
 - `npm test` (node --test) cobre as fusões — o lugar certo pra travar regressão de sync.
+- **Teste que lê o `App.tsx` (ou o servidor) normaliza o fim de linha (CRLF → LF) antes
+  de comparar.** O índice do git é LF, o checkout no Windows é CRLF, e um `includes`
+  com quebra de linha no meio reprovava três testes-guarda que estavam CERTOS — no VPS
+  passavam. Alarme que grita sempre é alarme que ninguém lê (25/09/2026).
 
 ---
 

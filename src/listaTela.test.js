@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const APP = fs.readFileSync(
-  path.join(path.dirname(fileURLToPath(import.meta.url)), 'App.tsx'), 'utf8');
+  path.join(path.dirname(fileURLToPath(import.meta.url)), 'App.tsx'), 'utf8').replace(/\r\n/g, '\n');
 
 const FORM = (() => {
   const i = APP.indexOf('function InlineEditItem(');
