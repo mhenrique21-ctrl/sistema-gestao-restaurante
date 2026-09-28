@@ -2491,6 +2491,19 @@ trocar de local **limpa** o corredor, senão ficaria a "Rua 7" de outra loja.
 
 ⚠️ `locaisCompra` está nas **duas** fusões (§3).
 
+⚠️ **E é UM cadastro para as duas empresas, como o catálogo.** `produtosLista` é
+compartilhado e guarda `localId`; `locaisCompra` era gravado só na empresa ativa. A
+migração criava "Assaí" onde rodou, o catálogo das duas passava a apontar para esse
+id, e na outra empresa o mesmo produto abria como *"Onde comprar — não definido"*, sem
+"Assaí" na lista — e o Salvar gravava `""` por cima do vínculo. Sintoma (28/09/2026):
+*"ao editar produto sem rua a opção de Assaí não aparece"*. Hoje: união por id na
+carga (**mesmo id**, nunca um novo — cunhar id por empresa foi o erro do
+`produtosSyncV1`), todo escritor de `locaisCompra` sai por `applyBothProd`, o select
+mantém selecionado um `localId` que não resolve, e os TRÊS formulários — catálogo,
+item novo e edição embutida — oferecem o local (dois deles ainda liam `listaRuas`,
+cuja tela foi apagada em 21/09: um local criado depois nunca aparecia neles).
+`listaTela.test.js` trava os três.
+
 #### "Tem na Loja" continua digitado à mão — e isso foi uma decisão
 
 ⚠️ **Chegou a virar saldo automático e foi DESFEITO no mesmo dia** (21/09/2026,

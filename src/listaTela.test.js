@@ -138,3 +138,38 @@ test('o motor da migração não decide nada sozinho', () => {
   assert.ok(MOD.includes("if (String(i?.localId ?? '').trim()) continue;"),
     'o plano voltou a contar item já migrado — a fila nunca zeraria');
 });
+
+test('⚠️ locaisCompra é UM cadastro para as duas empresas — grava pelo caminho compartilhado', () => {
+  // O catálogo (compartilhado) guarda `localId`; gravar o local só na empresa
+  // ativa deixava a outra apontando para um id que ela não tinha: "Assaí"
+  // aparecia numa e "não definido" na outra, para o MESMO produto (28/09/2026).
+  const painel = LISTA;
+  const escritores = [...painel.matchAll(/(setDbAndSave\|\|setDb|applyBothProd)\(\(d:any\)=>[^]*?locaisCompra:/g)]
+    .map((m) => m[1]);
+  assert.ok(escritores.length >= 4, 'sumiram escritores de locaisCompra: ' + escritores.length);
+  assert.ok(escritores.every((e) => e === 'applyBothProd'),
+    'locaisCompra gravado por setDbAndSave (uma empresa só): ' + escritores.join(','));
+  assert.ok(APP.includes('const porId=new Map<string,any>();') && APP.includes('locaisCompra:todos'),
+    'a união dos locais na carga sumiu — id criado num lado não chega ao outro');
+  assert.ok(!/locaisCompra[^\n]*id:Math\.random/.test(APP), 'local com id novo por empresa é a identidade dupla de novo');
+});
+
+test('o select de "Onde comprar" não apaga um localId que não resolve', () => {
+  assert.ok(APP.includes('(local não encontrado neste aparelho)'), 'sem a opção reserva, salvar grava "" por cima do vínculo');
+});
+
+test('o catálogo oferece o LOCAL, não a rua legada', () => {
+  // A tela de Ruas foi apagada em 21/09; um select preso a `listaRuas` nunca
+  // mostraria um local criado depois — era o "a opção de Assaí não aparece".
+  assert.ok(APP.includes('value={prodForm.localId||""}'), 'o form do catálogo perdeu o Onde comprar');
+  assert.ok(!APP.includes('{ruas.length>0&&<select value={prodForm.rua}'), 'o select de rua legada voltou ao catálogo');
+  assert.ok(APP.includes('localId:prodForm.localId||"",corredor:prodForm.corredor||""'), 'saveProd não grava o local');
+});
+
+test('o formulário de item novo também oferece o LOCAL, não a rua legada', () => {
+  // Três selects liam `listaRuas` (catálogo, item novo, edição): os três
+  // precisam do mesmo campo, senão "Assaí" aparece num e some no outro.
+  assert.ok(!APP.includes('<select value={form.rua}'), 'o select de rua legada voltou ao formulário de item novo');
+  const n = (APP.match(/value=\{form\.localId\|\|""\}/g) || []).length;
+  assert.ok(n >= 2, 'faltou Onde comprar no formulário do topo ou na edição embutida: ' + n);
+});
