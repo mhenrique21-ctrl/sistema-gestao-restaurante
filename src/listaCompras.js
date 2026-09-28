@@ -176,7 +176,7 @@ export function unirLocaisDasEmpresas(porEmpresa) {
 // categoria fora da taxonomia tanto pode ser uma loja ("cia do sorveteiro")
 // quanto um produto que alguém cadastrou como categoria ("bombom"). As duas
 // viram PERGUNTA, não palpite.
-export function planoDeMigracao({ listaCompras = [], produtosLista = [], listaRuas = [], listaCategorias = [] } = {}) {
+export function planoDeMigracao({ listaCompras = [], produtosLista = [], listaRuas = [], listaCategorias = [], ruaCatMap = {} } = {}) {
   const itens = [...listaCompras, ...produtosLista];
 
   // Os valores de "rua" que existem de fato, com quantos itens dependem de cada.
@@ -193,7 +193,10 @@ export function planoDeMigracao({ listaCompras = [], produtosLista = [], listaRu
     if (!v) continue;
     usoRua.set(v, (usoRua.get(v) || 0) + 1);
   }
-  for (const r of listaRuas) {
+  // ⚠️ O ruaCatMap (categoria → rua, da tela de Ruas apagada) também guarda
+  // nome de loja nos VALORES — "bebidas: Assaí". Sem lê-lo, uma loja que só
+  // existia por esse caminho não aparecia em lugar nenhum (28/09/2026).
+  for (const r of [...listaRuas, ...Object.values(ruaCatMap || {})]) {
     const v = String(r ?? '').trim();
     if (v && !usoRua.has(v)) usoRua.set(v, 0);
   }

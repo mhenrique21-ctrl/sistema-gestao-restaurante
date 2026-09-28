@@ -10763,7 +10763,7 @@ function SwipeRow({onRight,onLeft,disabled,rowStyle,children}:{onRight:()=>void,
 // React preserve a identidade do input entre re-renders -- se fosse uma função criada
 // de novo a cada render do painel pai, o campo perderia o foco a cada letra digitada.
 function InlineEditItem({form,setF,isAdmin,editId,cancelEdit,del,saveItem,prodsCatalog,locais,ruasLoja=[],escolherLocal}:
-  {form:any,setF:(k:string,v:any)=>void,isAdmin?:boolean,editId:string|null,cancelEdit:()=>void,del:(id:string)=>void,saveItem:()=>void,prodsCatalog:any[],locais:any[],ruasLoja?:string[],escolherLocal?:(valor:string,ruaDoItem:string)=>{localId:string,corredor:string}|null}){
+  {form:any,setF:(k:string,v:any)=>void,isAdmin?:boolean,editId:string|null,cancelEdit:()=>void,del:(id:string)=>void,saveItem:()=>void,prodsCatalog:any[],locais:any[],ruasLoja?:{nome:string,origem:string}[],escolherLocal?:(valor:string,ruaDoItem:string)=>{localId:string,corredor:string}|null}){
   const [showSugg,setShowSugg]=useState(false);
   const suggestions:any[]=form.nome.trim().length>=1
     ?prodsCatalog.filter((p:any)=>p.nome.toLowerCase().includes(form.nome.trim().toLowerCase())).slice(0,8)
@@ -10826,8 +10826,9 @@ function InlineEditItem({form,setF,isAdmin,editId,cancelEdit,del,saveItem,prodsC
         <option value="">Onde comprar — não definido</option>
         {locaisAtivos(locais).map((l:any)=><option key={l.id} value={l.id}>🏪 {l.nome}</option>)}
         {/* As lojas que ainda vivem no campo Rua antigo: escolher cria o local. */}
-        {ruasLoja.filter(n=>!locais.some((l:any)=>foldNome(l.nome)===foldNome(n))).map(n=><option key={"rua:"+n} value={"rua:"+n}>🏪 {n} — criar local</option>)}
-        {escolherLocal&&<option value="novo">➕ Outro local…</option>}
+        {ruasLoja.filter(o=>!locais.some((l:any)=>foldNome(l.nome)===foldNome(o.nome))).map(o=><option key={"rua:"+o.nome} value={"rua:"+o.nome}>🏪 {o.nome} — criar local{o.origem==="categoria"?" (era categoria)":""}</option>)}
+        {!locaisAtivos(locais).length&&!ruasLoja.length&&<option value="" disabled>— nenhuma loja nos campos antigos (Rua/categoria) —</option>}
+        {escolherLocal&&<option value="novo">➕ Criar novo local…</option>}
         {/* ⚠️ Vínculo que este aparelho não conhece continua SELECIONADO, nunca
             some: sem esta opção o select caía em "não definido" e o Salvar
             gravava "" por cima de uma escolha feita noutra empresa. */}
@@ -10931,7 +10932,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onNavigate,onLogout,setState,login,
   // ---- Locais de compra (substituem o campo livre "rua") --------------------
   const locais:any[]=db.locaisCompra||[];
   const plano=planoDeMigracao({listaCompras:db.listaCompras||[],produtosLista:db.produtosLista||[],
-    listaRuas:db.listaRuas||[],listaCategorias:db.listaCategorias||[]});
+    listaRuas:db.listaRuas||[],listaCategorias:db.listaCategorias||[],ruaCatMap:db.ruaCatMap||{}});
   // O que ainda não foi migrado: rua que não virou local, e categoria que a
   // taxonomia fechada não reconhece.
   const locaisJaCriados=new Set(locais.map((l:any)=>foldNome(l.nome)));
@@ -11016,7 +11017,18 @@ function ListaComprasPanel({db,setDb,isAdmin,onNavigate,onLogout,setState,login,
   // O corredor do próprio item vai junto: "Filé Mignon" está em "Rua 12"; a
   // pessoa disse que ele é do Assaí, então a Rua 12 desse item é do Assaí. Vira
   // corredor do local e corredor do item — sem isso o número se perdia.
-  const ruasLoja:string[]=ruasPendentes.map((r:any)=>r.valor);
+  // ⚠️ A CATEGORIA ANTIGA TAMBÉM PODE SER LOJA. Antes da tela de Locais, "para
+  // arquivar um item por onde se compra, só havia criar uma categoria com o
+  // nome da loja" (§ Lista). A taxonomia fechou em 21/09 e essa categoria sumiu
+  // do select — e como não era rua, não entrava na fila de locais: "Assaí"
+  // desaparecia dos DOIS lugares. Entra como candidato, rotulado de onde veio;
+  // "bombom" também vai aparecer, e é a pessoa quem sabe que não é loja.
+  const jaLocal=(n:string)=>locais.some((l:any)=>foldNome(l.nome)===foldNome(n));
+  const ruasLoja:{nome:string,origem:string}[]=[
+    ...ruasPendentes.map((r:any)=>({nome:r.valor,origem:"rua"})),
+    ...plano.categoriasPendentes.filter((c:any)=>!jaLocal(c.valor)&&!ruasPendentes.some((r:any)=>foldNome(r.valor)===foldNome(c.valor)))
+      .map((c:any)=>({nome:c.valor,origem:"categoria"})),
+  ];
   const escolherLocal=(valor:string,ruaDoItem:string):{localId:string,corredor:string}|null=>{
     let nome="";
     if(valor==="novo"){nome=(prompt("Nome do local (mercado, atacadista, fornecedor):")||"").trim();if(!nome)return null;}
@@ -12580,8 +12592,8 @@ function ListaComprasPanel({db,setDb,isAdmin,onNavigate,onLogout,setState,login,
         <select value={prodForm.localId||""} onChange={e=>{const r=escolherLocal(e.target.value,prodForm.rua||"");if(!r)return;setProdForm(f=>({...f,localId:r.localId,corredor:r.corredor}));}} className="inp" style={{flex:"1 1 110px",marginBottom:0}}>
           <option value="">Onde comprar</option>
           {locaisAtivos(locais).map((l:any)=><option key={l.id} value={l.id}>🏪 {l.nome}</option>)}
-          {ruasLoja.filter(n=>!locais.some((l:any)=>foldNome(l.nome)===foldNome(n))).map(n=><option key={"rua:"+n} value={"rua:"+n}>🏪 {n} — criar local</option>)}
-          <option value="novo">➕ Outro local…</option>
+          {ruasLoja.filter(o=>!locais.some((l:any)=>foldNome(l.nome)===foldNome(o.nome))).map(o=><option key={"rua:"+o.nome} value={"rua:"+o.nome}>🏪 {o.nome} — criar local{o.origem==="categoria"?" (era categoria)":""}</option>)}
+          <option value="novo">➕ Criar novo local…</option>
           {prodForm.localId&&!locais.some((l:any)=>l.id===prodForm.localId)&&<option value={prodForm.localId}>🏪 (local não encontrado)</option>}
         </select>
         {(()=>{const loc=localPorId(locais,prodForm.localId);if(!loc?.corredores?.length)return null;
@@ -12909,8 +12921,8 @@ function ListaComprasPanel({db,setDb,isAdmin,onNavigate,onLogout,setState,login,
             <select value={form.localId||""} onChange={e=>{const r=escolherLocal(e.target.value,form.rua||"");if(!r)return;setF("localId",r.localId);setF("corredor",r.corredor);}} className="inp" style={{marginBottom:0,flex:2}}>
               <option value="">Não definido</option>
               {locaisAtivos(locais).map((l:any)=><option key={l.id} value={l.id}>🏪 {l.nome}</option>)}
-              {ruasLoja.filter(n=>!locais.some((l:any)=>foldNome(l.nome)===foldNome(n))).map(n=><option key={"rua:"+n} value={"rua:"+n}>🏪 {n} — criar local</option>)}
-              <option value="novo">➕ Outro local…</option>
+              {ruasLoja.filter(o=>!locais.some((l:any)=>foldNome(l.nome)===foldNome(o.nome))).map(o=><option key={"rua:"+o.nome} value={"rua:"+o.nome}>🏪 {o.nome} — criar local{o.origem==="categoria"?" (era categoria)":""}</option>)}
+              <option value="novo">➕ Criar novo local…</option>
               {form.localId&&!locais.some((l:any)=>l.id===form.localId)&&<option value={form.localId}>🏪 (local não encontrado)</option>}
             </select>
             {(()=>{const loc=localPorId(locais,form.localId);if(!loc?.corredores?.length)return null;

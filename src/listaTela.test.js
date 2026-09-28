@@ -183,7 +183,7 @@ test('⚠️ a rua que é LOJA aparece em "Onde comprar", e escolher cria o loca
   // Na loja `locaisCompra` estava vazio: a migração exigia ir a Lista → Locais
   // e clicar "criar" em cada loja. Enquanto isso "Assaí" seguia no campo Rua
   // antigo, que o select novo não lê — "a opção de Assaí sumiu" (28/09/2026).
-  const n = (APP.match(/value=\{"rua:"\+n\}/g) || []).length;
+  const n = (APP.match(/value=\{"rua:"\+o\.nome\}/g) || []).length;
   assert.equal(n, 3, 'os três selects (embutido, topo, catálogo) têm que oferecer as ruas-loja: ' + n);
   const ini = APP.indexOf('const criarLocalDaRua=');
   const bloco = APP.slice(ini, APP.indexOf('const escolherLocal=', ini));
@@ -192,4 +192,14 @@ test('⚠️ a rua que é LOJA aparece em "Onde comprar", e escolher cria o loca
   const esc = APP.slice(APP.indexOf('const escolherLocal='), APP.indexOf('const escolherLocal=') + 900);
   assert.ok(esc.includes('classificarRua(ruaDoItem)'), 'o corredor do item ("Rua 12") tem que ir junto para o local escolhido');
   assert.ok(APP.includes('ruasLoja={ruasLoja} escolherLocal={escolherLocal}'), 'a edição embutida não recebe as ruas-loja');
+});
+
+test('⚠️ a CATEGORIA antiga fora da taxonomia também é candidata a local', () => {
+  // Era a outra forma de marcar loja antes de existir Locais. A taxonomia
+  // fechou em 21/09 e "Assaí" sumiu do select de categoria; como não era rua,
+  // não entrava na fila de locais — desaparecia dos dois lugares (28/09/2026).
+  assert.ok(APP.includes('origem:"categoria"'), 'as categorias pendentes não viram candidato a local');
+  assert.ok(APP.includes('(era categoria)'), 'o rótulo tem que dizer de onde o nome veio — "bombom" também vai aparecer');
+  assert.ok(APP.includes('ruaCatMap:db.ruaCatMap||{}'), 'o plano não recebe o ruaCatMap');
+  assert.ok(APP.includes('nenhuma loja nos campos antigos'), 'select vazio tem que explicar por quê');
 });

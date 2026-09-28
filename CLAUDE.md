@@ -2510,6 +2510,14 @@ Hoje a **rua que é loja aparece no "Onde comprar" como "criar local"**, e é a 
 da pessoa que cria o cadastro (nas duas empresas) e liga o item, num gesto — o
 corredor do próprio item ("Rua 12") vai junto para o local. Nada é decidido sozinho:
 "Rua 7" continua não dizendo de qual loja é; quem diz é quem escolhe.
+
+⚠️ **A loja pode estar em TRÊS campos antigos, e o candidato sai dos três:** o `rua`
+dos itens/produtos e `listaRuas`; os **valores** do `ruaCatMap` (categoria → rua da
+tela apagada); e a **categoria antiga** fora da taxonomia — antes de existir Locais,
+"para arquivar por onde se compra só havia criar uma categoria com o nome da loja",
+e quando a taxonomia fechou (21/09) esse nome sumiu do select sem entrar na fila de
+locais. No select ele vem rotulado "(era categoria)": "bombom" também aparece, e é a
+pessoa quem sabe que não é loja. Select sem local e sem candidato **diz por quê**.
 `listaTela.test.js` trava os quatro.
 
 ⚠️ **A união roda em TODA fusão (`migrateDb`) e por isso é estável por CONTEÚDO**

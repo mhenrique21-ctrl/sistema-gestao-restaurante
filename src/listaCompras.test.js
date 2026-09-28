@@ -314,3 +314,10 @@ test('a versão mais recente do mesmo id vence', () => {
   assert.equal(r.locais.CONFRARIA[0].nome, 'Assaí');
   assert.deepEqual(r.locais.CONFRARIA[0].corredores, ['12']);
 });
+
+test('o plano lê os VALORES do ruaCatMap como rua', () => {
+  // "bebidas: Assaí" na tela de Ruas apagada: a loja só existia por esse mapa.
+  const p = planoDeMigracao({ listaCompras: [], produtosLista: [], listaRuas: [], listaCategorias: [], ruaCatMap: { bebidas: 'Assaí', hortifruti: 'Rua 7' } });
+  assert.deepEqual(p.locais.map((l) => l.valor), ['Assaí']);
+  assert.deepEqual(p.corredores.map((c) => c.numero), ['7']);
+});
