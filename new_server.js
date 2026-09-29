@@ -1246,6 +1246,39 @@ const _vigia = setInterval(() => {
 }, 250);
 _vigia.unref?.();
 
+// ---- RECORTE DA LISTA DE COMPRAS -----------------------------------------
+// O documento inteiro tem alguns MB e a aba Lista precisa de uma fração dele.
+// Baixar tudo é o que faz o item do outro operador levar ~2 s para aparecer no
+// 4G da loja — o SSE resolveu QUANDO avisar, isto resolve QUANTO baixar.
+//
+// ⚠️ CACHEADO POR mtime, como o `contaDeAcesso`: o parse de alguns MB acontece
+// uma vez por GRAVAÇÃO, não uma vez por pedido. Sem o cache, isto seria
+// exatamente o defeito que a rota `/versao` existe para não cometer.
+//
+// ⚠️ `usuarios` NÃO ESTÁ no recorte, então a senha não passa nem perto daqui
+// (Fase 4). Se algum campo novo entrar nesta lista, confira se ele é público
+// para quem tem sessão — o recorte vai inteiro, sem passar pelo `semSenhas`.
+const CAMPOS_LISTA = [
+  'listaCompras', 'listaDeletedIds', 'listaCategorias', 'listaCatOrdem',
+  'listaCatOrdemV2', 'listaCatOrdemV3', 'listaCatDeleted',
+  'listaAtualId', 'listaAtualAbertaEm',
+  'produtosLista', 'pedidosLista', 'listaRuas', 'ruaCatMap',
+];
+const _cacheLista = new Map();
+
+function recorteDaLista(emp) {
+  const marca = marcaDoArquivo(emp);
+  const cache = _cacheLista.get(emp);
+  if (cache && cache.marca === marca) return cache.texto;
+  let doc = null;
+  try { doc = JSON.parse(fs.readFileSync(path.join(DADOS_DIR, `${emp.toLowerCase()}.json`), 'utf-8')); } catch {}
+  const out = {};
+  if (doc) for (const k of CAMPOS_LISTA) if (doc[k] !== undefined) out[k] = doc[k];
+  const texto = JSON.stringify(out);
+  _cacheLista.set(emp, { marca, texto });
+  return texto;
+}
+
 // ---- HTTP Server ----
 
 // Usuários e carimbo de revogação, lidos dos DOIS arquivos de empresa.
@@ -3492,6 +3525,19 @@ REGRAS:
     res.setHeader('Cache-Control', 'no-store');
     res.writeHead(200);
     res.end(JSON.stringify({ login: ok ? payload : null }));
+    return;
+  }
+
+  // Só os campos da Lista de Compras, para a aba Lista não baixar o documento
+  // inteiro a cada item que alguém insere.
+  if (req.method === 'GET' && /^\/api\/dados\/[^/]+\/lista$/.test(urlPath)) {
+    const emp = (urlPath.split('/')[3] || '').toUpperCase();
+    if (!['CONFRARIA','SEAMA'].includes(emp)) { res.writeHead(400); res.end('null'); return; }
+    if (barrouDados(req, res)) return;
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.writeHead(200);
+    res.end(recorteDaLista(emp));
     return;
   }
 

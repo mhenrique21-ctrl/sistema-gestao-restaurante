@@ -120,3 +120,46 @@ test('o poll continua existindo, de rede de segurança', () => {
   assert.ok(APP.slice(i, i + 900).includes('versaoRef.current[emp]===v'),
     'o aviso parou de comparar com a versão que o poll já conhece');
 });
+
+test('o recorte da Lista NÃO entra cru na fusão', () => {
+  // ⚠️ É A ARMADILHA QUE JÁ MORDEU SEIS VEZES (§3): `mergeFromServer` monta
+  // `next[emp]={...servidor,...campos fundidos}`, com o SERVIDOR de base. Um
+  // documento parcial como base apagaria vendas, compras e folha no primeiro
+  // poll. Deitado sobre o estado local, todo campo fora do recorte funde
+  // local-contra-local e não muda nada.
+  assert.ok(APP.includes('const buscarRecorteDaLista=async(emp:string)=>{'), 'o recorte sumiu do cliente');
+  const i = APP.indexOf('const buscarRecorteDaLista=async');
+  const fn = APP.slice(i, i + 1200);
+  assert.ok(fn.includes('mergeFromServer(prev,{[emp]:{...prev[emp],...parcial}})'),
+    'o recorte deixou de entrar deitado sobre o estado local — ou ganhou uma segunda fusão');
+  // ⚠️ Uma segunda fusão só para a Lista divergiria da primeira no dia em que
+  // uma mudasse: "na aba Lista atualiza certo, no resto do app não".
+  assert.ok(!/fundirLista|mergeLista\(/.test(fn), 'apareceu uma fusão própria para o recorte');
+  // ⚠️ Quem carimba "já vi esta versão" é o ciclo do documento inteiro. Marcando
+  // no recorte, uma venda do PDV seria dada como vista sem ser baixada.
+  assert.ok(!fn.includes('versaoRef'), 'o recorte passou a carimbar a versão do documento inteiro');
+});
+
+test('o recorte não leva usuários — logo, não leva senha', () => {
+  // A Fase 4 tirou a senha do documento que vai ao navegador pelo
+  // `semUsuariosComSenha`. O recorte não passa por ele: ele vai inteiro. A
+  // proteção aqui é a lista de campos não incluir `usuarios`.
+  const i = SRV.indexOf('const CAMPOS_LISTA = [');
+  assert.ok(i > 0, 'a lista de campos do recorte sumiu');
+  const campos = SRV.slice(i, SRV.indexOf('];', i));
+  assert.ok(!campos.includes('usuarios'), 'usuarios entrou no recorte, e com ele a senha em hash');
+  for (const c of ['listaCompras', 'produtosLista', 'listaDeletedIds', 'listaAtualId']) {
+    assert.ok(campos.includes(`'${c}'`), `${c} saiu do recorte`);
+  }
+});
+
+test('o recorte é cacheado por mtime, não relido a cada pedido', () => {
+  // ⚠️ Sem o cache, o parse de alguns MB aconteceria a cada pedido — é
+  // exatamente o defeito que a rota `/versao` existe para não cometer.
+  const i = SRV.indexOf('function recorteDaLista(emp) {');
+  assert.ok(i > 0, 'recorteDaLista sumiu');
+  const fn = SRV.slice(i, i + 900);
+  assert.ok(fn.includes('if (cache && cache.marca === marca) return cache.texto;'),
+    'o recorte voltou a reler e reparsear o arquivo a cada pedido');
+  assert.ok(fn.includes('marcaDoArquivo(emp)'), 'o recorte deixou de usar a marca do arquivo');
+});

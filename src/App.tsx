@@ -2370,6 +2370,34 @@ export default function App() {
     });
   },[]);
 
+  // Só os campos da Lista, para a aba Lista não esperar o documento inteiro.
+  //
+  // ⚠️ REUSA O `mergeFromServer`, NÃO UMA SEGUNDA FUSÃO. O recorte entra
+  // DEITADO sobre o estado local (`{...prev[emp],...parcial}`): assim todo campo
+  // que não vem nele funde local-contra-local, o que não muda nada, e só os da
+  // Lista fundem contra o servidor — com as regras que já estão lá (o carimbo do
+  // `listaCompras`, a união do `listaDeletedIds`, o `listaCatOrdem` que é do
+  // local, o `abertaEm` estritamente maior).
+  //
+  // ⚠️ E É POR ISSO QUE ELE NÃO PODE IR CRU: `mergeFromServer` monta
+  // `next[emp]={...servidor,...campos fundidos}` (§3, a armadilha que já mordeu
+  // seis vezes). Um documento parcial como base apagaria vendas, compras, folha
+  // — tudo o que não está no recorte — no primeiro poll.
+  //
+  // ⚠️ NÃO mexe na `versaoRef`: quem carimba "já vi esta versão" é o ciclo do
+  // documento inteiro. Marcando aqui, uma mudança fora da Lista (uma venda do
+  // PDV) seria dada como vista sem nunca ter sido baixada.
+  const buscarRecorteDaLista=async(emp:string)=>{
+    try{
+      const r=await fetchSync(`/api/dados/${emp}/lista?_=${Date.now()}`,{},8000);
+      const parcial=await r.json();
+      if(!parcial||typeof parcial!=="object"||Array.isArray(parcial))return;
+      if(syncTimer.current||directSaveRef.current)return;
+      fromPollRef.current=true;
+      setState(prev=>prev[emp]?mergeFromServer(prev,{[emp]:{...prev[emp],...parcial}}):prev);
+    }catch{}
+  };
+
   // Auto-refresh every 10s (keeps shopping list in sync between users)
   useEffect(()=>{
     if(!login)return;
@@ -2397,6 +2425,13 @@ export default function App() {
       }));
       const alvos=mudou.filter(Boolean) as string[];
       if(!alvos.length)return;
+      // ⚠️ NA ABA LISTA, O RECORTE VEM PRIMEIRO — e não espera o documento
+      // inteiro. O SSE resolveu QUANDO avisar (~50 ms); o que sobrou de demora
+      // é o DOWNLOAD de alguns MB, que no 4G da loja é a maior parte dos ~2 s
+      // até o item do outro operador aparecer. O recorte chega em ~100 ms e a
+      // tela já atualiza; o documento inteiro continua vindo atrás, no mesmo
+      // ciclo, porque a aba Lista não é a única coisa que o app mostra.
+      if(tab==="lista")alvos.forEach(emp=>{buscarRecorteDaLista(emp);});
       Promise.all(alvos.map(emp=>
         fetchSync(`/api/dados/${emp}?_=${ts}`).then(r=>r.json()).then(d=>({emp,d})).catch(()=>null)
       )).then(results=>{

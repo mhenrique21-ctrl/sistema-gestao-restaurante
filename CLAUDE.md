@@ -2366,6 +2366,97 @@ A conversão é `materiasPrimas[].unidadesPorEmbalagem`. Sem ela, comparar
 "40 vendidas" com "7 compradas" inventa um rombo — por isso a tela avisa em vez
 de mostrar o número quando a conversão não está configurada.
 
+### Sincronização da Lista: o servidor AVISA (29/09/2026)
+
+O relato é sempre o mesmo — *"o item que eu insiro não aparece para os
+outros"* — e a causa **não era perda de dado**: as fusões estão corretas e o
+`local && !server` do `listaCompras` preserva o item novo. Era a gravação não
+terminar de subir, e o aparelho ficar cego enquanto ela não termina.
+
+#### Inserir um item era TRÊS gravações
+
+`saveItem` chamava `setDbAndSave` (a lista, da empresa ativa) e logo em seguida
+`applyBothProdutos` (o catálogo), que grava nas **duas** empresas por conta
+própria. Cada uma faz o próprio GET → funde → POST do documento **inteiro**.
+
+⚠️ E `applyBothProdutos` **não liga `directSaveRef`**. Duas consequências
+somadas: o poll caía no meio da segunda gravação, e o aparelho — que fica até
+**5 s** sem poder buscar enquanto um save direto roda — também parava de
+**RECEBER**. Daí "não atualiza pros outros" ser, na prática, *"não termina de
+subir, e enquanto não termina eu também não vejo ninguém"*.
+
+`setDbAndSave(fn, fnAmbas)` resolve numa volta: o segundo updater vale para as
+duas empresas (é por onde `produtosLista` passa, §1), a empresa **ativa** sai num
+POST só com as duas mudanças juntas, e a outra só entra quando o catálogo
+realmente mudou — **em série**, porque as duas fundem sobre o mesmo `state`.
+
+⚠️ **O id do produto novo nasce FORA do updater.** `fnAmbas` roda uma vez POR
+EMPRESA, então `uid()` dentro dele dava um id **diferente** para o mesmo produto
+em cada arquivo: dois cadastros do mesmo item, cada um plausível, que só a fusão
+por nome disfarçava. Defeito que já existia no caminho antigo.
+
+#### O aviso vem do servidor, por SSE
+
+`GET /api/eventos` (`text/event-stream`). Medido com o servidor no ar: o aviso
+chega em ~250 ms da gravação, e o recorte já sai com o item novo.
+
+⚠️ **O AVISO NASCE DE UM LUGAR SÓ: o disco.** O servidor olha mtime+tamanho dos
+dois arquivos a cada 250 ms. Chamar `avisarMudanca()` em cada rota que grava é a
+receita de "cinco cópias da mesma regra, e uma fica para trás" — além do POST de
+dados gravam o `/api/venda-pdv` e a migração de senha da subida. Vigiando o
+disco, **qualquer** escritor entra, inclusive um futuro. E o vigia desiste quando
+ninguém escuta: em repouso nem `statSync`.
+
+⚠️ **O POLL NÃO FOI REMOVIDO**, virou rede de segurança. O SSE depende de uma
+conexão aberta atravessar proxy, operadora e o Wi-Fi da loja — e quando ela cai o
+silêncio é **idêntico** a "nada mudou". Afrouxa (5 s / 15 s) com o SSE de pé e
+volta ao ritmo apertado (800 ms / 3 s) quando não está.
+
+⚠️ `EventSource`, não WebSocket: HTTP puro, sem dependência nem upgrade de
+protocolo no Nginx, e **reconecta sozinho** — o que importa num celular que troca
+de Wi-Fi para 4G no meio do serviço.
+
+⚠️ **`X-Accel-Buffering: no` na resposta**, mais `proxy_buffering off` no Nginx.
+Sem isso o Nginx segura o fluxo no buffer e nada chega até a conexão fechar: o
+sintoma é *"o SSE não funciona em produção e funciona local"*. O cabeçalho é a
+metade que não depende de ninguém lembrar de mexer na configuração.
+
+⚠️ Batimento de **25 s** (`: ping`, comentário que o `EventSource` ignora),
+abaixo do timeout padrão de 60 s do Nginx: proxy e operadora fecham conexão
+parada.
+
+⚠️ O aviso compara com a **mesma `versaoRef`** do poll. Duas contas do "já vi
+esta versão" fariam o aparelho baixar o documento a cada aviso — inclusive o
+aviso da gravação dele mesmo.
+
+#### O recorte da Lista — `GET /api/dados/<emp>/lista`
+
+O SSE resolveu **quando** avisar; isto resolve **quanto** baixar. Medido:
+**1,75 MB → 68 KB**, 26× menor.
+
+⚠️ **O RECORTE NÃO ENTRA CRU NA FUSÃO.** `mergeFromServer` monta
+`next[emp]={...servidor, ...campos fundidos}` (§3): um documento parcial como
+base apagaria vendas, compras e folha no primeiro poll. Ele entra **deitado sobre
+o estado local** (`{...prev[emp], ...parcial}`), e aí todo campo fora do recorte
+funde local-contra-local — não muda nada — enquanto os da Lista fundem contra o
+servidor com as regras que já estão lá. **Não existe uma segunda fusão**, que
+divergiria no dia em que uma mudasse.
+
+⚠️ **O recorte NÃO carimba a `versaoRef`.** Quem carimba "já vi esta versão" é o
+ciclo do documento inteiro; marcando aqui, uma venda do PDV seria dada como vista
+sem nunca ter sido baixada. Por isso o documento inteiro continua vindo atrás, no
+mesmo ciclo: o recorte compra **latência**, não bytes.
+
+⚠️ **`usuarios` NÃO está em `CAMPOS_LISTA`** — o recorte não passa pelo
+`semUsuariosComSenha`, vai inteiro. Campo novo nessa lista precisa ser conferido.
+
+⚠️ Cacheado por **mtime**, como o `contaDeAcesso`: o parse acontece uma vez por
+gravação, não por pedido. Sem o cache seria exatamente o defeito que a rota
+`/versao` existe para não cometer.
+
+`src/listaSync.test.js` lê o `App.tsx` e o `new_server.js` e trava as dez
+decisões acima.
+
 ### Lista de Compras — blindagem
 
 Fusão própria em `mergeListaCompras.js` (servidor) e bloco dedicado no
@@ -2980,5 +3071,26 @@ cd /var/www/sistema-gestao-restaurante && git pull origin <branch> && pm2 restar
 # PDV Seama
 cd /var/www/sistema-gestao-restaurante && git pull origin <branch> && pm2 restart seama-backend
 ```
+
+⚠️ **O SSE exige um ajuste no Nginx, uma vez só** (29/09/2026). Sem ele o
+aviso de mudança fica preso no buffer e nada chega até a conexão fechar — o app
+não quebra (o poll é a rede de segurança), só não fica instantâneo. No bloco de
+`gestao.confrariacafe.com`:
+
+```nginx
+location /api/eventos {
+    proxy_pass http://127.0.0.1:3000;
+    proxy_http_version 1.1;
+    proxy_set_header Connection '';
+    proxy_buffering off;
+    proxy_cache off;
+    proxy_read_timeout 1h;
+}
+```
+
+Depois: `nginx -t && systemctl reload nginx`. O `X-Accel-Buffering: no` que o
+servidor manda cobre a maior parte dos casos sozinho; o bloco acima é o que
+garante o `proxy_read_timeout`, senão a conexão cai a cada 60 s e o navegador
+reconecta sem parar.
 
 VPS Hostinger. Nginx com um bloco por subdomínio, todos com certbot.
