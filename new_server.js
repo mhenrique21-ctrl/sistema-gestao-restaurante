@@ -1202,6 +1202,50 @@ function iaComplete({ system, userText, maxTokens = 2048 }) {
   });
 }
 
+// ---- AVISO DE MUDANÇA (SSE) ----------------------------------------------
+// Antes, cada aparelho perguntava "mudou?" de 800 ms em 800 ms, para sempre,
+// mesmo com a loja parada. Agora o servidor AVISA, e o poll fica só de rede de
+// segurança (ver o comentário no App.tsx).
+//
+// ⚠️ O AVISO NASCE DE UM LUGAR SÓ: o servidor olha o mtime+tamanho dos dois
+// arquivos. A alternativa — chamar `avisar()` em cada rota que grava — é a
+// receita de "cinco cópias da mesma regra, e uma fica para trás": além do POST
+// de dados gravam o `/api/venda-pdv`, a migração de senha na subida, e o que
+// vier depois. Vigiando o disco, QUALQUER escritor entra, inclusive um futuro.
+//
+// ⚠️ `statSync` de dois arquivos a cada 250 ms é o mesmo custo que o gate de
+// sessão já paga em TODA chamada de `/api/dados/*` — ~40 bytes, sem ler os 3 MB.
+const sseClientes = new Set();
+const _marcaSse = new Map();
+
+function marcaDoArquivo(emp) {
+  try {
+    const st = fs.statSync(path.join(DADOS_DIR, `${emp.toLowerCase()}.json`));
+    return `${st.mtimeMs}-${st.size}`;
+  } catch { return '0-0'; }
+}
+
+function avisarMudanca(emp, v) {
+  // ⚠️ `event:` nomeado, não a mensagem padrão: assim o cliente escuta só o que
+  // entende, e um aviso novo amanhã não cai no mesmo handler.
+  const linha = `event: dados\ndata: ${JSON.stringify({ emp, v })}\n\n`;
+  for (const res of [...sseClientes]) {
+    try { res.write(linha); } catch { sseClientes.delete(res); }
+  }
+}
+
+for (const emp of ['CONFRARIA', 'SEAMA']) _marcaSse.set(emp, marcaDoArquivo(emp));
+const _vigia = setInterval(() => {
+  if (!sseClientes.size) return;   // ninguém escutando: nem statSync
+  for (const emp of ['CONFRARIA', 'SEAMA']) {
+    const v = marcaDoArquivo(emp);
+    if (_marcaSse.get(emp) === v) continue;
+    _marcaSse.set(emp, v);
+    avisarMudanca(emp, v);
+  }
+}, 250);
+_vigia.unref?.();
+
 // ---- HTTP Server ----
 
 // Usuários e carimbo de revogação, lidos dos DOIS arquivos de empresa.
@@ -3448,6 +3492,41 @@ REGRAS:
     res.setHeader('Cache-Control', 'no-store');
     res.writeHead(200);
     res.end(JSON.stringify({ login: ok ? payload : null }));
+    return;
+  }
+
+  // Aviso de mudança, por SSE. O cliente abre isto uma vez e fica ouvindo; o
+  // poll continua rodando devagar por baixo, de rede de segurança.
+  if (req.method === 'GET' && urlPath === '/api/eventos') {
+    // ⚠️ MESMO PORTÃO DAS ROTAS DE DADOS. O aviso diz quando a empresa mudou —
+    // é pouco, mas é informação, e é a mesma regra do `/versao`. `EventSource`
+    // não manda cabeçalho, mas manda o COOKIE (mesma origem), que é o que a
+    // sessão usa.
+    if (barrouDados(req, res)) return;
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-store, no-cache, must-revalidate',
+      Connection: 'keep-alive',
+      // ⚠️ Sem isto o Nginx SEGURA o fluxo no buffer e nada chega até a conexão
+      // fechar — o sintoma é "o SSE não funciona em produção e funciona local".
+      // O `proxy_buffering off` no Nginx é a outra metade; este cabeçalho é a
+      // que não depende de ninguém lembrar de mexer na configuração.
+      'X-Accel-Buffering': 'no',
+    });
+    // Manda a marca atual na conexão: quem acabou de abrir (ou reconectar
+    // depois de um túnel caindo) descobre na hora que perdeu alguma coisa, em
+    // vez de esperar a próxima gravação.
+    for (const emp of ['CONFRARIA', 'SEAMA']) {
+      res.write(`event: dados\ndata: ${JSON.stringify({ emp, v: marcaDoArquivo(emp) })}\n\n`);
+    }
+    sseClientes.add(res);
+    // ⚠️ O batimento existe porque proxy e operadora fecham conexão parada. Dois
+    // pontos: o comentário `:` é ignorado pelo EventSource, e 25 s fica abaixo
+    // do timeout padrão de 60 s do Nginx.
+    const bat = setInterval(() => { try { res.write(': ping\n\n'); } catch {} }, 25000);
+    const encerrar = () => { clearInterval(bat); sseClientes.delete(res); };
+    req.on('close', encerrar);
+    req.on('error', encerrar);
     return;
   }
 

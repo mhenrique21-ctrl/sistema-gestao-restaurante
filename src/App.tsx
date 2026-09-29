@@ -2350,6 +2350,10 @@ export default function App() {
   // Última versão vista de cada empresa (data+tamanho do arquivo no servidor).
   // É o que permite ao polling decidir se precisa baixar o documento.
   const versaoRef = useRef<Record<string,string>>({});
+  // O SSE está de pé? É o que decide se o poll corre apertado (rede de
+  // segurança única) ou folgado (o aviso chega antes). Ref e não state: mudar
+  // isto não precisa repintar nada, e num state recriaria o efeito do poll.
+  const sseVivoRef = useRef(false);
   // Sempre aponta pro setDbAndSave mais atual (reatribuído a cada render, ver
   // abaixo) — permite reenviar um salvamento interrompido a partir de um
   // useEffect com dependências que não recriam a cada render (ver onVisible).
@@ -2403,10 +2407,49 @@ export default function App() {
       });
     };
     poll();
-    // 800ms agora que o ciclo custa ~40 bytes por empresa em vez de 4 MB. Os
-    // 300ms de antes nem chegavam a acontecer: cada volta levava ~2s.
-    const interval=(tab==="lista"||tab==="producao")?800:3000;
+    // ⚠️ O POLL FICOU DE REDE DE SEGURANÇA, e não foi removido. Quem avisa na
+    // hora agora é o SSE (abaixo) — mas ele depende de uma conexão aberta
+    // atravessar proxy, operadora e Wi-Fi da loja, e quando ela cai o silêncio é
+    // idêntico a "nada mudou". Sem o poll por baixo, a lista congelaria sem nada
+    // denunciando: é o mesmo cuidado do repasse da impressora, que avisa em vez
+    // de interromper.
+    //
+    // O intervalo é folgado porque o caso normal é o SSE chegar primeiro; ele
+    // aperta sozinho se a conexão do SSE não estiver de pé.
+    const interval=sseVivoRef.current
+      ?((tab==="lista"||tab==="producao")?5000:15000)
+      :((tab==="lista"||tab==="producao")?800:3000);
     const t=setInterval(poll,interval);
+
+    // ---- O servidor avisa, em vez de todo aparelho perguntar ----------------
+    // Antes: 1 pergunta por empresa a cada 800 ms, em cada aparelho, para
+    // sempre, mesmo com a loja parada. Agora o item do outro operador chega em
+    // ~50 ms, e o tráfego em repouso é ZERO.
+    //
+    // ⚠️ `EventSource` e não WebSocket: é HTTP puro (sem dependência nova, sem
+    // upgrade de protocolo no Nginx) e RECONECTA sozinho, que é o que importa
+    // num celular que troca de Wi-Fi para 4G no meio do serviço.
+    let es:EventSource|null=null;
+    try{
+      es=new EventSource("/api/eventos");
+      es.addEventListener("open",()=>{sseVivoRef.current=true;});
+      es.addEventListener("dados",(ev:any)=>{
+        try{
+          const {emp,v}=JSON.parse(ev.data||"{}");
+          if(!emp||!emps.includes(emp))return;
+          // ⚠️ Compara com a MESMA `versaoRef` do poll. Duas contas do "já vi
+          // esta versão" divergiriam, e o aparelho baixaria 3 MB a cada aviso —
+          // inclusive o aviso da própria gravação dele.
+          if(v&&versaoRef.current[emp]===v)return;
+          poll();
+        }catch{}
+      });
+      es.addEventListener("error",()=>{
+        // Não fecha nem avisa: o EventSource tenta de novo por conta própria, e
+        // o poll (que volta ao ritmo apertado) cobre o intervalo.
+        sseVivoRef.current=false;
+      });
+    }catch{sseVivoRef.current=false;}
     // No mobile (PWA instalado), o navegador pausa os timers quando o app vai
     // pra segundo plano (tela bloqueia, troca de app). Sem isso, ao voltar o
     // usuário via dados desatualizados até o próximo ciclo do polling cair —
@@ -2433,6 +2476,9 @@ export default function App() {
     window.addEventListener("focus",onVisible);
     return()=>{
       clearInterval(t);
+      // Sem fechar, trocar de aba abriria uma conexão nova a cada render do
+      // efeito e o servidor acumularia clientes mortos até o timeout.
+      es?.close();
       document.removeEventListener("visibilitychange",onVisible);
       window.removeEventListener("focus",onVisible);
     };

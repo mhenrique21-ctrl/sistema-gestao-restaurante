@@ -72,3 +72,51 @@ test('toda escrita da lista persiste — nunca setDb puro', () => {
       `${fn} voltou a gravar com setDb puro`);
   }
 });
+
+const SRV = fs.readFileSync(
+  path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'new_server.js'), 'utf8');
+
+test('o aviso de mudança nasce de UM lugar: o disco', () => {
+  // ⚠️ Chamar `avisarMudanca()` em cada rota que grava é a receita de "cinco
+  // cópias da mesma regra, e uma fica para trás": além do POST de dados gravam
+  // o `/api/venda-pdv`, a migração de senha na subida, e o que vier depois.
+  // Vigiando mtime+tamanho, QUALQUER escritor entra — inclusive um futuro.
+  assert.ok(SRV.includes('const sseClientes = new Set();'), 'a lista de ouvintes sumiu');
+  assert.ok(/const _vigia = setInterval\(/.test(SRV), 'o vigia do disco sumiu');
+  assert.ok(SRV.includes('if (!sseClientes.size) return;'),
+    'o vigia parou de desistir quando ninguém escuta — statSync a cada 250ms por nada');
+  // Uma chamada só de avisarMudanca: a do vigia.
+  assert.equal((SRV.match(/avisarMudanca\(/g) || []).length, 2,
+    'apareceu um segundo ponto que avisa mudança — é por aí que uma rota fica para trás');
+});
+
+test('a rota do SSE passa pelo MESMO portão das rotas de dados', () => {
+  const i = SRV.indexOf("urlPath === '/api/eventos'");
+  assert.ok(i > 0, 'a rota do SSE sumiu');
+  const rota = SRV.slice(i, i + 2200);
+  assert.ok(rota.includes('if (barrouDados(req, res)) return;'),
+    'o SSE ficou aberto sem sessão — o aviso diz quando a empresa mudou, e isso é informação');
+  assert.ok(rota.includes("'text/event-stream'"), 'o content-type saiu');
+  // ⚠️ Sem isto o Nginx segura o fluxo no buffer e nada chega até a conexão
+  // fechar: "o SSE não funciona em produção e funciona local".
+  assert.ok(rota.includes("'X-Accel-Buffering': 'no'"), 'o anti-buffer do Nginx saiu');
+  // ⚠️ Proxy e operadora fecham conexão parada.
+  assert.ok(/setInterval\(\(\) => \{ try \{ res\.write\(': ping/.test(rota), 'o batimento sumiu');
+  assert.ok(rota.includes("req.on('close', encerrar)"), 'o cliente morto deixou de ser removido');
+});
+
+test('o poll continua existindo, de rede de segurança', () => {
+  // ⚠️ O SSE depende de uma conexão aberta atravessar proxy, operadora e o
+  // Wi-Fi da loja — e quando ela cai o silêncio é IDÊNTICO a "nada mudou".
+  // Sem o poll por baixo, a lista congelaria sem nada denunciando.
+  assert.ok(APP.includes('const t=setInterval(poll,interval);'), 'o poll foi removido');
+  assert.ok(APP.includes('sseVivoRef.current\n      ?((tab==="lista"||tab==="producao")?5000:15000)'),
+    'o poll parou de afrouxar/apertar conforme o SSE estar de pé');
+  assert.ok(APP.includes('es?.close();'), 'o EventSource deixou de ser fechado na limpeza do efeito');
+  // ⚠️ A MESMA versaoRef do poll: duas contas do "já vi esta versão" fariam o
+  // aparelho baixar 3 MB a cada aviso, inclusive o da gravação dele mesmo.
+  const i = APP.indexOf('es.addEventListener("dados"');
+  assert.ok(i > 0, 'o ouvinte do aviso sumiu');
+  assert.ok(APP.slice(i, i + 900).includes('versaoRef.current[emp]===v'),
+    'o aviso parou de comparar com a versão que o poll já conhece');
+});
