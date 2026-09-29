@@ -2555,14 +2555,41 @@ export default function App() {
     }catch{return null;}
   };
 
-  const setDbAndSave=(fn:(d:any)=>any)=>{
+  // O segundo updater, `fnAmbas`, vale para as DUAS empresas — é por onde
+  // `produtosLista` passa, o único campo compartilhado entre elas (§1).
+  //
+  // ⚠️ ELE EXISTE PARA QUE SEJA UMA GRAVAÇÃO, NÃO TRÊS. Antes a tela chamava
+  // `setDbAndSave` (a lista, da empresa ativa) e logo em seguida
+  // `applyBothProdutos` (o catálogo, nas duas), cada uma com o próprio
+  // GET → funde → POST do documento INTEIRO: três ida-e-volta de alguns MB por
+  // item digitado, no 4G da loja. E a segunda não ligava `directSaveRef`, então
+  // o poll caía no meio dela — e o aparelho, que ficava até 5 s sem poder
+  // buscar, também parava de RECEBER o que os outros faziam. O sintoma é "o
+  // item não atualiza para os demais", que na verdade era "não termina de
+  // subir, e enquanto não termina eu também não vejo ninguém".
+  //
+  // ⚠️ A EMPRESA ATIVA SAI NUM POST SÓ, com as duas mudanças juntas. A outra só
+  // entra quando o catálogo REALMENTE mudou — comparação por referência do
+  // `produtosLista`, que é o que o updater devolve novo quando mexe nele.
+  const setDbAndSave=(fn:(d:any)=>any,fnAmbas?:(d:any)=>any)=>{
     directSaveRef.current=true;
     const safety=setTimeout(()=>{directSaveRef.current=false;directSaveEndRef.current=Date.now();},5000);
+    const outras:string[]=[];
     // 1) Aplica a mudanca local JA (feedback instantaneo na tela — ex: item some
     //    da lista assim que arrasta, sem esperar ida-e-volta com o servidor).
     flushSync(()=>{
       setState(prev=>{
-        const next={...prev,[empresa]:fn(prev[empresa])};
+        const next={...prev};
+        if(fnAmbas){
+          Object.keys(next).forEach(e=>{
+            if(next[e]&&typeof next[e]==="object"&&"produtosLista"in next[e]){
+              const antes=next[e].produtosLista;
+              next[e]=fnAmbas(next[e]);
+              if(next[e].produtosLista!==antes&&e!==empresa)outras.push(e);
+            }
+          });
+        }
+        next[empresa]=fn(next[empresa]);
         saveSeqRef.current++;
         clearTimeout(syncTimer.current);
         syncTimer.current=null;
@@ -2573,18 +2600,27 @@ export default function App() {
     // 2) Em seguida, funde com o que ha de mais recente no servidor (preserva a
     //    mudanca que acabou de aplicar) e so entao salva — sem travar a UI.
     (async()=>{
-      const merged=await mergeWithServerBeforePost(empresa);
-      let bodyToSave="";
-      flushSync(()=>{
-        setState(prev=>{
-          bodyToSave=JSON.stringify(withDeletedIds(merged??prev[empresa]));
-          return prev;
+      const postar=async(emp:string)=>{
+        const merged=await mergeWithServerBeforePost(emp);
+        let body="";
+        flushSync(()=>{
+          setState(prev=>{
+            body=JSON.stringify(withDeletedIds(merged??prev[emp]));
+            return prev;
+          });
         });
-      });
-      fetchSync(`/api/dados/${empresa}`,{method:"POST",headers:{"Content-Type":"application/json"},body:bodyToSave})
-        .then(r=>{if(!r.ok)throw new Error(r.status+"");setSyncStatus("ok");})
-        .catch(()=>setSyncStatus("erro"))
-        .finally(()=>{clearTimeout(safety);directSaveRef.current=false;directSaveEndRef.current=Date.now();});
+        const r=await fetchSync(`/api/dados/${emp}`,{method:"POST",headers:{"Content-Type":"application/json"},body});
+        if(!r.ok)throw new Error(r.status+"");
+      };
+      try{
+        await postar(empresa);
+        // ⚠️ EM SÉRIE, não em paralelo: as duas fundem sobre o MESMO `state`, e
+        // `applyBothProdutos` disparava as duas ao mesmo tempo — a segunda podia
+        // ler o estado antes da primeira terminar de fundir.
+        for(const emp of outras)await postar(emp);
+        setSyncStatus("ok");
+      }catch{setSyncStatus("erro");}
+      finally{clearTimeout(safety);directSaveRef.current=false;directSaveEndRef.current=Date.now();}
     })();
   };
   flushRef.current=setDbAndSave;
@@ -10776,7 +10812,7 @@ function ConciliarPanel({item,prodsCatalog,materiasPrimas,concBusca,setConcBusca
   </div>;
 }
 
-function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSave,pendingSub,setPendingSub}:{db:any,setDb:any,isAdmin?:boolean,onNavigate?:(tab:string)=>void,onLogout?:()=>void,setState?:any,login?:any,setDbAndSave?:(fn:(d:any)=>any)=>void,pendingSub?:string|null,setPendingSub?:(v:string|null)=>void}){
+function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSave,pendingSub,setPendingSub}:{db:any,setDb:any,isAdmin?:boolean,onNavigate?:(tab:string)=>void,onLogout?:()=>void,setState?:any,login?:any,setDbAndSave?:(fn:(d:any)=>any,fnAmbas?:(d:any)=>any)=>void,pendingSub?:string|null,setPendingSub?:(v:string|null)=>void}){
   const setBothDb=setDb;
   const [subTab,setSubTab]=useState(pendingSub||"nova");
   useEffect(()=>{if(pendingSub){setSubTab(pendingSub);setPendingSub?.(null);}},[pendingSub]);
@@ -10958,6 +10994,18 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
 
   const setF=(k:string,v:any)=>setForm(f=>({...f,[k]:v}));
 
+  // ⚠️ UMA GRAVAÇÃO, NÃO TRÊS. A lista é da empresa ativa e o catálogo é
+  // compartilhado, então antes eram duas chamadas seguidas — `setDbAndSave` e
+  // `applyBothProd` — e a segunda gravava nas DUAS empresas por conta própria:
+  // três GET + três POST do documento inteiro por item digitado. O segundo
+  // parâmetro de `setDbAndSave` resolve isso numa volta só (ver o comentário
+  // dele). Sem o prop, cai no caminho antigo em vez de perder o catálogo calado.
+  const salvarListaECatalogo=(fnLista:(d:any)=>any,fnCat?:((d:any)=>any)|null)=>{
+    if(setDbAndSave){setDbAndSave(fnLista,fnCat||undefined);return;}
+    setDb(fnLista);
+    if(fnCat)applyBothProd(fnCat);
+  };
+
   const saveItem=()=>{
     if(!form.nome.trim())return;
     if(!isAdmin){
@@ -10966,20 +11014,32 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       if(!existeNoCatalogo)return alert("Produto não cadastrado. Selecione um produto do catálogo.");
     }
 
+    const nome=form.nome.trim();
+    const nl=nome.toLowerCase();
+    const tsCat=new Date().toISOString();
+    // ⚠️ O id NASCE AQUI, FORA do updater. `fnAmbas` roda uma vez POR EMPRESA
+    // (como o `applyBothProdutos` sempre rodou), então `uid()` dentro dele daria
+    // um id DIFERENTE para o mesmo produto em cada arquivo — dois cadastros do
+    // mesmo item, cada um plausível, que só a fusão por nome disfarçava.
+    const idNovoProd=uid();
+
     if(editId){
-      const editNome=form.nome.trim();
-      (setDbAndSave||setDb)((d:any)=>({...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===editId?{...i,nome:editNome,quantidade:parseFloat(form.qtd)||1,unidade:form.unidade,categoria:form.cat||i.categoria||"outros",rua:form.rua,estoqueQtd:form.estoqueQtd,estoqueUn:form.estoqueUn||"un",obs:form.obs,urgente:form.urgente,updatedAt:Date.now()}:i)}));
-      if(pendingMpLinks!==null){
-        syncProdByName(editNome,(p:any)=>({...p,mpVinculados:pendingMpLinks,mpVinculadoId:undefined}));
-      }
+      const editNome=nome;
+      const nlEdit=editNome.toLowerCase();
+      const fnLista=(d:any)=>({...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===editId?{...i,nome:editNome,quantidade:parseFloat(form.qtd)||1,unidade:form.unidade,categoria:form.cat||i.categoria||"outros",rua:form.rua,estoqueQtd:form.estoqueQtd,estoqueUn:form.estoqueUn||"un",obs:form.obs,urgente:form.urgente,updatedAt:Date.now()}:i)});
+      // Carimba `atualizadoEm` (§3): sem ele um poll no meio do caminho reverte a
+      // edição para a versão que já estava no servidor.
+      const fnCat=pendingMpLinks!==null
+        ?(d:any)=>({...d,produtosLista:(d.produtosLista||[]).map((p:any)=>p.nome.trim().toLowerCase()===nlEdit
+            ?{...p,mpVinculados:pendingMpLinks,mpVinculadoId:undefined,atualizadoEm:tsCat}:p)})
+        :null;
+      salvarListaECatalogo(fnLista,fnCat);
       setEditId(null);
       setPendingMpLinks(null);
     }else{
-      const nome=form.nome.trim();
       const cat=form.cat||"outros";
       const qtdNova=parseFloat(form.qtd)||1;
       const ruaVal=form.rua||getRuaProd(nome,cat)||getRuaDaCat(cat);
-      const nl=nome.toLowerCase();
       // Só funde com um item do MESMO usuário. Antes fundia por nome apenas, de
       // quem quer que fosse: se a Patricia pedia 2 e o Mario pedia 3, virava uma
       // linha de 5 assinada pela Patricia, e o pedido do Mario desaparecia como
@@ -10990,47 +11050,45 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       const pendenteExistente=pendentes.find((i:any)=>
         i.nome.trim().toLowerCase()===nl &&
         (i.adicionadoPor||"").trim().toLowerCase()===quem);
+      let fnLista:(d:any)=>any;
       if(pendenteExistente){
         const ts=Date.now();
-        (setDbAndSave||setDb)((d:any)=>({...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===pendenteExistente.id?{...i,quantidade:(i.quantidade||0)+qtdNova,updatedAt:ts}:i)}));
+        fnLista=(d:any)=>({...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===pendenteExistente.id?{...i,quantidade:(i.quantidade||0)+qtdNova,updatedAt:ts}:i)});
       }else{
         const maxOrdem=lista.length>0?Math.max(...lista.map((i:any)=>i.ordem||0))+1:0;
         const newItem={id:uid(),listaId:listaAtualId,nome,quantidade:qtdNova,unidade:form.unidade,categoria:cat,rua:ruaVal,estoqueQtd:form.estoqueQtd,estoqueUn:form.estoqueUn||"un",obs:form.obs,urgente:form.urgente,comprado:false,ordem:maxOrdem,adicionadoPor:login?.label||"",criadoEm:new Date().toISOString(),updatedAt:Date.now()};
-        (setDbAndSave||setDb)((d:any)=>({...d,listaCompras:[...(d.listaCompras||[]).filter((i:any)=>i.id!==newItem.id),newItem]}));
+        fnLista=(d:any)=>({...d,listaCompras:[...(d.listaCompras||[]).filter((i:any)=>i.id!==newItem.id),newItem]});
       }
-      if(pendingMpLinks!==null){
-        const prodExiste=(db.produtosLista||[]).some((p:any)=>p.nome.toLowerCase()===nl);
-        if(prodExiste){
-          // Grava a rua junto do vínculo — ver o comentário do bloco abaixo.
-          syncProdByName(nome,(p:any)=>({...p,mpVinculados:pendingMpLinks,mpVinculadoId:undefined,...(ruaVal?{rua:ruaVal}:{})}));
-        }else{
-          applyBothProd((d:any)=>{
-            if((d.produtosLista||[]).some((p:any)=>p.nome.toLowerCase()===nl))return d;
-            return{...d,produtosLista:[...(d.produtosLista||[]),{id:uid(),nome,cat,unidade:form.unidade,rua:ruaVal,...(pendingMpLinks?.length?{mpVinculados:pendingMpLinks}:{}),criadoEm:new Date().toISOString(),atualizadoEm:new Date().toISOString()}]};
-          });
+      // O catálogo, numa função só — antes eram três ramos, cada um chamando a
+      // própria gravação. A comparação do nome vai TRIMADA nos dois lados (era o
+      // que `syncProdByName` já fazia): sem isso um produto gravado com espaço
+      // sobrando no fim virava um segundo cadastro.
+      const fnCat=(d:any)=>{
+        const achar=(p:any)=>p.nome.trim().toLowerCase()===nl;
+        const existe=(d.produtosLista||[]).some(achar);
+        if(pendingMpLinks!==null){
+          if(existe)return{...d,produtosLista:(d.produtosLista||[]).map((p:any)=>achar(p)
+            ?{...p,mpVinculados:pendingMpLinks,mpVinculadoId:undefined,...(ruaVal?{rua:ruaVal}:{}),atualizadoEm:tsCat}:p)};
+          return{...d,produtosLista:[...(d.produtosLista||[]),{id:idNovoProd,nome,cat,unidade:form.unidade,rua:ruaVal,...(pendingMpLinks?.length?{mpVinculados:pendingMpLinks}:{}),criadoEm:tsCat,atualizadoEm:tsCat}]};
         }
-      }else{
-        applyBothProd((d:any)=>{
-          // Produto já no catálogo: antes saía com `return d` e a rua escolhida
-          // aqui MORRIA. Ela ficava só no item desta lista, enquanto o catálogo
-          // — que é quem alimenta as próximas listas, via getRuaProd —
-          // continuava sem rua. Sintoma: "defino a rua e na lista seguinte o
-          // produto volta sem rua".
-          //
-          // Regravar é inócuo quando o usuário não escolheu nada: ruaVal já é
-          // form.rua || rua do próprio catálogo || rua da categoria. Por isso
-          // só grava quando há valor E ele muda — assim não carimba
-          // atualizadoEm à toa em todo salvamento de lista.
-          if((d.produtosLista||[]).some((p:any)=>p.nome.toLowerCase()===nl)){
-            if(!ruaVal)return d;
-            const precisa=(d.produtosLista||[]).some((p:any)=>p.nome.toLowerCase()===nl&&(p.rua||"")!==ruaVal);
-            if(!precisa)return d;
-            return{...d,produtosLista:(d.produtosLista||[]).map((p:any)=>
-              p.nome.toLowerCase()===nl?{...p,rua:ruaVal,atualizadoEm:new Date().toISOString()}:p)};
-          }
-          return{...d,produtosLista:[...(d.produtosLista||[]),{id:uid(),nome,cat,unidade:form.unidade,rua:ruaVal,criadoEm:new Date().toISOString(),atualizadoEm:new Date().toISOString()}]};
-        });
-      }
+        // Produto já no catálogo: antes saía com `return d` e a rua escolhida
+        // aqui MORRIA. Ela ficava só no item desta lista, enquanto o catálogo
+        // — que é quem alimenta as próximas listas, via getRuaProd —
+        // continuava sem rua. Sintoma: "defino a rua e na lista seguinte o
+        // produto volta sem rua".
+        //
+        // Regravar é inócuo quando o usuário não escolheu nada: ruaVal já é
+        // form.rua || rua do próprio catálogo || rua da categoria. Por isso
+        // só grava quando há valor E ele muda — assim não carimba
+        // atualizadoEm à toa em todo salvamento de lista.
+        if(existe){
+          if(!ruaVal)return d;
+          if(!(d.produtosLista||[]).some((p:any)=>achar(p)&&(p.rua||"")!==ruaVal))return d;
+          return{...d,produtosLista:(d.produtosLista||[]).map((p:any)=>achar(p)?{...p,rua:ruaVal,atualizadoEm:tsCat}:p)};
+        }
+        return{...d,produtosLista:[...(d.produtosLista||[]),{id:idNovoProd,nome,cat,unidade:form.unidade,rua:ruaVal,criadoEm:tsCat,atualizadoEm:tsCat}]};
+      };
+      salvarListaECatalogo(fnLista,fnCat);
     }
     setForm(EMPTY_FORM_LISTA);
     setPendingMpLinks(null);
