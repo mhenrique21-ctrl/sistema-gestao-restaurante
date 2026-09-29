@@ -18,8 +18,6 @@ justamente por isso.
 | Empresas são `"confraria"` / `"seama"` | São **`"CONFRARIA"`** e **`"SEAMA"`**, maiúsculas |
 | Dados nunca são compartilhados entre empresas | **`produtosLista` é compartilhado de propósito** (ver `applyBothProdutos`) |
 | "Vendas Extras" é uma modalidade à parte do Delivery | **São o MESMO campo** — `vendas[].delivery`. `legVendasExtras` era só o rótulo dele |
-| O campo "Rua" da Lista é o corredor do mercado | Era **duas coisas no mesmo campo**: corredor (`"Rua 7"`) e loja inteira (`"Santa Lucia"`). Virou `localId` + `corredor` |
-| Categoria da Lista é livre | **Fechada** (`CATS_LISTA`, 10). Criar categoria na tela era a causa da poluição, não uma conveniência |
 | Existe `db.rh` / `db.financeiro` | Não. Folha vem de **`db.funcionarios`**; financeiro é **`db.contas`** |
 | Categoria tem campo de tipo/módulo | **Não tem campo nenhum.** São strings puras; todo vínculo é estrutura à parte, ligada por nome |
 
@@ -51,7 +49,6 @@ src/relatorioPlataforma.js  o relatório do iFood/99Food vira Vendas (com testes
 src/relatorioPeriodo.js  o período, os canais e as formas de pagamento (com testes)
 src/grupoMarcas.js    várias marcas e embalagens viram um produto só (com testes)
 src/dre.js            as fatias da barra da DRE e o aviso do CMV vazio (com testes)
-src/listaCompras.js   categoria fechada, local de compra e a ponte com Compras (com testes)
 src/fechamentoVendas.js  o fechamento do dia: rótulo, taxa da plataforma, loja
                       fechada e o progresso (com testes)
 src/qualidadeCompras.js  fornecedor duplicado, categoria obrigatória, preço por
@@ -191,20 +188,6 @@ o primeiro save da vida do produto já nasce perdendo. `src/carimbos.test.js` l�
 compartilhado entre as duas empresas (§1) e `applyBothProdutos` é quem salva por conta
 própria. Cinco telas de rua gravavam com `setState` puro — mudança local que dependia do
 auto-save genérico e caía na armadilha nº 0.
-
-⚠️ **E `applyBothProdutos` não pode ser um SEGUNDO escritor.** Ele fazia o próprio
-GET→funde→POST das duas empresas **sem ligar `directSaveRef`**: o poll (800ms na
-Lista) e o auto-save genérico não recuavam, e três atores liam e gravavam o mesmo
-arquivo em janelas de ~100ms — quem gravasse por último com leitura velha apagava a
-edição. E o documento fundido era lido **fora de `flushSync`**: sob batching do React
-o updater roda depois do `if`, e o POST é pulado sem erro nenhum. Sintoma
-(25/09/2026): *"edito o produto sem rua e não salva"* — só nos produtos que o
-`produtosSyncV1` criou com **id diferente em cada empresa** (os sem rua), porque neles
-a edição por nome precisa vencer a disputa nas DUAS gravações; os que o dono já tinha
-tocado tinham o mesmo id dos dois lados e passavam. Hoje o App registra `salvarAmbas`
-em `_salvarAmbasRef` ao montar: **o mesmo protocolo do `setDbAndSave`** (trava +
-`flushSync` + funde antes de gravar), para toda empresa que tem catálogo.
-`carimbos.test.js` reprova quem voltar ao caminho antigo.
 
 ---
 
@@ -763,19 +746,6 @@ Nenhuma dentro da categoria:
 | Vai pro PDV? | `db.config.categoriasParaPdvDesligadas` — **lista de EXCLUSÃO**, nasce ligada |
 | Linha da DRE | `db.mapaCategoriaDre` |
 | Sangria do PDV | `db.categoriaFinanceiroSangria` |
-
-### A Lista tem categoria PRÓPRIA — e agora um campo de LOCAL
-
-⚠️ **A separação do §5 continua valendo** (decisão do dono, 21/09/2026): a
-categoria da Lista organiza o **corredor**, a de Compras mede **CMV**. Unificá-las
-faria a lista de compras ser organizada por conta contábil — é a lição da
-Contagem, que agrupava por categoria contábil e virou "uma rolagem que ninguém
-termina".
-
-⚠️ **O QUE ESTAVA ERRADO NÃO ERA A SEPARAÇÃO, ERA O CAMPO LIVRE.** `db.ruaCatMap`
-DERIVA a rua da categoria: quem precisava marcar *onde compra* um item só tinha
-um caminho — criar uma CATEGORIA com o nome da loja, e a rua vinha junto. Foi
-assim que "queijo minas" e "cia do sorveteiro" viraram categoria. Ver §6, Lista.
 
 ### Comparação de nome
 
@@ -2396,183 +2366,6 @@ A conversão é `materiasPrimas[].unidadesPorEmbalagem`. Sem ela, comparar
 "40 vendidas" com "7 compradas" inventa um rombo — por isso a tela avisa em vez
 de mostrar o número quando a conversão não está configurada.
 
-### Lista → Categoria e Local — `src/listaCompras.js` (com testes)
-
-A Lista misturava **o que o item é** com **onde ele se compra**, e a mistura não
-foi descuido: era o único caminho que a tela oferecia.
-
-| onde | o que guardava |
-|---|---|
-| `listaCompras[].rua` | ora corredor (**"Rua 7"**, que existe no Açaí *e* no Sendas), ora loja inteira (**"Santa Lucia"**) |
-| `db.ruaCatMap` | **categoria → rua**. É ele que fecha o círculo: para marcar onde se compra, criava-se uma categoria com o nome da loja |
-| `produtosLista[].cat` | as 19 operacionais, as criadas à mão (com nome de loja) **e** a categoria CONTÁBIL que `criarItemDaLista` grava desde a Fase 1 de Compras |
-
-#### A taxonomia virou FECHADA, com dez
-
-⚠️ **DEZ, NÃO DEZENOVE.** As antigas se sobrepunham tanto que arquivar virava
-adivinhação: "carnes" e "proteína" são a mesma coisa; "grãos", "farinhas",
-"massas", "molhos", "temperos" e "latas, caixas e temperos" são todas a
-mercearia. Categoria que se sobrepõe não organiza — só multiplica o lugar onde o
-item pode estar, e é parte do motivo de alguém preferir criar uma nova a procurar
-a certa. **A ordem é a do CORREDOR**, não alfabética.
-
-⚠️ **`categoriaFechada` traduz na LEITURA** as 19 antigas E as 8 contábeis —
-nenhum item precisou ser reescrito para aparecer no lugar certo. O que não casa
-devolve **`null`, nunca "Outros"**: chutar esconderia o trabalho, porque o que
-não casa é exatamente o nome de loja e o produto que viraram categoria.
-
-⚠️ **CRIAR CATEGORIA NA TELA DEIXOU DE EXISTIR**, e não é restrição de permissão
-— é a causa removida. `addCat`/`delCat`/`renameCat` foram apagadas. Renomear
-também: renomear categoria quebra vínculo por nome (§5), e com lista fixa não há
-o que renomear. O que sobrou de inválido se resolve em **Lista → Categorias**,
-que **reclassifica os itens** em vez de editar o nome.
-
-#### "Rua 7" é corredor; "Santa Lucia" é loja
-
-⚠️ **O NÚMERO É A ÚNICA PISTA CONFIÁVEL** no dado antigo (`classificarRua`).
-"Supermercado 3 Irmãos" continua sendo loja.
-
-⚠️ **O CORREDOR NÃO SABE DE QUAL LOJA É** — "Rua 7" existe no Açaí e no Sendas.
-Por isso a migração **exige escolher o local à mão**: adivinhar mandaria o item
-para o mercado errado, e a lista sairia impossível de seguir sem ninguém
-entender por quê. `planoDeMigracao` lê e **não decide nada**; categoria fora da
-taxonomia tanto pode ser loja ("cia do sorveteiro") quanto produto ("bombom"), e
-as duas viram pergunta com o motivo escrito (`pareceLocal` quando o mesmo nome
-também é uma rua — a assinatura do problema).
-
-⚠️ **A tela "Ruas" foi APAGADA** junto com as funções dela. Ela cadastrava rua
-por texto livre e mantinha o `ruaCatMap` — o mecanismo inteiro. O `sub:"ruas"`
-saiu do menu junto, senão ficaria bloco pendurado num `sub` que nada seleciona:
-tela em branco sem erro nenhum (a armadilha do `ABA_REL_ANTIGA`).
-
-⚠️ **`db.listaRuas` e `db.ruaCatMap` NÃO foram apagados do banco**: são a fonte
-que a migração lê para propor os locais. Some a tela, fica o dado.
-
-##### Responder a pergunta UMA vez (`migrarCorredoresParaLocal`, com testes)
-
-A migração se recusa a adivinhar de qual loja é "Rua 7" — e está certa. Mas
-quando a pessoa responde ("os corredores são **todos do Assaí**"), resolver item
-por item seria trabalho manual sobre centenas de registros, que é como metade da
-lista fica pela metade. O card **🛤️ Os corredores pertencem a qual local?** em
-Lista → Locais escolhe o local (ou cria) e manda todos de uma vez, cada um com o
-corredor que já estava no campo Rua.
-
-⚠️ **SÓ O QUE É CORREDOR ANDA.** Rua que é nome de loja ("Santa Lucia") fica
-como está — é outra pergunta, e arrastá-la junto mandaria para o Assaí um item
-comprado noutro lugar, que é exatamente o erro que a recusa de adivinhar existe
-para evitar. Item que já tem `localId` também não é tocado: escolha à mão não se
-apaga com um botão.
-
-⚠️ **O `rua` ANTIGO CONTINUA GRAVADO** — é de onde o número veio e é o que
-permite conferir a migração depois. Por isso quem sai da fila do
-`planoDeMigracao` é quem tem **`localId`**, não quem perdeu o `rua`: contando
-pelo campo antigo, a tela diria "corredores para resolver" para sempre, e fila
-que não zera é fila que ninguém lê.
-
-⚠️ **O id do local nasce FORA das duas gravações.** `listaCompras` sai por
-`setDbAndSave` e `produtosLista` por `applyBothProd` (§3, o catálogo é
-compartilhado): gerado dentro de cada uma, os dois lados apontariam para locais
-diferentes. E os números entram no cadastro do local na **primeira** gravação,
-com os do catálogo junto — a segunda não mexe no local, e um corredor que só
-existisse lá ficaria de fora.
-
-⚠️ **A conta é refeita sobre o `d` do save**, nunca sobre o `plano` do render: o
-render serve ao texto da confirmação.
-
-#### Os locais
-
-⚠️ **INATIVAR, NUNCA EXCLUIR.** Item antigo aponta para o local pelo **id**:
-apagando o cadastro, a lista arquivada deixa de dizer onde aquilo foi comprado.
-Por isso `locaisCompra` não precisa de tombstone.
-
-⚠️ **O corredor só aparece quando o local escolhido TEM corredor cadastrado** —
-num mercadinho sem corredor numerado, o campo seria uma pergunta sem resposta. E
-trocar de local **limpa** o corredor, senão ficaria a "Rua 7" de outra loja.
-
-⚠️ `locaisCompra` está nas **duas** fusões (§3).
-
-⚠️ **E é UM cadastro para as duas empresas, como o catálogo.** `produtosLista` é
-compartilhado e guarda `localId`; `locaisCompra` era gravado só na empresa ativa. A
-migração criava "Assaí" onde rodou, o catálogo das duas passava a apontar para esse
-id, e na outra empresa o mesmo produto abria como *"Onde comprar — não definido"*, sem
-"Assaí" na lista — e o Salvar gravava `""` por cima do vínculo. Sintoma (28/09/2026):
-*"ao editar produto sem rua a opção de Assaí não aparece"*. Hoje: união por id na
-carga (**mesmo id**, nunca um novo — cunhar id por empresa foi o erro do
-`produtosSyncV1`), todo escritor de `locaisCompra` sai por `applyBothProd`, o select
-mantém selecionado um `localId` que não resolve, e os TRÊS formulários — catálogo,
-item novo e edição embutida — oferecem o local (dois deles ainda liam `listaRuas`,
-cuja tela foi apagada em 21/09: um local criado depois nunca aparecia neles).
-
-⚠️ **E na loja `locaisCompra` estava VAZIO** — a união não tinha o que unir. A
-migração exigia ir a Lista → Locais e clicar "criar" em cada loja, e ninguém fez;
-"Assaí" e "Casa do Pescado" seguiam no campo Rua antigo, que o select novo não lê.
-Hoje a **rua que é loja aparece no "Onde comprar" como "criar local"**, e é a escolha
-da pessoa que cria o cadastro (nas duas empresas) e liga o item, num gesto — o
-corredor do próprio item ("Rua 12") vai junto para o local. Nada é decidido sozinho:
-"Rua 7" continua não dizendo de qual loja é; quem diz é quem escolhe.
-
-⚠️ **A loja pode estar em TRÊS campos antigos, e o candidato sai dos três:** o `rua`
-dos itens/produtos e `listaRuas`; os **valores** do `ruaCatMap` (categoria → rua da
-tela apagada); e a **categoria antiga** fora da taxonomia — antes de existir Locais,
-"para arquivar por onde se compra só havia criar uma categoria com o nome da loja",
-e quando a taxonomia fechou (21/09) esse nome sumiu do select sem entrar na fila de
-locais. No select ele vem rotulado "(era categoria)": "bombom" também aparece, e é a
-pessoa quem sabe que não é loja. Select sem local e sem candidato **diz por quê**.
-`listaTela.test.js` trava os quatro.
-
-⚠️ **A união roda em TODA fusão (`migrateDb`) e por isso é estável por CONTEÚDO**
-(`unirLocaisDasEmpresas`, com testes): a primeira versão comparava por identidade de
-objeto, e como cada empresa tem o seu objeto para o mesmo local, uma delas recebia
-referência nova a cada fusão. O auto-save decide "mudou" por referência
-(`state[e]!==prev[e]`): referência nova sem mudança real é POST de ~4 MB por ação
-do usuário. Foi suspeita de derrubar o servidor em 28/09/2026 (tela branca após o
-deploy) — **não era**: com fetch instrumentado, 41 s na Lista deram 0 POSTs, e
-`decidirAutoSave` ignora o eco do poll. A tela branca era o servidor entregando o
-bundle a ~13 KB/s (`/api/versao` levava 1–4,5 s), i.e., a VPS ocupada logo após o
-deploy — não código quebrando. A regra ficou porque vale de qualquer jeito.
-
-#### "Tem na Loja" continua digitado à mão — e isso foi uma decisão
-
-⚠️ **Chegou a virar saldo automático e foi DESFEITO no mesmo dia** (21/09/2026,
-decisão do dono). A troca lia `mpVinculados` → `materiasPrimas[].estoqueAtual`, o
-que parecia melhor no papel: o campo digitado nunca é reconferido, e o número na
-tela pode ter três semanas. Mas o saldo automático **só existe para o produto que
-está vinculado a uma matéria-prima**, e a maior parte da lista não está — na
-prática a informação sumia da tela justamente onde era usada, e um campo que
-some é pior que um campo desatualizado.
-
-⚠️ **Reverter exige mexer em TRÊS lugares, não um.** A primeira tentativa
-devolveu o input e esqueceu as duas gravações (`estoqueQtd`/`estoqueUn` no item
-novo e na edição): o campo voltava à tela e não guardava nada.
-`src/listaTela.test.js` trava os três.
-
-Se um dia o vínculo cobrir a lista inteira, `src/listaCompras.js` diz onde a
-função ficava.
-
-#### O elo com Compras
-
-⚠️ **ENCHE O CARRINHO, NÃO LANÇA A COMPRA.** A lista sabe produto, categoria e
-quanto foi pedido; **não sabe preço**, e preço é o que a compra existe para
-registrar. Lançar sozinho criaria entrada com valor zero, que estraga o CMV em
-silêncio.
-
-⚠️ **A categoria vai TRADUZIDA para a contábil** (`contabilDaLista`). Mandar
-"Açougue e frios" direto para o campo de Compras criaria uma categoria contábil
-nova — a mesma poluição desta fase, do outro lado. Quem chega sem categoria vira
-"Outros", que é justamente o que a revisão de entrada (Fase 1) obriga alguém a
-resolver antes de gravar.
-
-⚠️ **É UM BOTÃO, NÃO UM DIÁLOGO A CADA ITEM MARCADO.** Quem faz compra marca dez
-itens seguidos, e uma pergunta por marcação vira a pergunta que se fecha sem ler.
-
-⚠️ **A entrega é de mão em mão, não campo no `db`** (`poremRascunhoCompras` /
-`tomarRascunhoCompras`). É estado de navegação: no `db` viraria campo novo nas
-duas fusões e, pior, um rascunho esquecido voltaria dias depois no aparelho de
-outra pessoa. **Esvazia ao ser lido**, senão voltar à aba encheria o carrinho de
-novo.
-
-`src/listaTela.test.js` lê o `App.tsx` e trava as nove decisões acima.
-
 ### Lista de Compras — blindagem
 
 Fusão própria em `mergeListaCompras.js` (servidor) e bloco dedicado no
@@ -3011,10 +2804,6 @@ devolvem cor usadas nas duas pontas — substituição cega quebra a impressão.
 - `MoneyInput` para dinheiro; `parseMoney` / `fmtMoney` para converter.
 - Antes de commitar: `node --check new_server.js && npm run build && npm test`.
 - `npm test` (node --test) cobre as fusões — o lugar certo pra travar regressão de sync.
-- **Teste que lê o `App.tsx` (ou o servidor) normaliza o fim de linha (CRLF → LF) antes
-  de comparar.** O índice do git é LF, o checkout no Windows é CRLF, e um `includes`
-  com quebra de linha no meio reprovava três testes-guarda que estavam CERTOS — no VPS
-  passavam. Alarme que grita sempre é alarme que ninguém lê (25/09/2026).
 
 ---
 

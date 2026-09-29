@@ -57,23 +57,3 @@ test('as telas de rua salvam de verdade, não por setState cru', () => {
   assert.ok(!APP.includes('"listaCompras" in nx[e]'),
     'sobrou tela de rua com setState cru em vez de applyBothProdutos');
 });
-
-test('⚠️ o catálogo grava pelo MESMO protocolo do setDbAndSave, nas duas empresas', () => {
-  // applyBothProdutos era um SEGUNDO escritor sem coordenação: GET→funde→POST
-  // próprio, sem ligar directSaveRef — o poll (800ms na Lista) e o auto-save
-  // genérico não recuavam, e quem gravasse por último com leitura velha
-  // apagava a edição. E `atualizado` era lido fora de flushSync: sob batching
-  // do React o updater roda depois do `if`, o POST é pulado, sem erro.
-  // Sintoma: "edito o produto sem rua e não salva" (25/09/2026).
-  assert.ok(APP.includes('if (setState && _salvarAmbasRef.current) { _salvarAmbasRef.current(fn); return; }'),
-    'applyBothProdutos tem que delegar ao caminho coordenado');
-  const ini = APP.indexOf('const salvarAmbas=');
-  const fim = APP.indexOf('_salvarAmbasRef.current=salvarAmbas;');
-  assert.ok(ini > 0 && fim > ini, 'salvarAmbas sumiu ou não é registrado no ref');
-  const bloco = APP.slice(ini, fim);
-  assert.ok(bloco.includes('directSaveRef.current=true;'), 'sem a trava, poll e auto-save gravam por cima');
-  assert.ok(bloco.includes('await mergeWithServerBeforePost(emp)'), 'tem que fundir com o servidor ANTES de gravar');
-  assert.ok((bloco.match(/flushSync\(/g) || []).length >= 2, 'o corpo do POST precisa sair de um flushSync — fora dele pode vir null');
-  assert.ok(bloco.includes('"produtosLista" in next[e]'), 'aplica em toda empresa que tem catálogo, não só na ativa');
-  assert.ok(bloco.includes('directSaveRef.current=false;directSaveEndRef.current=Date.now();'), 'a trava tem que ser solta no finally');
-});

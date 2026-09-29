@@ -25,7 +25,6 @@ import { mergeArrayById } from "../mergeDocument.js";
 import QRCode from "qrcode";
 import { ConfigPanel, CONFIG_PADRAO, type ConfigAppState } from "./ConfigPanel";
 import { ConfigStyleInjector, useApplyConfig } from "./ConfigApplier";
-import {CATS_LISTA,categoriaFechada,classificarRua,novoLocal,locaisAtivos,localPorId,planoDeMigracao,contabilDaLista,migrarCorredoresParaLocal,unirLocaisDasEmpresas} from "./listaCompras.js";
 import {rotuloDelivery,ROTULO_RECIBOS,LEGADO_ROTULO_DELIVERY,BUCKET_RECIBO_BALCAO,BUCKET_RECIBO_ENCOMENDA,taxasDePlataforma,statusDoDia,progressoDoDia,serieDosDias,mediaDaSerie,HORA_PENDENCIA_PADRAO} from "./fechamentoVendas.js";
 import {garantirFornecedor,criarItemDaLista,conferirPreco,auditarPrecos,normalizarEncoding,gruposDeFornecedor,mesclarFornecedores,conciliacaoPorCategoria,pctHistoricoPorCategoria,normalizarTexto,precoPorUnidadeBase,filaSemCategoria,janelaAnterior,soDigitos,linhasDaRevisao,pendenciasDaRevisao,correcoesDaRevisao,resumoDoEncoding} from "./qualidadeCompras.js";
 import {fatiasDaReceita,conferirCmv,diasNoIntervalo,mesDaData,porDia,comprasForaDoCmv,MOTIVO_FORA_CMV} from "./dre.js";
@@ -298,7 +297,7 @@ const PRODS_SEED_V6=[
 const mkDb = () => ({
   contas:[], vendas:[], compras:[], fornecedores:[], fichasTecnicas:[],
   materiasPrimas:[], funcionarios:[], faltas:[], adiantamentos:[], consumacoes:[], encargos:[], encomendas:[], anotacoes:[], clientesEncomenda:[] as any[], recibosVenda:[] as any[], itensVendidos:[] as any[], mapaProdutoFicha:{} as any, tipoInsumo:{} as any,
-  normalizacoes:[], movEstoque:[], listaCompras:[], listaDeletedIds:[] as string[], listaCategorias:[] as string[], listaCatOrdem:[] as string[], locaisCompra:[] as any[], listaCatOrdemV2:false, listaCatOrdemV3:false, pedidosLista:[] as any[], produtosLista:[] as any[], pedidosProducao:[] as any[], produtosProducao:[] as any[], itensProducaoPendentes:[] as any[], categoriasProducao:[] as string[], categoriasClientes:{} as Record<string,boolean>, recibosEntrega:[] as any[], pedidosProducaoSeedCats:false, iconesProducao:{} as Record<string,string>, produtosSeedDone:false, produtosSeedV2:false, produtosSeedV3:false, produtosSeedV4:false, produtosSeedV5:false, produtosSeedV6:false, produtosDedupV1:false, produtosDedupV2:false, produtosCatsRepairV1:false,
+  normalizacoes:[], movEstoque:[], listaCompras:[], listaDeletedIds:[] as string[], listaCategorias:[] as string[], listaCatOrdem:[] as string[], listaCatOrdemV2:false, listaCatOrdemV3:false, pedidosLista:[] as any[], produtosLista:[] as any[], pedidosProducao:[] as any[], produtosProducao:[] as any[], itensProducaoPendentes:[] as any[], categoriasProducao:[] as string[], categoriasClientes:{} as Record<string,boolean>, recibosEntrega:[] as any[], pedidosProducaoSeedCats:false, iconesProducao:{} as Record<string,string>, produtosSeedDone:false, produtosSeedV2:false, produtosSeedV3:false, produtosSeedV4:false, produtosSeedV5:false, produtosSeedV6:false, produtosDedupV1:false, produtosDedupV2:false, produtosCatsRepairV1:false,
   usuarios:[] as any[], usuariosSeedDone:false,
   categorias:["Alimentação","Bebidas","Limpeza","Salários","Adiantamento","Aluguel","Energia","Água","Internet","Encomenda","Outros"],
   config:{snAliquota:6},
@@ -353,35 +352,7 @@ const foldBusca = (s:string) => foldNome(s).replace(/[^\p{L}\p{N}]+/gu," ").repl
 // desatualizada até o próximo poll trazer por cima. applyBothProd já existia
 // dentro de ListaComprasPanel; virou helper de módulo pra Compras usar
 // também (o painel de Conciliar Insumos gravava só na empresa atual).
-// ── Lista → Compras: o que a lista acabou de comprar ────────────────────────
-// ⚠️ ENTREGA DE MÃO EM MÃO, NÃO CAMPO NO `db`. É estado de navegação — vale
-// para o clique que acabou de acontecer, não é dado do negócio. Gravado no
-// `db`, viraria campo novo nas duas fusões (§3) e, pior, um rascunho esquecido
-// voltaria dias depois no aparelho de outra pessoa. Recarregou a página? É só
-// clicar de novo na lista.
-let _rascunhoCompras:any[]=[];
-export const poremRascunhoCompras=(itens:any[])=>{_rascunhoCompras=itens||[];};
-export const tomarRascunhoCompras=()=>{const r=_rascunhoCompras;_rascunhoCompras=[];return r;};
-
-// ⚠️ O CATÁLOGO PASSA PELO MESMO PROTOCOLO DO setDbAndSave. Esta função era um
-// SEGUNDO escritor sem coordenação: fazia o próprio GET→funde→POST das duas
-// empresas sem ligar `directSaveRef`, então nem o poll (800ms na Lista) nem o
-// auto-save genérico recuavam — três atores lendo e gravando o mesmo arquivo em
-// janelas de ~100ms, e quem gravasse por último com uma leitura velha apagava a
-// edição. E o `atualizado` era lido fora de `flushSync`: sob batching do React
-// o updater roda depois do `if`, o POST é pulado e ninguém fica sabendo.
-//
-// Sintoma na loja: "edito o produto e não salva" — só nos produtos que o
-// produtosSyncV1 criou com id DIFERENTE em cada empresa (os sem rua), porque
-// neles a edição por nome precisa vencer a disputa nas DUAS gravações. Ver
-// carimbos.test.js.
-//
-// O App registra aqui, ao montar, o `salvarAmbas` (trava + flushSync + funde
-// antes de gravar, por empresa). O caminho antigo só sobrevive como reserva
-// para uma chamada antes do mount, que não existe hoje.
-const _salvarAmbasRef:{current:((fn:(d:any)=>any)=>void)|null}={current:null};
 const applyBothProdutos = (setState:any, setDb:any, fn:(d:any)=>any) => {
-  if (setState && _salvarAmbasRef.current) { _salvarAmbasRef.current(fn); return; }
   if (setState) {
     setState((prev:any) => {
       const nx = { ...prev };
@@ -1884,26 +1855,6 @@ const migrateDb=(m:any)=>{
       m[e].listaCompras=(m[e].listaCompras||[]).map((i:any)=>i.listaId?i:{...i,listaId:idNovo});
     }
   });
-  // ⚠️ OS LOCAIS DE COMPRA SÃO UM CADASTRO SÓ, como o catálogo. `produtosLista`
-  // é compartilhado entre as empresas e guarda `localId`; `locaisCompra` era
-  // por empresa. Resultado: a migração criava "Assaí" na empresa em que rodou,
-  // o catálogo (das duas) passava a apontar para esse id, e na OUTRA empresa o
-  // mesmo produto abria como "Onde comprar — não definido" — sem "Assaí" na
-  // lista, e com o select pronto para gravar "" por cima do vínculo ao salvar.
-  // Sintoma (28/09/2026): "ao editar produto sem rua a opção de Assaí não
-  // aparece". União por id, o mais recente vence, cada empresa recebe o todo.
-  //
-  // ⚠️ MESMO id, nunca um novo: foi cunhar id por empresa (produtosSyncV1,
-  // `toAdd`) que deixou 218 produtos com identidade dupla. Roda em toda carga
-  // — é barato e cura também o que um bundle antigo gravar num lado só.
-  // ⚠️ Estável por CONTEÚDO: empresa cujo cadastro já é igual mantém a MESMA
-  // referência — o auto-save decide "mudou" por referência, e migrateDb roda em
-  // toda fusão. Ver unirLocaisDasEmpresas em listaCompras.js (com testes).
-  {
-    const emps=["CONFRARIA","SEAMA"].filter(e=>m[e]&&typeof m[e]==="object");
-    const r=unirLocaisDasEmpresas(Object.fromEntries(emps.map(e=>[e,m[e].locaisCompra||[]])));
-    if(r.mudou)emps.forEach(e=>{if(r.locais[e]!==(m[e].locaisCompra||[]))m[e]={...m[e],locaisCompra:r.locais[e]};});
-  }
   if(!m.CONFRARIA?.produtosSyncV1||!m.SEAMA?.produtosSyncV1){
     const allProds=new Map<string,any>();
     ["CONFRARIA","SEAMA"].forEach(e=>{
@@ -2245,11 +2196,6 @@ const mergeFromServer=(prev:any,updates:any)=>{
     }
     // listaDeletedIds: unir local e servidor
     next[emp].listaDeletedIds=[...new Set([...(s.listaDeletedIds||[]),...(p.listaDeletedIds||[])])].slice(-5000);
-    // ⚠️ `locaisCompra` é array com id: entra na fusão por id como os demais.
-    // Sem registrar AQUI e no `mergeDocument.js`, o poll devolveria a versão do
-    // servidor e o local recém-criado sumiria antes do POST confirmar — é a
-    // armadilha que já mordeu seis vezes (§3).
-    next[emp].locaisCompra=mergeArrayById(s.locaisCompra||[],p.locaisCompra||[],_listaDeletados);
     // listaCategorias, listaRuas, ruaCatMap: unir
     next[emp].listaCategorias=[...new Set([...(s.listaCategorias||[]),...(p.listaCategorias||[])])];
     next[emp].listaRuas=[...new Set([...(s.listaRuas||[]),...(p.listaRuas||[])])];
@@ -2642,41 +2588,6 @@ export default function App() {
     })();
   };
   flushRef.current=setDbAndSave;
-  // O setDbAndSave das DUAS empresas: mesmo protocolo, aplicado a toda empresa
-  // que tem catálogo. `mergeWithServerBeforePost` já roda em flushSync, então
-  // o documento fundido nunca chega null aqui — é o que o caminho antigo do
-  // applyBothProdutos não garantia.
-  const salvarAmbas=(fn:(d:any)=>any)=>{
-    directSaveRef.current=true;
-    const safety=setTimeout(()=>{directSaveRef.current=false;directSaveEndRef.current=Date.now();},5000);
-    let emps:string[]=[];
-    flushSync(()=>{
-      setState(prev=>{
-        const next={...prev};
-        emps=Object.keys(next).filter(e=>next[e]&&typeof next[e]==="object"&&"produtosLista" in next[e]);
-        emps.forEach(e=>{next[e]=fn(next[e]);});
-        saveSeqRef.current++;
-        clearTimeout(syncTimer.current);
-        syncTimer.current=null;
-        return next;
-      });
-    });
-    setSyncStatus("sync");
-    (async()=>{
-      try{
-        await Promise.all(emps.map(async emp=>{
-          const merged=await mergeWithServerBeforePost(emp);
-          let body="";
-          flushSync(()=>{setState(prev=>{body=JSON.stringify(withDeletedIds(merged??prev[emp]));return prev;});});
-          const r=await fetchSync(`/api/dados/${emp}`,{method:"POST",headers:{"Content-Type":"application/json"},body});
-          if(!r.ok)throw new Error(r.status+"");
-        }));
-        setSyncStatus("ok");
-      }catch{setSyncStatus("erro");}
-      finally{clearTimeout(safety);directSaveRef.current=false;directSaveEndRef.current=Date.now();}
-    })();
-  };
-  _salvarAmbasRef.current=salvarAmbas;
 
   const isOp=login?.role==="op"||login?.role==="op_lista"||login?.role==="op_producao"||login?.role==="op_enc";
   const isAdmin=login?.role==="admin";
@@ -2813,7 +2724,7 @@ export default function App() {
       {id:"lista-arq",label:"Arquivo",icon:"📂",sub:"arquivo",adminOnly:true},
       {id:"lista-prod",label:"Produtos",icon:"📦",sub:"produtos",adminOnly:true},
       {id:"lista-cat",label:"Categorias",icon:"🏷️",sub:"categorias",adminOnly:true},
-      {id:"lista-locais",label:"Locais",icon:"🏪",sub:"locais",adminOnly:true},
+      {id:"lista-rua",label:"Ruas",icon:"🛣️",sub:"ruas",adminOnly:true},
       {id:"lista-est",label:"Estimativa",icon:"💰",sub:"estimativa",adminOnly:true},
     ]},
     {id:"producao",label:"Produção",icon:"🏭",children:[
@@ -7396,24 +7307,6 @@ function Compras({db,setDb,empresa,state,setState,setDbAndSave,pendingSub,setPen
   const [vencimento,setVencimento]=useState(today());
   const [carrinho,setCarrinho]=useState([]);
   const [itemAtual,setItemAtual]=useState({nomeProduto:"",categoria:CATS_CMV[0],unidade:"kg",quantidade:"",valorUnit:"",valorTotal:"",qtdPorPacote:"",comprarEmbalagem:false,qtdEmbalagemComprada:"",categoriaManual:false});
-  // ⚠️ O QUE A LISTA MANDOU ENTRA NO CARRINHO, NÃO NA COMPRA. Vem com produto,
-  // categoria (já traduzida para a contábil) e quantidade; o PREÇO fica em
-  // branco de propósito — a lista não sabe quanto custou, e lançar com zero
-  // estragaria o CMV em silêncio. A revisão de entrada (Fase 1) ainda vai
-  // pedir categoria de quem chegou como "Outros".
-  //
-  // ⚠️ `tomarRascunho` ESVAZIA ao ler: sem isso, voltar para a aba de Compras
-  // mais tarde encheria o carrinho de novo com a mesma compra.
-  useEffect(()=>{
-    const r=tomarRascunhoCompras();
-    if(!r.length)return;
-    setCarrinho((c:any[])=>[...c,...r.map((x:any)=>({
-      id:uid(),nomeProduto:x.nomeProduto,categoria:x.categoria,unidade:x.unidade,
-      quantidade:x.quantidade,valorUnit:"",valorTotal:"",
-      obs:x.local?`comprado em ${x.local}`:undefined,
-    }))]);
-    setSubTab("novo");
-  },[]);
   const [sugestoes,setSugestoes]=useState([]);
   const [sugestoesForn,setSugestoesForn]=useState([]);
   const [toastMsg,setToastMsg]=useState<string|null>(null);
@@ -10695,9 +10588,7 @@ const CAT_ICONS:Record<string,string>={
 };
 const catIcon=(c:string)=>CAT_ICONS[c]||"🏷️";
 
-// ⚠️ `rua` continua no form por LEITURA do item antigo (ele ainda tem o campo
-// gravado), mas não é mais editável: quem escreve agora é `localId`+`corredor`.
-const EMPTY_FORM_LISTA={nome:"",qtd:"",unidade:"un",cat:"",estoqueQtd:"",estoqueUn:"un",obs:"",urgente:false,rua:"",localId:"",corredor:""};
+const EMPTY_FORM_LISTA={nome:"",qtd:"",unidade:"un",cat:"",estoqueQtd:"",estoqueUn:"un",obs:"",urgente:false,rua:""};
 
 // Arrastar o item pra direita marca comprado, arrastar pra esquerda abre edição
 // (startEdit) — substitui o antigo quadradinho de marcar + botões ✏️/× soltos.
@@ -10762,8 +10653,8 @@ function SwipeRow({onRight,onLeft,disabled,rowStyle,children}:{onRight:()=>void,
 // Componente de nivel superior (nao definido dentro de ListaComprasPanel) para que o
 // React preserve a identidade do input entre re-renders -- se fosse uma função criada
 // de novo a cada render do painel pai, o campo perderia o foco a cada letra digitada.
-function InlineEditItem({form,setF,isAdmin,editId,cancelEdit,del,saveItem,prodsCatalog,locais,ruasLoja=[],escolherLocal}:
-  {form:any,setF:(k:string,v:any)=>void,isAdmin?:boolean,editId:string|null,cancelEdit:()=>void,del:(id:string)=>void,saveItem:()=>void,prodsCatalog:any[],locais:any[],ruasLoja?:{nome:string,origem:string}[],escolherLocal?:(valor:string,ruaDoItem:string)=>{localId:string,corredor:string}|null}){
+function InlineEditItem({form,setF,isAdmin,cats,editId,cancelEdit,del,saveItem,prodsCatalog,getRuaDaCat,ruas}:
+  {form:any,setF:(k:string,v:any)=>void,isAdmin?:boolean,cats:string[],editId:string|null,cancelEdit:()=>void,del:(id:string)=>void,saveItem:()=>void,prodsCatalog:any[],getRuaDaCat:(cat:string)=>string,ruas:string[]}){
   const [showSugg,setShowSugg]=useState(false);
   const suggestions:any[]=form.nome.trim().length>=1
     ?prodsCatalog.filter((p:any)=>p.nome.toLowerCase().includes(form.nome.trim().toLowerCase())).slice(0,8)
@@ -10805,45 +10696,15 @@ function InlineEditItem({form,setF,isAdmin,editId,cancelEdit,del,saveItem,prodsC
       <select value={form.unidade} onChange={e=>setF("unidade",e.target.value)} className="inp" style={{marginBottom:0,flex:"1 1 60px"}}>
         {["un","kg","g","L","ml","cx","pc","sc","bd"].map(u=><option key={u} value={u}>{u}</option>)}
       </select>
-      {/* ⚠️ CATEGORIA FECHADA E OBRIGATÓRIA. "Sem categoria" saiu: era ela que
-          deixava o item cair em lugar nenhum, e o campo livre ao lado é o que
-          fez nome de loja virar categoria. Criar categoria aqui deixou de
-          existir — a taxonomia é fixa (§ Lista). */}
-      {isAdmin&&<select value={form.cat} onChange={e=>setF("cat",e.target.value)} className="inp"
-        style={{marginBottom:0,flex:"2 1 100px",borderColor:form.cat?undefined:"var(--warningText)"}}>
-        <option value="">— escolha a categoria —</option>
-        {CATS_LISTA.map(c=><option key={c} value={c}>{catIcon(c)} {c}</option>)}
+      {isAdmin&&<select value={form.cat} onChange={e=>{const c=e.target.value;setF("cat",c);if(!form.rua){const r=getRuaDaCat(c);if(r)setF("rua",r);}}} className="inp" style={{marginBottom:0,flex:"2 1 100px"}}>
+        <option value="">Sem categoria</option>
+        {cats.map(c=><option key={c} value={c}>{catIcon(c)} {c}</option>)}
       </select>}
     </div>
-    {/* ⚠️ ONDE SE COMPRA virou campo próprio. Antes dividia o campo "rua" com o
-        corredor, e por isso "Rua 7" (que existe em duas lojas) e "Santa Lucia"
-        moravam juntos. O corredor só aparece quando o local escolhido TEM
-        corredor cadastrado — num mercadinho sem corredor numerado, o campo seria
-        uma pergunta sem resposta. */}
-    {isAdmin&&<div style={{display:"flex",gap:8,marginBottom:8}}>
-      <select value={form.localId||""} onChange={e=>{const r=escolherLocal?escolherLocal(e.target.value,form.rua||""):{localId:e.target.value,corredor:""};if(!r)return;setF("localId",r.localId);setF("corredor",r.corredor);}}
-        className="inp" style={{marginBottom:0,flex:2}}>
-        <option value="">Onde comprar — não definido</option>
-        {locaisAtivos(locais).map((l:any)=><option key={l.id} value={l.id}>🏪 {l.nome}</option>)}
-        {/* As lojas que ainda vivem no campo Rua antigo: escolher cria o local. */}
-        {ruasLoja.filter(o=>!locais.some((l:any)=>foldNome(l.nome)===foldNome(o.nome))).map(o=><option key={"rua:"+o.nome} value={"rua:"+o.nome}>🏪 {o.nome} — criar local{o.origem==="categoria"?" (era categoria)":""}</option>)}
-        {!locaisAtivos(locais).length&&!ruasLoja.length&&<option value="" disabled>— nenhuma loja nos campos antigos (Rua/categoria) —</option>}
-        {escolherLocal&&<option value="novo">➕ Criar novo local…</option>}
-        {/* ⚠️ Vínculo que este aparelho não conhece continua SELECIONADO, nunca
-            some: sem esta opção o select caía em "não definido" e o Salvar
-            gravava "" por cima de uma escolha feita noutra empresa. */}
-        {form.localId&&!locais.some((l:any)=>l.id===form.localId)&&<option value={form.localId}>🏪 (local não encontrado neste aparelho)</option>}
-      </select>
-      {(()=>{
-        const loc=localPorId(locais,form.localId);
-        if(!loc?.corredores?.length)return null;
-        return <select value={form.corredor||""} onChange={e=>setF("corredor",e.target.value)}
-          className="inp" style={{marginBottom:0,flex:1}}>
-          <option value="">Corredor</option>
-          {loc.corredores.map((c:string)=><option key={c} value={c}>Rua {c}</option>)}
-        </select>;
-      })()}
-    </div>}
+    {isAdmin&&ruas.length>0&&<select value={form.rua||""} onChange={e=>setF("rua",e.target.value)} className="inp" style={{marginBottom:8}}>
+      <option value="">Sem rua</option>
+      {ruas.map(r=><option key={r} value={r}>🛤️ {r}</option>)}
+    </select>}
     <textarea placeholder="Observações..." value={form.obs} onChange={e=>setF("obs",e.target.value)} className="inp" style={{minHeight:40,marginBottom:8,resize:"vertical" as const}}/>
     <div style={{display:"flex",gap:6}}>
       <button className="btn" onClick={cancelEdit} style={{flex:1,background:"var(--border2)",color:"var(--text2)",padding:"9px",fontSize:13}}>Cancelar</button>
@@ -10915,7 +10776,7 @@ function ConciliarPanel({item,prodsCatalog,materiasPrimas,concBusca,setConcBusca
   </div>;
 }
 
-function ListaComprasPanel({db,setDb,isAdmin,onNavigate,onLogout,setState,login,setDbAndSave,pendingSub,setPendingSub}:{db:any,setDb:any,isAdmin?:boolean,onNavigate?:(tab:string)=>void,onLogout?:()=>void,setState?:any,login?:any,setDbAndSave?:(fn:(d:any)=>any)=>void,pendingSub?:string|null,setPendingSub?:(v:string|null)=>void}){
+function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSave,pendingSub,setPendingSub}:{db:any,setDb:any,isAdmin?:boolean,onNavigate?:(tab:string)=>void,onLogout?:()=>void,setState?:any,login?:any,setDbAndSave?:(fn:(d:any)=>any)=>void,pendingSub?:string|null,setPendingSub?:(v:string|null)=>void}){
   const setBothDb=setDb;
   const [subTab,setSubTab]=useState(pendingSub||"nova");
   useEffect(()=>{if(pendingSub){setSubTab(pendingSub);setPendingSub?.(null);}},[pendingSub]);
@@ -10929,171 +10790,13 @@ function ListaComprasPanel({db,setDb,isAdmin,onNavigate,onLogout,setState,login,
   const [form,setForm]=useState(EMPTY_FORM_LISTA);
   const [editId,setEditId]=useState<string|null>(null);
   const [busca,setBusca]=useState("");
-  // ---- Locais de compra (substituem o campo livre "rua") --------------------
-  const locais:any[]=db.locaisCompra||[];
-  const plano=planoDeMigracao({listaCompras:db.listaCompras||[],produtosLista:db.produtosLista||[],
-    listaRuas:db.listaRuas||[],listaCategorias:db.listaCategorias||[],ruaCatMap:db.ruaCatMap||{}});
-  // O que ainda não foi migrado: rua que não virou local, e categoria que a
-  // taxonomia fechada não reconhece.
-  const locaisJaCriados=new Set(locais.map((l:any)=>foldNome(l.nome)));
-  const ruasPendentes=plano.locais.filter((l:any)=>!locaisJaCriados.has(foldNome(l.valor)));
-  const migracaoPendente=ruasPendentes.length+plano.categoriasPendentes.length+(plano.corredores.length&&!locais.some((l:any)=>l.corredores?.length)?1:0);
-  const showLocais=subTab==="locais";
-  const [novoLocalForm,setNovoLocalForm]=useState({nome:"",temCorredor:false,corredores:""});
-  const [editLocalId,setEditLocalId]=useState<string|null>(null);
-  const corredoresDoTexto=(t:string)=>[...new Set(String(t||"").split(/[,;]/).map(x=>x.trim()).filter(Boolean))];
-  const salvarLocal=()=>{
-    const nome=novoLocalForm.nome.trim();
-    if(!nome)return alert("Informe o nome do local.");
-    const corredores=novoLocalForm.temCorredor?corredoresDoTexto(novoLocalForm.corredores):[];
-    const jaExiste=locais.some((l:any)=>foldNome(l.nome)===foldNome(nome)&&l.id!==editLocalId);
-    if(jaExiste)return alert("Já existe um local com esse nome.");
-    // ⚠️ Cadastro compartilhado: sai por applyBothProd, nas duas empresas —
-    // criar um local numa e editar um produto na outra é o caso de uso.
-    applyBothProd((d:any)=>{
-      const arr=[...(d.locaisCompra||[])];
-      if(editLocalId){
-        const i=arr.findIndex((l:any)=>l.id===editLocalId);
-        if(i>=0)arr[i]=novoLocal({...arr[i],nome,temCorredor:novoLocalForm.temCorredor,corredores});
-      }else{
-        arr.push(novoLocal({id:uid(),nome,temCorredor:novoLocalForm.temCorredor,corredores}));
-      }
-      return{...d,locaisCompra:arr};
-    });
-    setEditLocalId(null);
-    setNovoLocalForm({nome:"",temCorredor:false,corredores:""});
-  };
-  // ⚠️ Inativar, nunca excluir (ver o comentário na tela).
-  // Reescreve os itens que usavam um valor que não é categoria.
-  //
-  // ⚠️ Mexe em `listaCompras` E em `produtosLista` — o catálogo guarda a
-  // categoria em `cat`, a lista em `categoria`, e deixar um dos dois para trás
-  // faria a fila reaparecer no poll seguinte, com os mesmos nomes.
-  //
-  // ⚠️ `produtosLista` é COMPARTILHADO entre as empresas e sai por
-  // `applyBothProd` (§3); `listaCompras` é por empresa e sai por `setDbAndSave`.
-  const reclassificarCat=(valor:string,alvo:string)=>{
-    const n=(db.listaCompras||[]).filter((i:any)=>(i.categoria||"")===valor).length
-      +(db.produtosLista||[]).filter((p:any)=>(p.cat||"")===valor).length;
-    if(!confirm(`Reclassificar ${n} item(ns) de "${valor}" para "${alvo}"?\n\nO valor antigo fica guardado em cada registro.`))return;
-    const agora=new Date().toISOString();
-    (setDbAndSave||setDb)((d:any)=>({...d,
-      listaCompras:(d.listaCompras||[]).map((i:any)=>(i.categoria||"")===valor
-        ?{...i,categoria:alvo,categoriaOriginal:i.categoriaOriginal||valor,updatedAt:Date.now()}:i),
-      // A categoria some da lista de criadas à mão: ela não existe mais.
-      listaCategorias:(d.listaCategorias||[]).filter((x:string)=>x!==valor)}));
-    applyBothProd((d:any)=>({...d,
-      produtosLista:(d.produtosLista||[]).map((p:any)=>(p.cat||"")===valor
-        ?{...p,cat:alvo,catOriginal:p.catOriginal||valor,atualizadoEm:agora}:p)}));
-  };
-  const alternarLocalAtivo=(id:string)=>applyBothProd((d:any)=>({...d,
-    locaisCompra:(d.locaisCompra||[]).map((l:any)=>l.id===id?novoLocal({...l,ativo:l.ativo===false}):l)}));
-  // Cria o local a partir de um valor que estava no campo Rua. NÃO mexe em item
-  // nenhum: ligar os itens é um segundo gesto, explícito.
-  const criarLocalDaRua=(nome:string,comCorredor:boolean,corredoresExtra:string[]=[]):string=>{
-    const existente=locais.find((l:any)=>foldNome(l.nome)===foldNome(nome));
-    if(existente)return existente.id;
-    const corredores=[...new Set([...(comCorredor?plano.corredores.map((c:any)=>c.numero):[]),...corredoresExtra])]
-      .sort((a:string,b:string)=>Number(a)-Number(b));
-    // O id nasce AQUI, antes da gravação: quem chama precisa dele para ligar o
-    // item na hora (escolherLocal), sem esperar o poll devolver o cadastro.
-    const id=uid();
-    applyBothProd((d:any)=>({...d,
-      locaisCompra:[...(d.locaisCompra||[]),novoLocal({id,nome,temCorredor:comCorredor||corredores.length>0,corredores})]}));
-    return id;
-    // Sem toast aqui: este painel não recebe `setToastMsg`, e o local aparece
-    // na lista logo abaixo no mesmo render — o retorno visual é ele mesmo.
-  };
-  // ⚠️ A RUA QUE É LOJA ENTRA NO "ONDE COMPRAR", E ESCOLHER CRIA O LOCAL.
-  //
-  // Na loja, `locaisCompra` estava VAZIO: a migração exige ir a Lista → Locais e
-  // clicar "criar" em cada loja, e ninguém fez — enquanto isso "Assaí" e "Casa
-  // do Pescado" continuavam no campo antigo (`listaRuas`/`rua`), que o select
-  // novo não lê. O usuário abria "Onde comprar", via só "não definido" e a
-  // conclusão era "a opção de Assaí sumiu" (28/09/2026). Nada é decidido
-  // sozinho: a rua-que-é-loja aparece como opção "criar local", e é a ESCOLHA
-  // da pessoa que cria o cadastro (nas duas empresas) e liga o item, num gesto.
-  //
-  // O corredor do próprio item vai junto: "Filé Mignon" está em "Rua 12"; a
-  // pessoa disse que ele é do Assaí, então a Rua 12 desse item é do Assaí. Vira
-  // corredor do local e corredor do item — sem isso o número se perdia.
-  // ⚠️ A CATEGORIA ANTIGA TAMBÉM PODE SER LOJA. Antes da tela de Locais, "para
-  // arquivar um item por onde se compra, só havia criar uma categoria com o
-  // nome da loja" (§ Lista). A taxonomia fechou em 21/09 e essa categoria sumiu
-  // do select — e como não era rua, não entrava na fila de locais: "Assaí"
-  // desaparecia dos DOIS lugares. Entra como candidato, rotulado de onde veio;
-  // "bombom" também vai aparecer, e é a pessoa quem sabe que não é loja.
-  const jaLocal=(n:string)=>locais.some((l:any)=>foldNome(l.nome)===foldNome(n));
-  const ruasLoja:{nome:string,origem:string}[]=[
-    ...ruasPendentes.map((r:any)=>({nome:r.valor,origem:"rua"})),
-    ...plano.categoriasPendentes.filter((c:any)=>!jaLocal(c.valor)&&!ruasPendentes.some((r:any)=>foldNome(r.valor)===foldNome(c.valor)))
-      .map((c:any)=>({nome:c.valor,origem:"categoria"})),
-  ];
-  const escolherLocal=(valor:string,ruaDoItem:string):{localId:string,corredor:string}|null=>{
-    let nome="";
-    if(valor==="novo"){nome=(prompt("Nome do local (mercado, atacadista, fornecedor):")||"").trim();if(!nome)return null;}
-    else if(valor.startsWith("rua:"))nome=valor.slice(4);
-    else return {localId:valor,corredor:""};
-    const c=classificarRua(ruaDoItem);
-    const corredor=c.tipo==="corredor"?c.numero:"";
-    const localId=criarLocalDaRua(nome,false,corredor?[corredor]:[]);
-    return {localId,corredor};
-  };
-  // ---- Os corredores, todos de um local só ---------------------------------
-  // ⚠️ A MIGRAÇÃO SE RECUSA A ADIVINHAR de qual loja é "Rua 7", e está certa.
-  // Isto NÃO é um palpite: é a resposta do dono ("os corredores são todos do
-  // Assaí") virando um gesto só. Sem ele, responder a pergunta significaria
-  // abrir centenas de itens um a um — que é como metade fica pela metade.
-  const [migDestino,setMigDestino]=useState("");
-  const [migNome,setMigNome]=useState("Assaí");
-  const locaisComCorredor=locais.filter((l:any)=>l.corredores?.length||l.temCorredor);
-  const migrarCorredores=()=>{
-    const nums=plano.corredores.map((c:any)=>c.numero);
-    if(!nums.length)return alert("Não há corredor nenhum para migrar.");
-    const destino=migDestino?localPorId(locais,migDestino):null;
-    const nome=destino?destino.nome:migNome.trim();
-    if(!nome)return alert("Informe o nome do local.");
-    if(!destino&&locais.some((l:any)=>foldNome(l.nome)===foldNome(nome)))
-      return alert(`Já existe um local chamado "${nome}" — escolha ele na lista acima.`);
-    const n=plano.corredores.reduce((a:number,c:any)=>a+c.itens,0);
-    if(!confirm(`Mandar ${n} item(ns) com corredor para "${nome}"?\n\n`
-      +`Corredores: ${nums.map((x:string)=>"Rua "+x).join(", ")}\n\n`
-      +`Rua que é nome de LOJA (ex.: "Santa Lucia") não se mexe — é outra pergunta.\n`
-      +`Item que você já mandou para um local à mão também fica como está.`))return;
-    // O id nasce AQUI, fora das duas gravações: `listaCompras` sai por
-    // `setDbAndSave` e `produtosLista` por `applyBothProd` (§3, o catálogo é
-    // compartilhado entre as empresas). Gerado dentro de cada uma, os dois
-    // lados apontariam para locais diferentes.
-    const alvoId=destino?destino.id:uid();
-    (setDbAndSave||setDb)((d:any)=>{
-      // ⚠️ A conta é refeita sobre o `d` da gravação, nunca sobre o `plano` do
-      // render: item que outro operador acabou de adicionar entraria de fora.
-      const r=migrarCorredoresParaLocal({listaCompras:d.listaCompras||[],localId:alvoId});
-      return{...d,listaCompras:r.listaCompras};
-    });
-    // O cadastro do local vai JUNTO com o catálogo, pelo caminho compartilhado:
-    // era gravá-lo só na empresa ativa que deixava a outra apontando para um id
-    // que ela não tinha. Os números do catálogo entram junto, e um corredor que
-    // só existe lá não fica de fora.
-    const comLocal=(arr0:any[])=>{
-      const arr=[...arr0];
-      const i=arr.findIndex((l:any)=>l.id===alvoId);
-      const todos=[...new Set([...(i>=0?arr[i].corredores||[]:[]),...nums])]
-        .sort((a:string,b:string)=>Number(a)-Number(b));
-      if(i>=0)arr[i]=novoLocal({...arr[i],temCorredor:true,corredores:todos});
-      else arr.push(novoLocal({id:alvoId,nome,temCorredor:true,corredores:todos}));
-      return arr;
-    };
-    applyBothProd((d:any)=>({...d,
-      produtosLista:migrarCorredoresParaLocal({produtosLista:d.produtosLista||[],localId:alvoId}).produtosLista,
-      locaisCompra:comLocal(d.locaisCompra||[])}));
-    setMigDestino("");
-  };
   const showCatMgmt=subTab==="categorias";
   const setShowCatMgmt=(v:boolean)=>setSubTab(v?"categorias":"nova");
+  const [novaCat,setNovaCat]=useState("");
+  const [editCat,setEditCat]=useState<{name:string,val:string}|null>(null);
   const showProdMgmt=subTab==="produtos";
   const setShowProdMgmt=(v:boolean)=>setSubTab(v?"produtos":"nova");
-  const [prodForm,setProdForm]=useState({nome:"",cat:"",unidade:"un",rua:"",localId:"",corredor:""});
+  const [prodForm,setProdForm]=useState({nome:"",cat:"",unidade:"un",rua:""});
   const [editProdId,setEditProdId]=useState<string|null>(null);
   const prodFormRef=useRef<HTMLDivElement>(null);
   const listaFormRef=useRef<HTMLDivElement>(null);
@@ -11103,8 +10806,10 @@ function ListaComprasPanel({db,setDb,isAdmin,onNavigate,onLogout,setState,login,
   const showHistorico=subTab==="arquivo";
   const [expandedPedido,setExpandedPedido]=useState<string|null>(null);
   const [expandedMeses,setExpandedMeses]=useState<Set<string>>(()=>new Set([today().slice(0,7)]));
+  const showRuaMgmt=subTab==="ruas";
   const setShowRuaMgmt=(v:boolean)=>setSubTab(v?"ruas":"nova");
   const [novaRua,setNovaRua]=useState("");
+  const [editRua,setEditRua]=useState<{name:string,val:string}|null>(null);
   const [vistaRua,setVistaRua]=useState(true);
   const showEstimativa=subTab==="estimativa";
   const setShowEstimativa=(v:boolean)=>setSubTab(v?"estimativa":"nova");
@@ -11263,7 +10968,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onNavigate,onLogout,setState,login,
 
     if(editId){
       const editNome=form.nome.trim();
-      (setDbAndSave||setDb)((d:any)=>({...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===editId?{...i,nome:editNome,quantidade:parseFloat(form.qtd)||1,unidade:form.unidade,categoria:form.cat||i.categoria||"outros",localId:form.localId||"",corredor:form.corredor||"",estoqueQtd:form.estoqueQtd,estoqueUn:form.estoqueUn||"un",obs:form.obs,urgente:form.urgente,updatedAt:Date.now()}:i)}));
+      (setDbAndSave||setDb)((d:any)=>({...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===editId?{...i,nome:editNome,quantidade:parseFloat(form.qtd)||1,unidade:form.unidade,categoria:form.cat||i.categoria||"outros",rua:form.rua,estoqueQtd:form.estoqueQtd,estoqueUn:form.estoqueUn||"un",obs:form.obs,urgente:form.urgente,updatedAt:Date.now()}:i)}));
       if(pendingMpLinks!==null){
         syncProdByName(editNome,(p:any)=>({...p,mpVinculados:pendingMpLinks,mpVinculadoId:undefined}));
       }
@@ -11290,7 +10995,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onNavigate,onLogout,setState,login,
         (setDbAndSave||setDb)((d:any)=>({...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===pendenteExistente.id?{...i,quantidade:(i.quantidade||0)+qtdNova,updatedAt:ts}:i)}));
       }else{
         const maxOrdem=lista.length>0?Math.max(...lista.map((i:any)=>i.ordem||0))+1:0;
-        const newItem={id:uid(),listaId:listaAtualId,nome,quantidade:qtdNova,unidade:form.unidade,categoria:cat,localId:form.localId||"",corredor:form.corredor||"",estoqueQtd:form.estoqueQtd,estoqueUn:form.estoqueUn||"un",obs:form.obs,urgente:form.urgente,comprado:false,ordem:maxOrdem,adicionadoPor:login?.label||"",criadoEm:new Date().toISOString(),updatedAt:Date.now()};
+        const newItem={id:uid(),listaId:listaAtualId,nome,quantidade:qtdNova,unidade:form.unidade,categoria:cat,rua:ruaVal,estoqueQtd:form.estoqueQtd,estoqueUn:form.estoqueUn||"un",obs:form.obs,urgente:form.urgente,comprado:false,ordem:maxOrdem,adicionadoPor:login?.label||"",criadoEm:new Date().toISOString(),updatedAt:Date.now()};
         (setDbAndSave||setDb)((d:any)=>({...d,listaCompras:[...(d.listaCompras||[]).filter((i:any)=>i.id!==newItem.id),newItem]}));
       }
       if(pendingMpLinks!==null){
@@ -11332,9 +11037,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onNavigate,onLogout,setState,login,
   };
 
   const startEdit=(item:any)=>{
-    // A categoria antiga é traduzida na LEITURA: o item não precisa ser reescrito
-    // para o select fechado reconhecê-lo.
-    setForm({nome:item.nome,qtd:String(item.quantidade),unidade:item.unidade||"un",cat:categoriaFechada(item.categoria)||"",estoqueQtd:item.estoqueQtd||"",estoqueUn:item.estoqueUn||"un",obs:item.obs||"",urgente:!!item.urgente,rua:item.rua||"",localId:item.localId||"",corredor:item.corredor||""});
+    setForm({nome:item.nome,qtd:String(item.quantidade),unidade:item.unidade||"un",cat:item.categoria||"",estoqueQtd:item.estoqueQtd||"",estoqueUn:item.estoqueUn||"un",obs:item.obs||"",urgente:!!item.urgente,rua:item.rua||""});
     setEditId(item.id);
     // A edição agora abre embutida na própria linha do produto (ver InlineEditItem),
     // então não precisa mais rolar a tela até um formulário no topo da página.
@@ -11354,28 +11057,6 @@ function ListaComprasPanel({db,setDb,isAdmin,onNavigate,onLogout,setState,login,
       const maxOrdem=arr.reduce((m:number,i:any)=>Math.max(m,i.ordem||0),0);
       return{...d,listaCompras:arr.map(i=>i.id===id?{...i,comprado:nowComprado,naoTem:false,quantidadeComprada:nowComprado?i.quantidadeComprada:undefined,ordem:nowComprado?maxOrdem+1:i.ordem,updatedAt:ts}:i)};
     });
-  };
-  // Leva os itens comprados para Compras → Entradas, já preenchidos.
-  //
-  // ⚠️ NÃO LANÇA A COMPRA — enche o carrinho. A lista sabe o produto, a
-  // categoria e quanto foi pedido; ela NÃO sabe preço, e preço é o que a
-  // compra existe para registrar. Lançar sozinho criaria entrada com valor
-  // zero, que estraga o CMV em silêncio (§ Compras).
-  //
-  // ⚠️ A categoria vai traduzida para a CONTÁBIL: as duas taxonomias medem
-  // coisas diferentes (§5), e mandar "Açougue e frios" para o campo de Compras
-  // criaria uma categoria contábil nova — exatamente a poluição que esta fase
-  // acabou de limpar, do outro lado.
-  const lancarEmCompras=()=>{
-    if(!comprados.length)return;
-    poremRascunhoCompras(comprados.map((i:any)=>({
-      nomeProduto:i.nome,
-      categoria:contabilDaLista(categoriaFechada(i.categoria)),
-      unidade:i.unidade||"un",
-      quantidade:String(i.quantidadeComprada??i.quantidade??1),
-      local:localPorId(locais,i.localId)?.nome||"",
-    })));
-    onNavigate?.("compras");
   };
   const setQtd=(id:string,novaQtd:number)=>{
     if(!(novaQtd>0))return;
@@ -11570,15 +11251,48 @@ function ListaComprasPanel({db,setDb,isAdmin,onNavigate,onLogout,setState,login,
     });
   };
 
-  // ⚠️ `addCat` / `delCat` / `renameCat` foram APAGADAS (21/09/2026): a
-  // taxonomia da Lista virou FECHADA (`CATS_LISTA`). Criar categoria na tela era
-  // a causa do problema, não uma conveniência — era o único jeito de marcar
-  // "onde eu compro isso", e foi assim que "queijo minas" e "cia do sorveteiro"
-  // viraram categoria. Renomear também sumiu: renomear categoria quebra vínculo
-  // por nome (§5), e com lista fixa não há o que renomear.
-  //
-  // O que sobrou de inválido no banco é resolvido em Lista → Categorias, que
-  // reclassifica os itens em vez de editar o nome da categoria.
+  const addCat=()=>{
+    const n=novaCat.trim().toLowerCase();if(!n)return;
+    if(allCats.includes(n))return alert("Categoria já existe.");
+    const applyAdd=(d:any)=>({...d,
+      listaCategorias:[...new Set([...(d.listaCategorias||[]),n])],
+      listaCatDeleted:(d.listaCatDeleted||[]).filter((x:string)=>x!==n),
+    });
+    applyBothProdutos(setState,setDb,applyAdd);
+    setNovaCat("");
+  };
+  const delCat=(c:string)=>{
+    if(c==="outros"){alert("A categoria \"outros\" não pode ser excluída.");return;}
+    const itensNaCat=(db.listaCompras||[]).filter((i:any)=>(i.categoria||"outros")===c).length;
+    const msg=itensNaCat?`Excluir categoria "${c}"?\n\n${itensNaCat} produto(s) serão movidos para "outros".`:`Excluir categoria "${c}"?`;
+    if(!confirm(msg))return;
+    const applyDel=(d:any)=>({...d,
+      listaCategorias:(d.listaCategorias||[]).filter((x:string)=>x!==c),
+      listaCatOrdem:(d.listaCatOrdem||[]).filter((x:string)=>x!==c),
+      listaCatDeleted:[...new Set([...(d.listaCatDeleted||[]),c])],
+      listaCompras:(d.listaCompras||[]).map((i:any)=>(i.categoria||"outros")===c?{...i,categoria:"outros"}:i),
+      produtosLista:(d.produtosLista||[]).map((p:any)=>(p.cat||"")===c?{...p,cat:"outros",atualizadoEm:new Date().toISOString()}:p),
+    });
+    if(setState) setState((prev:any)=>{const n={...prev};Object.keys(n).forEach(e=>{if(n[e]&&typeof n[e]==="object"&&"listaCompras" in n[e])n[e]=applyDel(n[e]);});return n;});
+    else setDb(applyDel);
+  };
+  const renameCat=(old:string,novo:string)=>{
+    novo=novo.trim().toLowerCase();
+    if(!novo){setEditCat(null);return;}
+    if(novo===old){setEditCat(null);return;}
+    if(allCats.filter(c=>c!==old).includes(novo)){alert("Categoria já existe.");return;}
+    // setDbAndSave: renomear categoria reescreve TODOS os itens da lista.
+    // Com setDb puro, a renomeação feita durante a janela de outro save
+    // sumia e as telas ficavam com nomes de categoria diferentes entre si.
+    (setDbAndSave||setDb)((d:any)=>{
+      const cl:string[]=d.listaCategorias||[];
+      const newCl=cl.includes(old)?cl.map(c=>c===old?novo:c):[...cl.filter(c=>c!==novo),novo];
+      const ordem=(d.listaCatOrdem||[]).map((c:string)=>c===old?novo:c);
+      const lista=(d.listaCompras||[]).map((i:any)=>i.categoria===old?{...i,categoria:novo}:i);
+      return{...d,listaCategorias:newCl,listaCatOrdem:ordem,listaCompras:lista};
+    });
+    setEditCat(null);
+  };
 
   const prodsCatalog:any[]=db.produtosLista||[];
 
@@ -11661,9 +11375,9 @@ function ListaComprasPanel({db,setDb,isAdmin,onNavigate,onLogout,setState,login,
       const oldProd=(db.produtosLista||[]).find((p:any)=>p.id===editProdId);
       const oldName=oldProd?.nome||n;
       if(oldName.toLowerCase()===n.toLowerCase()){
-        syncProdByName(n,(p:any)=>({...p,nome:n,cat:prodForm.cat,unidade:prodForm.unidade,rua:prodForm.rua,localId:prodForm.localId||"",corredor:prodForm.corredor||""}));
+        syncProdByName(n,(p:any)=>({...p,nome:n,cat:prodForm.cat,unidade:prodForm.unidade,rua:prodForm.rua}));
       }else{
-        applyBothProd((d:any)=>({...d,produtosLista:(d.produtosLista||[]).map((p:any)=>p.nome.trim().toLowerCase()===oldName.trim().toLowerCase()?{...p,nome:n,cat:prodForm.cat,unidade:prodForm.unidade,rua:prodForm.rua,localId:prodForm.localId||"",corredor:prodForm.corredor||"",atualizadoEm:new Date().toISOString()}:p)}));
+        applyBothProd((d:any)=>({...d,produtosLista:(d.produtosLista||[]).map((p:any)=>p.nome.trim().toLowerCase()===oldName.trim().toLowerCase()?{...p,nome:n,cat:prodForm.cat,unidade:prodForm.unidade,rua:prodForm.rua,atualizadoEm:new Date().toISOString()}:p)}));
       }
       setEditProdId(null);
     }else{
@@ -11671,12 +11385,12 @@ function ListaComprasPanel({db,setDb,isAdmin,onNavigate,onLogout,setState,login,
         const exists=(d.produtosLista||[]).some((p:any)=>p.nome.trim().toLowerCase()===n.toLowerCase());
         if(exists)return d;
         const ts=new Date().toISOString();
-        return{...d,produtosLista:[...(d.produtosLista||[]),{id:uid(),nome:n,cat:prodForm.cat,unidade:prodForm.unidade,rua:prodForm.rua,localId:prodForm.localId||"",corredor:prodForm.corredor||"",criadoEm:ts,atualizadoEm:ts}]};
+        return{...d,produtosLista:[...(d.produtosLista||[]),{id:uid(),nome:n,cat:prodForm.cat,unidade:prodForm.unidade,rua:prodForm.rua,criadoEm:ts,atualizadoEm:ts}]};
       });
     }
-    setProdForm({nome:"",cat:"",unidade:"un",rua:"",localId:"",corredor:""});
+    setProdForm({nome:"",cat:"",unidade:"un",rua:""});
   };
-  const startEditProd=(p:any)=>{setEditProdId(p.id);setProdForm({nome:p.nome,cat:p.cat||"",unidade:p.unidade||"un",rua:p.rua||"",localId:p.localId||"",corredor:p.corredor||""});setTimeout(()=>prodFormRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),100);};
+  const startEditProd=(p:any)=>{setEditProdId(p.id);setProdForm({nome:p.nome,cat:p.cat||"",unidade:p.unidade||"un",rua:p.rua||""});setTimeout(()=>prodFormRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),100);};
   const delProd=(id:string)=>{
     if(!confirm("Excluir produto do catálogo?"))return;
     const prod=(db.produtosLista||[]).find((p:any)=>p.id===id);
@@ -11846,10 +11560,51 @@ function ListaComprasPanel({db,setDb,isAdmin,onNavigate,onLogout,setState,login,
     applyBothProdutos(setState,setDb,applyAdd);
     setNovaRua("");
   };
-  // ⚠️ `delRua` / `renameRua` / `moverRua` foram APAGADAS junto com a tela de
-  // Ruas: elas editavam `listaRuas` e `ruaCatMap` como texto livre, que é o
-  // mecanismo que fazia nome de loja virar categoria. Quem edita "onde se
-  // compra" agora é Lista → Locais, e lá o local é inativado, nunca excluído.
+  const delRua=(r:string)=>{
+    if(!confirm(`Excluir rua "${r}"?\nProdutos dessa rua ficarão sem rua.`))return;
+    const applyDel=(d:any)=>{
+      const m={...(d.ruaCatMap||{})};
+      Object.keys(m).forEach(k=>{if(m[k]===r)delete m[k];});
+      return{...d,
+        listaRuas:(d.listaRuas||[]).filter((x:string)=>x!==r),
+        listaCompras:(d.listaCompras||[]).map((i:any)=>i.rua===r?{...i,rua:""}:i),
+        // ⚠️ CARIMBA. Sem `atualizadoEm`, a fusão por id cai na regra "só o
+        // servidor tem timestamp → servidor vence" e a rua volta ao que era,
+        // no poll seguinte. Era o "altero a rua, salvo, e volta sem rua".
+        produtosLista:(d.produtosLista||[]).map((p:any)=>p.rua===r?{...p,rua:"",atualizadoEm:new Date().toISOString()}:p),
+        ruaCatMap:m,
+      };
+    };
+    applyBothProdutos(setState,setDb,applyDel);
+  };
+  const renameRua=(old:string,novo:string)=>{
+    novo=novo.trim();
+    if(!novo){setEditRua(null);return;}
+    if(novo===old){setEditRua(null);return;}
+    if(ruas.some(r=>r.toLowerCase()===novo.toLowerCase()&&r!==old)){alert("Rua já existe.");return;}
+    const applyRen=(d:any)=>{
+      const m={...(d.ruaCatMap||{})};
+      Object.keys(m).forEach(k=>{if(m[k]===old)m[k]=novo;});
+      return{...d,
+        listaRuas:(d.listaRuas||[]).map((x:string)=>x===old?novo:x),
+        listaCompras:(d.listaCompras||[]).map((i:any)=>i.rua===old?{...i,rua:novo}:i),
+        produtosLista:(d.produtosLista||[]).map((p:any)=>p.rua===old?{...p,rua:novo,atualizadoEm:new Date().toISOString()}:p),
+        ruaCatMap:m,
+      };
+    };
+    applyBothProdutos(setState,setDb,applyRen);
+    setEditRua(null);
+  };
+  const moverRua=(r:string,dir:-1|1)=>{
+    const applyMov=(d:any)=>{
+      const arr=[...(d.listaRuas||[])];
+      const i=arr.indexOf(r);if(i<0)return d;
+      const j=i+dir;if(j<0||j>=arr.length)return d;
+      [arr[i],arr[j]]=[arr[j],arr[i]];
+      return{...d,listaRuas:arr};
+    };
+    applyBothProdutos(setState,setDb,applyMov);
+  };
   const getRuaProd=(nome:string,cat?:string):string=>{
     const p=(db.produtosLista||[]).find((p:any)=>p.nome.toLowerCase()===nome.toLowerCase());
     if(p?.rua)return p.rua;
@@ -12332,220 +12087,159 @@ function ListaComprasPanel({db,setDb,isAdmin,onNavigate,onLogout,setState,login,
       </div>;
     })()}
 
-    {/* ===== CATEGORIAS — taxonomia FECHADA + a fila do que não é categoria =====
-        ⚠️ CRIAR CATEGORIA AQUI DEIXOU DE EXISTIR, e isso não é uma restrição de
-        permissão: é a causa do problema. Era o campo livre que fazia nome de
-        loja ("queijo minas", "cia do sorveteiro") e produto ("bombom") virarem
-        categoria — porque não havia onde mais escrever "onde eu compro isso".
-        Agora "onde" tem campo próprio (Locais), e a categoria é fixa.
-
-        ⚠️ E ela NÃO virou a taxonomia contábil de Compras. As duas medem coisas
-        diferentes (§5): esta organiza o corredor, aquela mede CMV — a lição da
-        Contagem é que categoria contábil não serve para andar pela loja com o
-        celular. `categoriaFechada` traduz as duas antigas na LEITURA, então
-        nenhum item precisou ser reescrito. */}
-    {isAdmin&&showCatMgmt&&<div>
-      <div className="card" style={{marginBottom:12}}>
-        <div className="section-title" style={{margin:"0 0 6px"}}>🏷️ Categorias da Lista</div>
-        <div style={{fontSize:11.5,color:"var(--text2)",lineHeight:1.55,marginBottom:10}}>
-          Lista fixa, na ordem do <b>corredor</b> — é nela que a lista é lida enquanto se
-          anda pela loja. Eram 19 e se sobrepunham tanto (“carnes” e “proteína”; “grãos”,
-          “farinhas”, “massas”, “molhos” e “temperos”) que arquivar virava adivinhação.
-        </div>
-        <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-          {CATS_LISTA.map((c,i)=>(
-            <span key={c} className="tag" style={{background:"var(--bg4)",color:"var(--text2)",fontSize:11.5,padding:"4px 10px"}}>
-              <b style={{color:"var(--text3)",marginRight:4}}>{i+1}</b>{catIcon(c)} {c}
-            </span>
-          ))}
-        </div>
+    {/* Gerenciar categorias (admin only) */}
+    {isAdmin&&showCatMgmt&&<div className="card" style={{marginBottom:12,border:"1px solid #8B5CF640"}}>
+      <div className="section-title" style={{color:"var(--category)"}}>🏷️ Categorias — Ordem de exibição</div>
+      <div style={{marginBottom:10}}>
+        {cats.map((c,idx)=>(
+          <div key={c} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 8px",marginBottom:4,background:"var(--bg4)",borderRadius:8,border:"1px solid var(--border)"}}>
+            <span style={{fontSize:16}}>{catIcon(c)}</span>
+            {editCat?.name===c
+              ? <>
+                  <input autoFocus value={editCat.val}
+                    onChange={e=>setEditCat(ec=>ec?{...ec,val:e.target.value}:ec)}
+                    onKeyDown={e=>{if(e.key==="Enter")renameCat(c,editCat.val);if(e.key==="Escape")setEditCat(null);}}
+                    className="inp" style={{flex:1,marginBottom:0,fontSize:13,padding:"4px 8px"}}/>
+                  <button onClick={()=>renameCat(c,editCat.val)} style={{background:"#22C55E22",border:"1px solid #22C55E",borderRadius:5,color:"#22C55E",cursor:"pointer",fontSize:12,padding:"3px 8px"}}>✓</button>
+                  <button onClick={()=>setEditCat(null)} style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:"#888",cursor:"pointer",fontSize:12,padding:"3px 6px"}}>✕</button>
+                </>
+              : <>
+                  <span style={{flex:1,fontSize:13,fontWeight:600,textTransform:"capitalize"}}>{c}</span>
+                  <button onClick={()=>setEditCat({name:c,val:c})} title="Renomear"
+                    style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:"var(--btnPrimary)",cursor:"pointer",fontSize:11,padding:"2px 6px",lineHeight:1}}>✏️</button>
+                  <div style={{display:"flex",gap:2}}>
+                    <button onClick={()=>moverCat(c,-1)} disabled={idx===0}
+                      style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:idx===0?"var(--text3)":"#8B5CF6",cursor:idx===0?"default":"pointer",fontSize:10,padding:"2px 5px",lineHeight:1}}>▲</button>
+                    <button onClick={()=>moverCat(c,1)} disabled={idx===cats.length-1}
+                      style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:idx===cats.length-1?"var(--text3)":"#8B5CF6",cursor:idx===cats.length-1?"default":"pointer",fontSize:10,padding:"2px 5px",lineHeight:1}}>▼</button>
+                  </div>
+                  {c!=="outros"&&<button onClick={()=>delCat(c)} style={{background:"none",border:"none",color:"var(--btnDanger)",cursor:"pointer",fontSize:14,padding:"0 2px",lineHeight:1}}>×</button>}
+                </>
+            }
+          </div>
+        ))}
       </div>
-
-      {/* ---- A fila: o que está gravado e não é categoria ---- */}
-      {plano.categoriasPendentes.length>0
-        ?<div className="card" style={{marginBottom:12}}>
-          <div style={{fontSize:13,fontWeight:700,marginBottom:4}}>
-            {plano.categoriasPendentes.length} valor(es) gravado(s) que não são categoria
-          </div>
-          <div style={{fontSize:11.5,color:"var(--text2)",lineHeight:1.55,marginBottom:10}}>
-            ⚠️ Nada aqui é decidido sozinho: <b>“cia do sorveteiro” é loja</b> e
-            <b> “bombom” é produto</b>, e os dois só têm em comum não serem categoria.
-            Escolher a categoria reescreve os itens que usavam aquele valor.
-          </div>
-          {plano.categoriasPendentes.map((c:any)=>(
-            <div key={c.valor} style={{padding:"9px 0",borderTop:"1px solid var(--bg4)"}}>
-              <div style={{display:"flex",alignItems:"baseline",gap:8,flexWrap:"wrap",marginBottom:6}}>
-                <b style={{fontSize:13}}>{c.valor}</b>
-                <span className="muted" style={{fontSize:11}}>{c.itens} item(ns)</span>
-                {c.pareceLocal&&<span className="tag" style={{background:"var(--warningBg)",color:"var(--warningText)",fontSize:10}}>
-                  também existe como rua — provavelmente é uma loja
-                </span>}
-              </div>
-              <div className="chip-row">
-                {CATS_LISTA.map((alvo:string)=>(
-                  <button key={alvo} type="button" className="chip" onClick={()=>reclassificarCat(c.valor,alvo)}>
-                    {catIcon(alvo)} {alvo}
-                  </button>
-                ))}
-              </div>
-              {c.pareceLocal&&<div style={{fontSize:11,color:"var(--text2)",marginTop:6}}>
-                Se for loja, crie o local em <b>Lista → Locais</b> e depois escolha aqui a
-                categoria de verdade dos {c.itens} item(ns).
-              </div>}
-            </div>
-          ))}
-        </div>
-        :<div className="card" style={{marginBottom:12,textAlign:"center",padding:"22px 16px"}}>
-          <div style={{fontSize:30,marginBottom:6}}>✅</div>
-          <div style={{fontWeight:700,fontSize:13}}>Nenhuma categoria inválida</div>
-          <div className="muted" style={{fontSize:11.5,marginTop:3}}>Todo item usa uma das {CATS_LISTA.length} categorias.</div>
-        </div>}
+      <div style={{display:"flex",gap:6}}>
+        <input placeholder="Nova categoria..." value={novaCat} onChange={e=>setNovaCat(e.target.value)}
+          onKeyDown={e=>{if(e.key==="Enter")addCat();}} className="inp" style={{marginBottom:0}}/>
+        <button className="btn" onClick={addCat} style={{background:"var(--category)",color:"#fff",padding:"8px 14px",fontSize:13,flexShrink:0}}>+ Add</button>
+      </div>
     </div>}
 
     {/* Gerenciar ruas (admin only) */}
-    {/* ===== LOCAIS DE COMPRA (substitui a tela de "Ruas") =====
-        ⚠️ A tela antiga associava CATEGORIA → RUA (`ruaCatMap`), e era ela a
-        origem do problema: para arquivar um item por onde se compra, só havia
-        criar uma categoria com o nome da loja. Agora "onde" é entidade própria,
-        com os corredores de cada local dentro dela. */}
-    {isAdmin&&showLocais&&<BackBar label="Nova Lista" onClick={()=>setSubTab("nova")}/>}
-    {isAdmin&&showLocais&&<div>
-      {migracaoPendente>0&&<div className="card" style={{marginBottom:12,background:"var(--warningBg)",border:"1px solid var(--warningText)44"}}>
-        <div style={{fontSize:13,fontWeight:700,color:"var(--warningText)",marginBottom:6}}>
-          Migração pendente — {migracaoPendente} coisa(s) para resolver
-        </div>
-        <div style={{fontSize:11.5,color:"var(--warningText)",lineHeight:1.6}}>
-          O campo <b>Rua</b> guardava duas coisas diferentes: corredor
-          (<b>“Rua 7”</b>, que existe no Açaí <i>e</i> no Sendas) e loja inteira
-          (<b>“Santa Lucia”</b>). Nada é convertido sozinho — <b>“Rua 7” não diz de
-          qual loja é</b>, e adivinhar mandaria o item para o mercado errado.
-        </div>
-      </div>}
-
-      {/* ---- As ruas que são LOJA viram local, uma a uma ---- */}
-      {ruasPendentes.length>0&&<div className="card" style={{marginBottom:12}}>
-        <div className="section-title" style={{margin:"0 0 6px"}}>🏪 Viram local de compra</div>
-        <div style={{fontSize:11.5,color:"var(--text2)",marginBottom:10,lineHeight:1.55}}>
-          Estes valores do campo Rua são nome de loja. Criar o local aqui <b>não mexe
-          em item nenhum</b> — os itens continuam como estão até você ligá-los.
-        </div>
-        {ruasPendentes.map((r:any)=>(
-          <div key={r.valor} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 0",borderTop:"1px solid var(--bg4)"}}>
-            <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:13,fontWeight:600}}>{r.valor}</div>
-              <div className="muted" style={{fontSize:11}}>{r.itens} item(ns) apontam para cá</div>
+    {isAdmin&&showRuaMgmt&&<BackBar label="Nova Lista" onClick={()=>setSubTab("nova")}/>}
+    {isAdmin&&showRuaMgmt&&<div className="card" style={{marginBottom:12,border:"1px solid #15803D"}}>
+      <div className="section-title" style={{color:"#22C55E"}}>🛤️ Ruas — Ordem de compra</div>
+      <div style={{fontSize:11,color:"#888",marginBottom:10}}>Defina as ruas do mercado e associe categorias. Produtos dessas categorias herdarão a rua automaticamente.</div>
+      <div style={{marginBottom:10}}>
+        {!ruas.length&&<div className="muted" style={{fontSize:12,textAlign:"center",padding:"12px 0"}}>Nenhuma rua cadastrada</div>}
+        {ruas.map((r,idx)=>{
+          const catsNaRua=cats.filter(c=>ruaCatMap[c]===r);
+          const catsDisponiveis=cats.filter(c=>!ruaCatMap[c]||ruaCatMap[c]===r);
+          return <div key={r} style={{marginBottom:6,background:"var(--bg4)",borderRadius:8,border:"1px solid var(--border)"}}>
+            <div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 8px"}}>
+              <span style={{fontSize:14,color:"#22C55E",fontWeight:800,minWidth:22,textAlign:"center"}}>{idx+1}</span>
+              {editRua?.name===r
+                ? <>
+                    <input autoFocus value={editRua.val}
+                      onChange={e=>setEditRua(er=>er?{...er,val:e.target.value}:er)}
+                      onKeyDown={e=>{if(e.key==="Enter")renameRua(r,editRua.val);if(e.key==="Escape")setEditRua(null);}}
+                      className="inp" style={{flex:1,marginBottom:0,fontSize:13,padding:"4px 8px"}}/>
+                    <button onClick={()=>renameRua(r,editRua.val)} style={{background:"#22C55E22",border:"1px solid #22C55E",borderRadius:5,color:"#22C55E",cursor:"pointer",fontSize:12,padding:"3px 8px"}}>✓</button>
+                    <button onClick={()=>setEditRua(null)} style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:"#888",cursor:"pointer",fontSize:12,padding:"3px 6px"}}>✕</button>
+                  </>
+                : <>
+                    <span style={{flex:1,fontSize:13,fontWeight:600}}>{r}</span>
+                    <button onClick={()=>setEditRua({name:r,val:r})} title="Renomear"
+                      style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:"var(--btnPrimary)",cursor:"pointer",fontSize:11,padding:"2px 6px",lineHeight:1}}>✏️</button>
+                    <div style={{display:"flex",gap:2}}>
+                      <button onClick={()=>moverRua(r,-1)} disabled={idx===0}
+                        style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:idx===0?"var(--text3)":"#22C55E",cursor:idx===0?"default":"pointer",fontSize:10,padding:"2px 5px",lineHeight:1}}>▲</button>
+                      <button onClick={()=>moverRua(r,1)} disabled={idx===ruas.length-1}
+                        style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,color:idx===ruas.length-1?"var(--text3)":"#22C55E",cursor:idx===ruas.length-1?"default":"pointer",fontSize:10,padding:"2px 5px",lineHeight:1}}>▼</button>
+                    </div>
+                    <button onClick={()=>delRua(r)} style={{background:"none",border:"none",color:"var(--btnDanger)",cursor:"pointer",fontSize:14,padding:"0 2px",lineHeight:1}}>×</button>
+                  </>
+              }
             </div>
-            <button className="btn" onClick={()=>criarLocalDaRua(r.valor,false)}
-              style={{background:"var(--bg4)",color:"var(--text2)",padding:"6px 10px",fontSize:11.5}}>criar</button>
-            <button className="btn" onClick={()=>criarLocalDaRua(r.valor,true)}
-              style={{background:"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)",padding:"6px 10px",fontSize:11.5}}>criar com corredores</button>
-          </div>
-        ))}
-      </div>}
-
-      {/* ---- Os corredores viram local + corredor, de uma vez ---- */}
-      {plano.corredores.length>0&&<div className="card" style={{marginBottom:12}}>
-        <div className="section-title" style={{margin:"0 0 6px"}}>🛤️ Os corredores pertencem a qual local?</div>
-        <div style={{fontSize:11.5,color:"var(--text2)",marginBottom:10,lineHeight:1.55}}>
-          Há <b>{plano.corredores.length} corredor(es)</b> em uso (
-          {plano.corredores.slice(0,10).map((c:any)=>`Rua ${c.numero}`).join(", ")}
-          {plano.corredores.length>10?"…":""}), em{" "}
-          <b>{plano.corredores.reduce((a:number,c:any)=>a+c.itens,0)} item(ns)</b>.
-          {" "}Responda uma vez e todos vão junto, com o corredor de cada um.
-        </div>
-        <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
-          <select value={migDestino} onChange={e=>setMigDestino(e.target.value)} className="inp"
-            style={{marginBottom:0,flex:"1 1 160px",fontSize:12.5}}>
-            <option value="">— criar um local novo —</option>
-            {locais.map((l:any)=><option key={l.id} value={l.id}>{l.nome}</option>)}
-          </select>
-          {!migDestino&&<input value={migNome} onChange={e=>setMigNome(e.target.value)}
-            placeholder="Nome do local" className="inp" style={{marginBottom:0,flex:"1 1 140px",fontSize:12.5}}/>}
-          <button className="btn" onClick={migrarCorredores}
-            style={{background:"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)",padding:"8px 14px",fontSize:12.5}}>
-            🛤️ mandar os corredores para cá
-          </button>
-        </div>
-        {/* ⚠️ O que NÃO anda fica escrito: contador que encolhe sem explicação
-            faz a pessoa procurar o item que sumiu. */}
-        <div style={{fontSize:11,color:"var(--text3)",marginTop:9,lineHeight:1.55,borderTop:"1px solid var(--bg4)",paddingTop:8}}>
-          Rua que é <b>nome de loja</b> (“Santa Lucia”) não vem junto — ela é a outra
-          pergunta, logo acima. Item que já foi mandado para um local à mão também fica
-          como está. O valor antigo do campo Rua continua guardado em cada registro.
-          {locaisComCorredor.length>0&&<> Locais que já têm corredor:{" "}
-            <b>{locaisComCorredor.map((l:any)=>l.nome).join(", ")}</b>.</>}
-        </div>
-      </div>}
-
-      {/* ---- Cadastro ---- */}
-      <div className="card" style={{marginBottom:12}}>
-        <div className="section-title" style={{margin:"0 0 8px"}}>🏪 Locais de compra</div>
-        <div style={{display:"flex",gap:8,marginBottom:8,flexWrap:"wrap"}}>
-          <input value={novoLocalForm.nome} onChange={e=>setNovoLocalForm(f=>({...f,nome:e.target.value}))}
-            placeholder="Nome do local (mercado, atacadista, fornecedor)" className="inp" style={{marginBottom:0,flex:"2 1 200px"}}/>
-          <label style={{display:"flex",gap:6,alignItems:"center",fontSize:12,color:"var(--text2)"}}>
-            <input type="checkbox" checked={novoLocalForm.temCorredor}
-              onChange={e=>setNovoLocalForm(f=>({...f,temCorredor:e.target.checked}))}/>
-            tem corredores
-          </label>
-          <button className="btn" onClick={salvarLocal}
-            style={{background:"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)",padding:"8px 14px",fontSize:12.5}}>
-            {editLocalId?"✓ Salvar":"+ Adicionar"}
-          </button>
-          {editLocalId&&<button className="btn" onClick={()=>{setEditLocalId(null);setNovoLocalForm({nome:"",temCorredor:false,corredores:""});}}
-            style={{background:"var(--border2)",color:"var(--text2)",padding:"8px 12px",fontSize:12.5}}>Cancelar</button>}
-        </div>
-        {novoLocalForm.temCorredor&&<input value={novoLocalForm.corredores}
-          onChange={e=>setNovoLocalForm(f=>({...f,corredores:e.target.value}))}
-          placeholder="Corredores, separados por vírgula — ex.: 1, 2, 3, 7, 12" className="inp" style={{marginBottom:0,fontSize:12.5}}/>}
+            {/* Categorias associadas a esta rua */}
+            <div style={{padding:"2px 8px 4px",display:"flex",gap:4,flexWrap:"wrap" as const,alignItems:"center"}}>
+              <span style={{fontSize:9,color:"#666",fontWeight:700,textTransform:"uppercase" as const,letterSpacing:.5}}>Categorias:</span>
+              {catsNaRua.map(c=>(
+                <span key={c} style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,background:"#22C55E18",color:"#22C55E",border:"1px solid #22C55E44",borderRadius:12,padding:"2px 8px"}}>
+                  {catIcon(c)} {c}
+                  <button onClick={()=>setRuaCat(c,"")} style={{background:"none",border:"none",color:"var(--btnDanger)",cursor:"pointer",fontSize:11,padding:0,lineHeight:1}}>×</button>
+                </span>
+              ))}
+              <select onChange={e=>{if(e.target.value)setRuaCat(e.target.value,r);e.target.value="";}} style={{fontSize:10,background:"var(--bg3)",color:"#888",border:"1px solid var(--border2)",borderRadius:12,padding:"2px 6px",cursor:"pointer"}}>
+                <option value="">+ categoria</option>
+                {catsDisponiveis.filter(c=>!catsNaRua.includes(c)).map(c=><option key={c} value={c}>{catIcon(c)} {c}</option>)}
+              </select>
+            </div>
+            {/* Produtos associados a esta rua */}
+            {(()=>{
+              const prodsNaRua=(db.produtosLista||[]).filter((p:any)=>p.rua===r).sort((a:any,b:any)=>(a.nome||"").localeCompare(b.nome||"","pt-BR"));
+              const isBuscando=buscaProdRua?.rua===r;
+              const q=(buscaProdRua?.query||"").toLowerCase();
+              const prodsDisp=isBuscando&&q.length>=1
+                ?(db.produtosLista||[]).filter((p:any)=>p.rua!==r&&(p.nome||"").toLowerCase().includes(q)).slice(0,10)
+                :[];
+              // ⚠️ CARIMBA e salva pelo applyBothProdutos. Sem `atualizadoEm`, a
+              // fusão cai na regra "só o servidor tem timestamp → servidor
+              // vence" e a rua volta ao que era no poll seguinte — era o
+              // "altero a rua, salvo, e o produto volta sem rua". E o
+              // setState cru dependia do auto-save genérico; applyBothProdutos
+              // busca o servidor, funde e grava as duas empresas por conta.
+              const setProdRuaBoth=(nome:string,rua:string)=>{
+                const nLow=nome.toLowerCase();
+                const ts=new Date().toISOString();
+                applyBothProdutos(setState,setDb,(d:any)=>({...d,
+                  produtosLista:(d.produtosLista||[]).map((pp:any)=>
+                    (pp.nome||"").toLowerCase()===nLow?{...pp,rua,atualizadoEm:ts}:pp)}));
+              };
+              return <div style={{padding:"0 8px 6px"}}>
+                <div style={{display:"flex",gap:4,flexWrap:"wrap" as const,alignItems:"center",marginBottom:4}}>
+                  <span style={{fontSize:9,color:"#666",fontWeight:700,textTransform:"uppercase" as const,letterSpacing:.5}}>Produtos ({prodsNaRua.length}):</span>
+                  {prodsNaRua.slice(0,30).map((p:any)=>(
+                    <span key={p.id} style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,background:"#6366F118",color:"var(--btnPrimary)",border:"1px solid #6366F144",borderRadius:12,padding:"2px 8px"}}>
+                      {p.nome}
+                      <button onClick={()=>setProdRuaBoth(p.nome,"")} style={{background:"none",border:"none",color:"var(--btnDanger)",cursor:"pointer",fontSize:11,padding:0,lineHeight:1}}>×</button>
+                    </span>
+                  ))}
+                  {prodsNaRua.length>30&&<span style={{fontSize:10,color:"#888"}}>+{prodsNaRua.length-30} mais</span>}
+                </div>
+                <div style={{position:"relative"}}>
+                  <input placeholder="Buscar produto para adicionar..."
+                    value={isBuscando?buscaProdRua.query:""}
+                    onFocus={()=>setBuscaProdRua({rua:r,query:""})}
+                    onChange={e=>setBuscaProdRua({rua:r,query:e.target.value})}
+                    className="inp" style={{marginBottom:0,fontSize:11,padding:"5px 8px"}}/>
+                  {isBuscando&&prodsDisp.length>0&&<div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:100,background:"var(--bg3)",border:"1px solid #3a4a6a",borderRadius:8,boxShadow:"0 4px 16px #0008",marginTop:2,maxHeight:200,overflowY:"auto" as const}}>
+                    {prodsDisp.map((p:any)=>(
+                      <div key={p.id} onMouseDown={()=>{
+                        setProdRuaBoth(p.nome,r);
+                        setBuscaProdRua({rua:r,query:""});
+                      }} style={{display:"flex",alignItems:"center",gap:6,padding:"8px 10px",cursor:"pointer",borderBottom:"1px solid var(--border)"}}>
+                        <span style={{fontSize:13}}>{catIcon(p.cat||"outros")}</span>
+                        <span style={{flex:1,fontSize:12,fontWeight:600}}>{p.nome}</span>
+                        {p.rua&&<span style={{fontSize:9,color:"#22C55E"}}>🛤️ {p.rua}</span>}
+                        <span style={{fontSize:10,color:"#888"}}>{p.unidade}</span>
+                      </div>
+                    ))}
+                  </div>}
+                  {isBuscando&&q.length>=1&&!prodsDisp.length&&<div style={{fontSize:11,color:"#666",marginTop:4}}>Nenhum produto encontrado</div>}
+                </div>
+              </div>;
+            })()}
+          </div>;
+        })}
       </div>
-
-      {/* ---- Lista ---- */}
-      {!locais.length&&<EmptyState msg="Nenhum local cadastrado ainda"/>}
-      {locais.map((l:any)=>(
-        <div key={l.id} className="card" style={{marginBottom:8,opacity:l.ativo===false?.55:1}}>
-          <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-            <span style={{fontSize:14,fontWeight:700}}>🏪 {l.nome}</span>
-            {l.ativo===false&&<span className="tag" style={{background:"var(--bg4)",color:"var(--text3)"}}>inativo</span>}
-            {!!l.corredores?.length&&<span className="tag" style={{background:"var(--infoBg)",color:"var(--infoText)"}}>{l.corredores.length} corredor(es)</span>}
-            <span style={{flex:1}}/>
-            <button className="btn" onClick={()=>{setEditLocalId(l.id);setNovoLocalForm({nome:l.nome,temCorredor:!!l.corredores?.length||!!l.temCorredor,corredores:(l.corredores||[]).join(", ")});}}
-              style={{background:"var(--bg4)",color:"var(--btnPrimary)",padding:"5px 10px",fontSize:11.5}}>✏️ editar</button>
-            {/* ⚠️ INATIVAR, NUNCA EXCLUIR: item antigo aponta pelo id, e apagando
-                o cadastro a lista arquivada deixa de dizer onde aquilo foi
-                comprado. */}
-            <button className="btn" onClick={()=>alternarLocalAtivo(l.id)}
-              style={{background:"var(--bg4)",color:"var(--text2)",padding:"5px 10px",fontSize:11.5}}>
-              {l.ativo===false?"reativar":"inativar"}
-            </button>
-          </div>
-          {!!l.corredores?.length&&<div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:7}}>
-            {l.corredores.map((c:string)=><span key={c} className="tag" style={{background:"var(--bg4)",color:"var(--text2)"}}>Rua {c}</span>)}
-          </div>}
-        </div>
-      ))}
-      <div className="card" style={{background:"var(--infoBg)",border:"1px solid var(--infoText)33"}}>
-        <div style={{fontSize:11.5,color:"var(--infoText)",lineHeight:1.55}}>
-          Local nunca é <b>excluído</b>, só inativado: item antigo aponta para ele pelo id,
-          e apagar o cadastro faria a lista arquivada perder a informação de onde aquilo
-          foi comprado. Inativo some do formulário e continua no histórico.
-        </div>
+      <div style={{display:"flex",gap:6}}>
+        <input placeholder="Nova rua..." value={novaRua} onChange={e=>setNovaRua(e.target.value)}
+          onKeyDown={e=>{if(e.key==="Enter")addRua();}} className="inp" style={{marginBottom:0}}/>
+        <button className="btn" onClick={addRua} style={{background:"#22C55E",color:"#111",padding:"8px 14px",fontSize:13,flexShrink:0,fontWeight:700}}>+ Add</button>
       </div>
     </div>}
-
-    {/* ⚠️ A TELA "RUAS" FOI APAGADA (21/09/2026). Ela cadastrava rua por texto
-        livre e associava CATEGORIA → RUA (`ruaCatMap`) — era exatamente o
-        mecanismo que fazia nome de loja virar categoria: quem precisava marcar
-        onde compra um item só tinha esse caminho. O "onde" virou entidade
-        própria em Lista → Locais, com os corredores dentro de cada local.
-
-        O `sub:"ruas"` saiu do menu junto: bloco pendurado num `sub` que nada
-        seleciona é tela em branco sem erro nenhum, e nem o build nem o
-        TypeScript acusam (a armadilha do `ABA_REL_ANTIGA`).
-
-        ⚠️ `db.listaRuas` e `db.ruaCatMap` NÃO foram apagados do banco: eles são
-        a fonte que a migração lê para propor os locais. Some a tela, fica o
-        dado. */}
 
     {/* Catálogo de produtos (admin only) */}
     {isAdmin&&showProdMgmt&&<BackBar label="Nova Lista" onClick={()=>setSubTab("nova")}/>}
@@ -12584,25 +12278,12 @@ function ListaComprasPanel({db,setDb,isAdmin,onNavigate,onLogout,setState,login,
         <select value={prodForm.unidade} onChange={e=>setProdForm(f=>({...f,unidade:e.target.value}))} className="inp" style={{flex:"0 0 60px",marginBottom:0}}>
           {["un","kg","g","L","ml","cx","pc","sc","bd"].map(u=><option key={u} value={u}>{u}</option>)}
         </select>
-        {/* ⚠️ ONDE SE COMPRA é o LOCAL, não a rua legada. Este select lia
-            `listaRuas` — a tela que alimentava essa lista foi apagada em
-            21/09, então "Assaí", criado em Lista → Locais, nunca aparecia
-            aqui. Era isto: "ao editar produto sem rua a opção de Assaí não
-            aparece". `rua` continua gravada (é o registro de origem). */}
-        <select value={prodForm.localId||""} onChange={e=>{const r=escolherLocal(e.target.value,prodForm.rua||"");if(!r)return;setProdForm(f=>({...f,localId:r.localId,corredor:r.corredor}));}} className="inp" style={{flex:"1 1 110px",marginBottom:0}}>
-          <option value="">Onde comprar</option>
-          {locaisAtivos(locais).map((l:any)=><option key={l.id} value={l.id}>🏪 {l.nome}</option>)}
-          {ruasLoja.filter(o=>!locais.some((l:any)=>foldNome(l.nome)===foldNome(o.nome))).map(o=><option key={"rua:"+o.nome} value={"rua:"+o.nome}>🏪 {o.nome} — criar local{o.origem==="categoria"?" (era categoria)":""}</option>)}
-          <option value="novo">➕ Criar novo local…</option>
-          {prodForm.localId&&!locais.some((l:any)=>l.id===prodForm.localId)&&<option value={prodForm.localId}>🏪 (local não encontrado)</option>}
-        </select>
-        {(()=>{const loc=localPorId(locais,prodForm.localId);if(!loc?.corredores?.length)return null;
-          return <select value={prodForm.corredor||""} onChange={e=>setProdForm(f=>({...f,corredor:e.target.value}))} className="inp" style={{flex:"0 1 90px",marginBottom:0}}>
-            <option value="">Corredor</option>
-            {loc.corredores.map((c:string)=><option key={c} value={c}>Rua {c}</option>)}
-          </select>;})()}
+        {ruas.length>0&&<select value={prodForm.rua} onChange={e=>setProdForm(f=>({...f,rua:e.target.value}))} className="inp" style={{flex:"1 1 80px",marginBottom:0}}>
+          <option value="">Rua</option>
+          {ruas.map(r=><option key={r} value={r}>{r}</option>)}
+        </select>}
         <button className="btn" onClick={saveProd} style={{background:"#22C55E",color:"#111",padding:"8px 14px",fontSize:13,flexShrink:0,fontWeight:700}}>{editProdId?"💾":"+"}</button>
-        {editProdId&&<button className="btn" onClick={()=>{setEditProdId(null);setProdForm({nome:"",cat:"",unidade:"un",rua:"",localId:"",corredor:""});}} style={{background:"var(--border2)",color:"#aaa",padding:"8px 10px",fontSize:13,flexShrink:0}}>✕</button>}
+        {editProdId&&<button className="btn" onClick={()=>{setEditProdId(null);setProdForm({nome:"",cat:"",unidade:"un",rua:""});}} style={{background:"var(--border2)",color:"#aaa",padding:"8px 10px",fontSize:13,flexShrink:0}}>✕</button>}
       </div>
       {/* Conciliação com compras */}
       {(()=>{
@@ -12677,9 +12358,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onNavigate,onLogout,setState,login,
                 {isLinked?"🔗":"💰"}{mp._avgCount>1?`(${mp._avgCount})`:""} {fmtMoney(mp.ultimoValor)}/{mp.unidade||"un"}
               </span>:
               <span onClick={()=>{setCatConcItem(isExpConc?null:p.id);setConcBusca("");}} style={{fontSize:10,color:"#f59e0b",cursor:"pointer",whiteSpace:"nowrap" as const}}>sem preço</span>}
-              {(()=>{const loc=localPorId(locais,p.localId);
-                if(loc)return <span style={{fontSize:10,color:"#22C55E",background:"#22C55E18",borderRadius:4,padding:"1px 5px"}}>🏪 {loc.nome}{p.corredor?` · Rua ${p.corredor}`:""}</span>;
-                return p.rua?<span style={{fontSize:10,color:"#22C55E",background:"#22C55E18",borderRadius:4,padding:"1px 5px"}}>🛤️ {p.rua}</span>:null;})()}
+              {p.rua&&<span style={{fontSize:10,color:"#22C55E",background:"#22C55E18",borderRadius:4,padding:"1px 5px"}}>🛤️ {p.rua}</span>}
               <span style={{fontSize:11,color:"#888",background:"var(--bg4)",borderRadius:4,padding:"1px 5px"}}>{p.unidade}</span>
               <button onClick={()=>startEditProd(p)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--btnPrimary)",fontSize:13,padding:"0 3px"}}>✏️</button>
               <button onClick={()=>delProd(p.id)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--btnDanger)",fontSize:13,padding:"0 3px"}}>🗑️</button>
@@ -12885,12 +12564,6 @@ function ListaComprasPanel({db,setDb,isAdmin,onNavigate,onLogout,setState,login,
             {["un","kg","g","L","ml","cx","pc","sc","bd"].map(u=><option key={u} value={u}>{u}</option>)}
           </select>
         </div>
-        {/* "Tem na Loja": quanto já existe na loja, digitado por quem monta a
-            lista. Chegou a ser trocado pelo saldo do estoque em 21/09/2026 e
-            foi DESFEITO no mesmo dia, por decisão do dono — o saldo automático
-            só serve quando o produto está vinculado a uma matéria-prima, e a
-            maior parte da lista não está. Aqui vale o que a pessoa viu na
-            prateleira. */}
         <div style={{flex:"2 1 130px"}}>
           <div style={{fontSize:11,color:"#888",fontWeight:600,marginBottom:4}}>Tem na Loja</div>
           <div style={{display:"flex",gap:4}}>
@@ -12910,28 +12583,13 @@ function ListaComprasPanel({db,setDb,isAdmin,onNavigate,onLogout,setState,login,
             {cats.map(c=><option key={c} value={c}>{catIcon(c)} {c}</option>)}
           </select>
         </div>
-        {/* ⚠️ ONDE SE COMPRA é o LOCAL. Este select lia `listaRuas`, cuja tela
-            foi apagada em 21/09 — um local criado em Lista → Locais nunca
-            aparecia aqui, e o item novo nascia sem `localId` (o saveItem já
-            gravava o campo; só não havia como preenchê-lo). Era o terceiro
-            lugar do "a opção de Assaí não aparece". */}
-        <div style={{flex:1}}>
-          <div style={{fontSize:11,color:"#888",fontWeight:600,marginBottom:4}}>Onde comprar</div>
-          <div style={{display:"flex",gap:6}}>
-            <select value={form.localId||""} onChange={e=>{const r=escolherLocal(e.target.value,form.rua||"");if(!r)return;setF("localId",r.localId);setF("corredor",r.corredor);}} className="inp" style={{marginBottom:0,flex:2}}>
-              <option value="">Não definido</option>
-              {locaisAtivos(locais).map((l:any)=><option key={l.id} value={l.id}>🏪 {l.nome}</option>)}
-              {ruasLoja.filter(o=>!locais.some((l:any)=>foldNome(l.nome)===foldNome(o.nome))).map(o=><option key={"rua:"+o.nome} value={"rua:"+o.nome}>🏪 {o.nome} — criar local{o.origem==="categoria"?" (era categoria)":""}</option>)}
-              <option value="novo">➕ Criar novo local…</option>
-              {form.localId&&!locais.some((l:any)=>l.id===form.localId)&&<option value={form.localId}>🏪 (local não encontrado)</option>}
-            </select>
-            {(()=>{const loc=localPorId(locais,form.localId);if(!loc?.corredores?.length)return null;
-              return <select value={form.corredor||""} onChange={e=>setF("corredor",e.target.value)} className="inp" style={{marginBottom:0,flex:1}}>
-                <option value="">Corredor</option>
-                {loc.corredores.map((c:string)=><option key={c} value={c}>Rua {c}</option>)}
-              </select>;})()}
-          </div>
-        </div>
+        {ruas.length>0&&<div style={{flex:1}}>
+          <div style={{fontSize:11,color:"#888",fontWeight:600,marginBottom:4}}>Rua</div>
+          <select value={form.rua} onChange={e=>setF("rua",e.target.value)} className="inp" style={{marginBottom:0}}>
+            <option value="">Sem rua</option>
+            {ruas.map(r=><option key={r} value={r}>{r}</option>)}
+          </select>
+        </div>}
       </div>}
       {/* Observações */}
       <div style={{marginBottom:12}}>
@@ -12967,14 +12625,6 @@ function ListaComprasPanel({db,setDb,isAdmin,onNavigate,onLogout,setState,login,
         <button className="btn" onClick={fecharLista} style={{background:"var(--successBg)",color:"var(--successText)",border:"1px solid #22C55E40",padding:"10px 12px",fontSize:12,flexShrink:0,fontWeight:700}}>
           🔒 Fechar Lista
         </button>
-        {/* ⚠️ O ELO É UM BOTÃO, NÃO UM DIÁLOGO A CADA ITEM MARCADO. Quem faz
-            compra marca dez itens seguidos, e uma pergunta por marcação vira a
-            pergunta que se fecha sem ler — a regra do "aviso que grita sempre".
-            Aqui ele aparece uma vez, quando já há o que lançar. */}
-        {comprados.length>0&&isAdmin&&<button className="btn" onClick={lancarEmCompras}
-          style={{background:"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)",padding:"10px 12px",fontSize:12,flexShrink:0,fontWeight:700}}>
-          🏪 Lançar {comprados.length} em Compras
-        </button>}
         {comprados.length>0&&<button className="btn" onClick={limparComprados} style={{background:"var(--dangerBg)",color:"#888",padding:"10px 12px",fontSize:12,flexShrink:0}}>
           🗑️ Limpar
         </button>}
@@ -13032,7 +12682,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onNavigate,onLogout,setState,login,
           const estoqueRef=item.estoqueQtd!=null&&item.estoqueQtd!==""?parseFloat(item.estoqueQtd):0;
           const isEditing=editId===item.id;
           const mpPreco=precoUnitMp(getMpByName(item.nome));
-          if(isEditing)return <InlineEditItem key={item.id} form={form} setF={setF} isAdmin={isAdmin} editId={editId} cancelEdit={cancelEdit} del={del} saveItem={saveItem} prodsCatalog={prodsCatalog} locais={locais} ruasLoja={ruasLoja} escolherLocal={escolherLocal}/>;
+          if(isEditing)return <InlineEditItem key={item.id} form={form} setF={setF} isAdmin={isAdmin} cats={cats} editId={editId} cancelEdit={cancelEdit} del={del} saveItem={saveItem} prodsCatalog={prodsCatalog} getRuaDaCat={getRuaDaCat} ruas={ruas}/>;
           return(
           <div key={item.id}>
           <SwipeRow disabled={travandoIds.has(item.id)}
@@ -13043,10 +12693,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onNavigate,onLogout,setState,login,
               <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap" as const}}>
                 <span style={{fontSize:13,fontWeight:600,color:item.urgente?"#ff9aa8":"inherit"}}>{item.nome}</span>
                 {item.urgente&&<span style={{fontSize:9,background:"var(--btnDanger)",color:"var(--onDanger,#FFFFFF)",borderRadius:8,padding:"1px 5px",fontWeight:800}}>URGENTE</span>}
-                {isAdmin&&(()=>{const loc=localPorId(locais,item.localId);
-                  if(loc)return <span style={{fontSize:9,color:"#22C55E",background:"#22C55E18",borderRadius:4,padding:"1px 5px"}}>🏪 {loc.nome}{item.corredor?` · Rua ${item.corredor}`:""}</span>;
-                  const r=item.rua||getRuaProd(item.nome);
-                  return r?<span style={{fontSize:9,color:"#22C55E",background:"#22C55E18",borderRadius:4,padding:"1px 5px"}}>🛤️ {r}</span>:null;})()}
+                {isAdmin&&(item.rua||getRuaProd(item.nome))&&<span style={{fontSize:9,color:"#22C55E",background:"#22C55E18",borderRadius:4,padding:"1px 5px"}}>🛤️ {item.rua||getRuaProd(item.nome)}</span>}
               </div>
               <div style={{display:"flex",gap:6,alignItems:"center",marginTop:2,flexWrap:"wrap" as const}}>
                 <div style={{display:"flex",alignItems:"center",gap:2}} onClick={(e:any)=>e.stopPropagation()} onPointerDown={(e:any)=>e.stopPropagation()}>
@@ -13098,7 +12745,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onNavigate,onLogout,setState,login,
           const estoqueRef=item.estoqueQtd!=null&&item.estoqueQtd!==""?parseFloat(item.estoqueQtd):0;
           const isEditing=editId===item.id;
           const mpPreco=precoUnitMp(getMpByName(item.nome));
-          if(isEditing)return <InlineEditItem key={item.id} form={form} setF={setF} isAdmin={isAdmin} editId={editId} cancelEdit={cancelEdit} del={del} saveItem={saveItem} prodsCatalog={prodsCatalog} locais={locais} ruasLoja={ruasLoja} escolherLocal={escolherLocal}/>;
+          if(isEditing)return <InlineEditItem key={item.id} form={form} setF={setF} isAdmin={isAdmin} cats={cats} editId={editId} cancelEdit={cancelEdit} del={del} saveItem={saveItem} prodsCatalog={prodsCatalog} getRuaDaCat={getRuaDaCat} ruas={ruas}/>;
           return(
           <div key={item.id}>
           <SwipeRow disabled={travandoIds.has(item.id)}
@@ -13110,12 +12757,6 @@ function ListaComprasPanel({db,setDb,isAdmin,onNavigate,onLogout,setState,login,
                 <span style={{fontSize:13,fontWeight:600,color:item.urgente?"#ff9aa8":"inherit"}}>{item.nome}</span>
                 {item.urgente&&<span style={{fontSize:9,background:"var(--btnDanger)",color:"var(--onDanger,#FFFFFF)",borderRadius:8,padding:"1px 5px",fontWeight:800}}>URGENTE</span>}
                 <span style={{fontSize:10,color:"var(--category)",background:"#8B5CF618",borderRadius:4,padding:"1px 5px"}}>{catIcon(item.categoria||"outros")} {item.categoria||"outros"}</span>
-                {/* Onde se compra, ao lado da categoria: a linha só mostrava a
-                    rua legada, então um item já ligado ao local parecia "sem
-                    rua" — e a pessoa ia editar o que já estava certo. */}
-                {(()=>{const loc=localPorId(locais,item.localId);
-                  if(loc)return <span style={{fontSize:10,color:"#22C55E",background:"#22C55E18",borderRadius:4,padding:"1px 5px"}}>🏪 {loc.nome}{item.corredor?` · Rua ${item.corredor}`:""}</span>;
-                  return item.rua?<span style={{fontSize:10,color:"#22C55E",background:"#22C55E18",borderRadius:4,padding:"1px 5px"}}>🛤️ {item.rua}</span>:null;})()}
               </div>
               <div style={{display:"flex",gap:6,alignItems:"center",marginTop:2,flexWrap:"wrap" as const}}>
                 <div style={{display:"flex",alignItems:"center",gap:2}} onClick={(e:any)=>e.stopPropagation()} onPointerDown={(e:any)=>e.stopPropagation()}>
