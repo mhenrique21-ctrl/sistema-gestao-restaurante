@@ -44,6 +44,7 @@ src/faltaClt.js       desconto de falta: o dia E o DSR, pela CLT (com testes)
 src/nfeImportadas.js  quais NF-e já entraram, pela chave de 44 dígitos (com testes)
 src/vinculoProducao.js  liga o nome da produção ao produto do Eclética (com testes)
 src/autoSave.js       salvar, reagendar ou ignorar — a decisão que perdia dado (com testes)
+src/listaId.js        a identidade da lista que sucede uma arquivada (com testes)
 src/planilha.js       .xlsx e .csv sem dependência nenhuma (com testes)
 src/relatorioPlataforma.js  o relatório do iFood/99Food vira Vendas (com testes)
 src/relatorioPeriodo.js  o período, os canais e as formas de pagamento (com testes)
@@ -2476,6 +2477,64 @@ entrar no tombstone**, e voltava no poll seguinte piscando na tela de todos.
 ⚠️ `retomarLista` é destrutiva de propósito (o diálogo avisa), mas os ids que
 ela marca como excluídos saem do estado que está sendo escrito — senão apagaria
 item que chegou de outro operador entre o clique e a gravação.
+
+#### O item some da TELA, não do banco — `src/listaId.js` (com testes)
+
+Relatado em 04/10/2026 como *"insiro na lista e não atualiza para os outros
+usuários, **quando a lista anterior ainda não foi cancelada**"* — e a segunda
+metade da frase é que localiza o defeito.
+
+A tela filtra por `i.listaId===listaAtualId`; o que não casa vira **órfão** e
+desaparece. O item sobe para o servidor, funde certo e chega em todo aparelho —
+e não aparece em nenhum. Quem inseriu jura que inseriu, os outros juram que não
+chegou nada, e os dois estão certos.
+
+⚠️ **`arquivarLista` criava a lista nova com `uid()`.** No fechamento automático
+TODO aparelho com a lista aberta começa a contagem de 10 s e eles disparam
+praticamente juntos; cada um criava a SUA lista nova, com o próprio `abertaEm`.
+A fusão fica com o `abertaEm` estritamente maior — o **último a gravar** — e todo
+item inserido nesse meio, nos aparelhos que perderam, nasceu com o `listaId`
+perdedor.
+
+⚠️ **A lição já estava três linhas acima e não foi aplicada.** O id do PEDIDO do
+arquivo é `arq-<listaAtualId>`, determinístico, com o comentário dizendo o
+porquê: *"com `uid()` cada um criaria um registro próprio e o Arquivo mostraria
+a mesma compra três vezes"*. No id da lista NOVA o mesmo erro custa mais caro: lá
+duplica uma linha no histórico, aqui some um item da tela de todo mundo.
+
+`proximaListaId(atual)` deriva o sucessor por hash, então os aparelhos que fecham
+a MESMA lista chegam no MESMO id. ⚠️ **De tamanho fixo**: derivar por
+concatenação (`"pos-"+id`) também seria determinístico e cresceria para sempre —
+uma lista por dia vira um id de milhares de caracteres dentro de *todo* item.
+
+⚠️ **O fallback do `migrateDb` também inventava um id por aparelho.** Ele carimba
+época ZERO de propósito (para nunca vencer um fechamento de verdade), e no empate
+a fusão fica com o servidor: o aparelho que inventasse o próprio id sempre
+perderia, e os itens que ele acabou de carimbar nasceriam órfãos. Virou a
+constante `ID_LISTA_INICIAL`.
+
+##### Órfão de HOJE não é "lista antiga"
+
+Arquivar uma lista **apaga** os itens dela, então órfão nunca deveria existir:
+quando existe, é anomalia. A regra antiga tratava todos como lista de outro dia —
+aviso **só para o admin**, e a única ação era **arquivar**, que para um item
+inserido há minutos é o pior desfecho: enterra no histórico justamente o que a
+pessoa acabou de digitar.
+
+⚠️ O órfão **criado hoje** é a assinatura do fechamento simultâneo, e volta para a
+lista (`trazerOrfaosDeHoje`). O de um dia anterior continua indo para o Arquivo,
+com a regra e o texto de sempre.
+
+⚠️ **O aviso dos órfãos de hoje é de TODO MUNDO**, não só do admin: quem precisa
+ver o item é quem está comprando. Ficar calado é o que fazia o relato ser "inseri
+e não atualizou para os outros" em vez de "tem item fora da lista".
+
+⚠️ A recuperação lê do **`d` da gravação** (§3) e **carimba `updatedAt`**: sem o
+carimbo a fusão devolve a versão antiga, com o `listaId` perdedor, no poll
+seguinte — e o item some de novo.
+
+`src/listaId.test.js` **reproduz o caso**: dois aparelhos fechando a mesma lista,
+com `uid()` o item fica órfão; com `proximaListaId` ele aparece.
 
 #### Fecha sozinha quando acaba
 

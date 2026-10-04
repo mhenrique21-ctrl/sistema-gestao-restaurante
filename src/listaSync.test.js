@@ -163,3 +163,48 @@ test('o recorte é cacheado por mtime, não relido a cada pedido', () => {
     'o recorte voltou a reler e reparsear o arquivo a cada pedido');
   assert.ok(fn.includes('marcaDoArquivo(emp)'), 'o recorte deixou de usar a marca do arquivo');
 });
+
+test('a lista NOVA do fechamento tem id determinístico', () => {
+  // ⚠️ Com `uid()` cada aparelho que disparava o fechamento automático criava a
+  // SUA lista nova; a fusão ficava com a do último a gravar, e todo item
+  // inserido nesse meio nascia com o `listaId` perdedor — órfão, invisível, sem
+  // nada avisando. É a mesma lição do `arq-<id>` três linhas acima, que já era
+  // determinístico pelo mesmo motivo.
+  const i = APP.indexOf('const arquivarLista=(auto:boolean)=>{');
+  assert.ok(i > 0, 'arquivarLista sumiu');
+  const fn = APP.slice(i, i + 3000);
+  assert.ok(fn.includes('listaAtualId:proximaListaId(atual),'),
+    'o id da lista nova voltou a ser por aparelho');
+  assert.ok(!/listaAtualId:uid\(\)/.test(APP), 'alguém reintroduziu uid() como id de lista');
+  assert.ok(fn.includes('id:"arq-"+atual'), 'o id do pedido do arquivo deixou de ser determinístico');
+});
+
+test('o fallback de quem não tem lista é CONSTANTE', () => {
+  // ⚠️ O carimbo do fallback é época ZERO de propósito, e no empate a fusão fica
+  // com o servidor: um id por aparelho sempre perderia, e os itens que ele
+  // carimbasse nasceriam órfãos.
+  assert.ok(APP.includes('const idNovo=ID_LISTA_INICIAL;'),
+    'o fallback voltou a inventar um id por aparelho');
+  assert.ok(APP.includes('m[e].listaAtualAbertaEm=new Date(0).toISOString();'),
+    'o fallback deixou de carimbar época zero — passaria a vencer um fechamento de verdade');
+});
+
+test('órfão de HOJE aparece para todo mundo e volta para a lista', () => {
+  // ⚠️ Arquivar uma lista APAGA os itens dela: órfão é anomalia. O de um dia
+  // anterior vai para o histórico; o de hoje é o item que a pessoa acabou de
+  // digitar, e enterrá-lo no Arquivo é o pior desfecho.
+  const i = APP.indexOf('const orfaosDeHoje:any[]=');
+  assert.ok(i > 0, 'a separação dos órfãos de hoje sumiu');
+  assert.ok(APP.includes('const trazerOrfaosDeHoje=()=>{'), 'a recuperação sumiu');
+  const fn = APP.slice(APP.indexOf('const trazerOrfaosDeHoje=()=>{'), APP.indexOf('const recuperarOrfaos=()=>{'));
+  // §3: do `d` da gravação, nunca do render — e com carimbo, senão o poll desfaz.
+  assert.ok(fn.includes('const alvo=d.listaAtualId||listaAtualId;'),
+    'passou a ler o listaAtualId do render em vez do `d` da gravação');
+  assert.ok(fn.includes('updatedAt:ts'), 'parou de carimbar — a fusão devolveria o listaId perdedor');
+  assert.ok(fn.includes('(setDbAndSave||setDb)'), 'voltou a gravar com setDb puro');
+  // O aviso NÃO pode ser só do admin: quem está comprando é quem precisa ver.
+  const banner = APP.indexOf('{orfaosDeHoje.length>0&&<div');
+  assert.ok(banner > 0, 'o aviso dos órfãos de hoje sumiu');
+  assert.ok(!APP.includes('{isAdmin&&orfaosDeHoje.length>0'),
+    'o aviso dos órfãos de hoje virou só do admin — o operador voltaria a ficar sem saber');
+});

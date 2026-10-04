@@ -16,6 +16,7 @@ import {separarImportadas,jaImportada,foldChave} from "./nfeImportadas.js";
 // insumos comprados, digitados em minúscula, respondiam.
 import {sugerirVinculo,itemDeEstoqueDaProducao,apelidosDoItem,normalizarNome as normProducao,fichasQueUsam,ehRecheio,candidatosDeVinculo} from "./vinculoProducao.js";
 import {decidirAutoSave,empresasComMudanca} from "./autoSave.js";
+import {proximaListaId,ID_LISTA_INICIAL} from "./listaId.js";
 import {lerPlanilha} from "./planilha.js";
 import {lerRelatorio,conferirRelatorio,resumoPorDia,lancamentosDoRelatorio,conflitosDaPonte,automaticosDePlataforma,limparAutomaticos,ROTULO as ROTULO_PLAT} from "./relatorioPlataforma.js";
 import {compararPeriodos,formasDoPeriodo,porDiaDaSemana,porMes,periodoAnterior,compararProdutos,coberturaItens,topComResto,CANAIS as CANAIS_REL,FORMAS as FORMAS_REL} from "./relatorioPeriodo.js";
@@ -1849,7 +1850,12 @@ const migrateDb=(m:any)=>{
     // que a de verdade, tornando todos os itens reais órfãos sem ninguém ter
     // clicado em "Fechar Lista".
     if(!m[e].listaAtualId){
-      const idNovo=uid();
+      // ⚠️ CONSTANTE, não `uid()`. O carimbo aqui é a época ZERO de propósito
+      // (para nunca vencer um fechamento de verdade), e no empate a fusão fica
+      // com o SERVIDOR — então o aparelho que inventasse um id próprio perderia,
+      // e os itens que ele acabou de carimbar com esse id nasceriam órfãos.
+      // Sendo a mesma constante em todo aparelho, não há disputa.
+      const idNovo=ID_LISTA_INICIAL;
       m[e].listaAtualId=idNovo;
       m[e].listaAtualAbertaEm=new Date(0).toISOString();
       m[e].listaCompras=(m[e].listaCompras||[]).map((i:any)=>i.listaId?i:{...i,listaId:idNovo});
@@ -10960,7 +10966,16 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
   // Um item "órfão" (listaId de uma lista já fechada, sobrevivente de alguma corrida
   // de sincronização) nunca se mistura na tela — fica só visível pro admin decidir.
   const lista:any[]=listaTodas.filter((i:any)=>!i.listaId||i.listaId===listaAtualId);
-  const orfaos:any[]=listaTodas.filter((i:any)=>i.listaId&&i.listaId!==listaAtualId);
+  const orfaosTodos:any[]=listaTodas.filter((i:any)=>i.listaId&&i.listaId!==listaAtualId);
+  // ⚠️ ÓRFÃO DE HOJE NÃO É "LISTA ANTIGA", e tratá-los igual enterra o item que
+  // a pessoa acabou de digitar. Arquivar uma lista APAGA os itens dela, então
+  // órfão nunca deveria existir: quando existe, é anomalia. A de um dia
+  // anterior vai para o histórico (regra de sempre, abaixo). A de HOJE é a
+  // assinatura do fechamento simultâneo (ver src/listaId.js): dois aparelhos
+  // criaram listas irmãs no mesmo instante e o item caiu na que perdeu a fusão.
+  // Esse volta para a lista — é da compra que está acontecendo agora.
+  const orfaosDeHoje:any[]=orfaosTodos.filter((i:any)=>(i.criadoEm||"").slice(0,10)===today());
+  const orfaos:any[]=orfaosTodos.filter((i:any)=>(i.criadoEm||"").slice(0,10)!==today());
   // "não tem" foi removido: item legado com essa marca antiga volta a contar como pendente normal.
   const pendentes=lista.filter((i:any)=>!i.comprado);
   const comprados=lista.filter((i:any)=>i.comprado);
@@ -11273,7 +11288,15 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
         ...d,
         pedidosLista:[pedido,...(d.pedidosLista||[]).filter((pp:any)=>pp.id!==pedido.id)],
         listaCompras:(d.listaCompras||[]).filter((i:any)=>!ids.includes(i.id)),
-        listaAtualId:uid(),
+        // ⚠️ DETERMINÍSTICO, pelo mesmo motivo do `arq-` logo acima — e aqui
+        // custa mais caro. Com `uid()`, os aparelhos que disparam juntos no
+        // fechamento automático criavam cada um a SUA lista nova; a fusão
+        // ficava com a do último a gravar, e todo item inserido nesse meio
+        // nascia com o `listaId` perdedor. O item sobe, funde, chega em todo
+        // aparelho — e some da TELA, filtrado por `i.listaId===listaAtualId`.
+        // Ninguém vê, nada avisa: `recuperarOrfaos` é manual e só do admin.
+        // Ver src/listaId.js, que reproduz o caso em teste.
+        listaAtualId:proximaListaId(atual),
         listaAtualAbertaEm:new Date().toISOString(),
         listaDeletedIds:[...new Set([...(d.listaDeletedIds||[]),...ids])].slice(-5000),
       };
@@ -11324,6 +11347,22 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
   // vira seu próprio registro no Arquivo, datado pelo criadoEm mais antigo
   // do grupo — os dados originais são preservados, só ficam no histórico
   // ao invés de reaparecerem junto com o que está sendo comprado agora.
+  // ⚠️ Lê do `d` da GRAVAÇÃO, nunca do render (§3): entre o clique e o save,
+  // outro operador pode ter inserido mais um — e ele tem que vir junto.
+  // ⚠️ E carimba `updatedAt`, senão a fusão devolve a versão antiga (com o
+  // listaId perdedor) no poll seguinte e o item some de novo.
+  const trazerOrfaosDeHoje=()=>{
+    if(!orfaosDeHoje.length)return;
+    const hoje=today();
+    (setDbAndSave||setDb)((d:any)=>{
+      const alvo=d.listaAtualId||listaAtualId;
+      const ts=Date.now();
+      return{...d,listaCompras:(d.listaCompras||[]).map((i:any)=>
+        (i.listaId&&i.listaId!==alvo&&(i.criadoEm||"").slice(0,10)===hoje)
+          ?{...i,listaId:alvo,updatedAt:ts}:i)};
+    });
+  };
+
   const recuperarOrfaos=()=>{
     if(!isAdmin)return;
     if(!orfaos.length)return;
@@ -12780,6 +12819,17 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
         ou uma corrida de sincronização que deixou o listaId desatualizado). Nunca
         aparecem misturados na lista atual — o admin só pode arquivá-los no
         histórico, no dia a que pertencem; nunca trazê-los de volta pra hoje. */}
+    {/* ⚠️ ESTE AVISO É DE TODO MUNDO, não só do admin. O de baixo pode ser
+        (arquivar lista antiga é decisão de admin), mas um item que a pessoa
+        inseriu HOJE e não está aparecendo é problema de quem está comprando
+        agora — e ficar calado é o que fazia o relato ser "inseri e não
+        atualizou para os outros". */}
+    {orfaosDeHoje.length>0&&<div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,padding:"9px 12px",background:"var(--warningBg)",borderRadius:10,border:"1px solid var(--warningText)44",fontSize:12,color:"var(--warningText)"}}>
+      <span style={{flex:1}}>⚠️ <b>{orfaosDeHoje.length} item(ns) inserido(s) hoje</b> ficaram fora desta lista — acontece quando dois aparelhos fecham a lista no mesmo instante. Eles não foram perdidos.</span>
+      <button onClick={trazerOrfaosDeHoje} className="btn" style={{background:"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)",padding:"6px 12px",fontSize:11,fontWeight:700,flexShrink:0}}>
+        ↩ Trazer para a lista
+      </button>
+    </div>}
     {isAdmin&&orfaos.length>0&&<div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,padding:"9px 12px",background:"#FEF3C7",borderRadius:10,border:"1px solid #F59E0B44",fontSize:12,color:"#92400e"}}>
       <span style={{flex:1}}>⚠️ {orfaos.length} item(ns) de uma lista antiga ficaram pra trás (não aparecem aqui, nunca se misturam com a lista de hoje). Use "Arquivar" pra guardá-los no histórico, no dia certo.</span>
       <button onClick={recuperarOrfaos} className="btn" style={{background:"#F59E0B",color:"#fff",padding:"6px 12px",fontSize:11,fontWeight:700,flexShrink:0}}>
