@@ -170,13 +170,18 @@ test('a lista NOVA do fechamento tem id determinístico', () => {
   // inserido nesse meio nascia com o `listaId` perdedor — órfão, invisível, sem
   // nada avisando. É a mesma lição do `arq-<id>` três linhas acima, que já era
   // determinístico pelo mesmo motivo.
-  const i = APP.indexOf('const arquivarLista=(auto:boolean)=>{');
+  const i = APP.indexOf('const arquivarLista=(auto:boolean,alvoId?:string)=>{');
   assert.ok(i > 0, 'arquivarLista sumiu');
-  const fn = APP.slice(i, i + 3000);
-  assert.ok(fn.includes('listaAtualId:proximaListaId(atual),'),
+  const fn = APP.slice(i, i + 5000);
+  // Com várias listas abertas, arquivar a ativa primeiro tenta HERDAR outra
+  // lista já aberta; só quando não sobra nenhuma é que nasce uma — e aí o id
+  // dela tem que ser derivado, nunca inventado por aparelho.
+  assert.ok(fn.includes('listaAtualId:herdeira||proximaListaId(alvo),'),
     'o id da lista nova voltou a ser por aparelho');
+  assert.ok(fn.includes('const herdeira=proximaAtiva(derivada,alvo);'),
+    'arquivar a lista aberta parou de herdar outra lista já aberta');
   assert.ok(!/listaAtualId:uid\(\)/.test(APP), 'alguém reintroduziu uid() como id de lista');
-  assert.ok(fn.includes('id:"arq-"+atual'), 'o id do pedido do arquivo deixou de ser determinístico');
+  assert.ok(fn.includes('id:"arq-"+alvo'), 'o id do pedido do arquivo deixou de ser determinístico');
 });
 
 test('o fallback de quem não tem lista é CONSTANTE', () => {
@@ -207,4 +212,68 @@ test('órfão de HOJE aparece para todo mundo e volta para a lista', () => {
   assert.ok(banner > 0, 'o aviso dos órfãos de hoje sumiu');
   assert.ok(!APP.includes('{isAdmin&&orfaosDeHoje.length>0'),
     'o aviso dos órfãos de hoje virou só do admin — o operador voltaria a ficar sem saber');
+});
+
+test('listasCompra está nas DUAS fusões', () => {
+  // A armadilha que já mordeu seis vezes (§3): campo novo fora de uma das duas
+  // e o poll reverte a gravação antes do POST confirmar.
+  assert.ok(APP.includes('listasCompra: mergeArrayById(s.listasCompra||[],p.listasCompra||[],_listaDeletados)'),
+    'falta no cliente');
+  const MD = fs.readFileSync(
+    path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'mergeDocument.js'), 'utf8');
+  assert.ok(MD.includes("'listasCompra',"), 'falta no servidor');
+});
+
+test('arquivar uma lista tira o cadastro dela COM tombstone', () => {
+  // ⚠️ `listasCompra` é fundido por id: sem tombstone o poll devolve a lista
+  // arquivada para o trocador, e ela reaparece sozinha.
+  const i = APP.indexOf('const arquivarLista=(auto:boolean,alvoId?:string)=>{');
+  const fn = APP.slice(i, i + 5000);
+  assert.ok(fn.includes('_listaDeletados.add(alvo);'), 'o cadastro da lista sai sem tombstone');
+  assert.ok(fn.includes('listasCompra:(d.listasCompra||[]).filter((l:any)=>l.id!==alvo)'),
+    'o cadastro da lista arquivada ficou no trocador');
+  // O nome e o autor vão PARA DENTRO do arquivo, senão o histórico continua
+  // identificando a compra só pela data.
+  assert.ok(/nome:cad\?\.nome/.test(fn) && /criadaPor:cad\?\.criadaPor/.test(fn),
+    'o arquivo parou de guardar nome e autor');
+});
+
+test('o fechamento das 48 h arquiva UMA por ciclo e nunca a aberta', () => {
+  // ⚠️ `arquivarLista` é um setDbAndSave, que liga o save direto por até 5 s
+  // (§3, armadilha nº 0): duas chamadas seguidas caem na janela uma da outra.
+  const i = APP.indexOf('const ociosaRef=useRef<string|null>(null);');
+  assert.ok(i > 0, 'a varredura das 48h sumiu');
+  const fn = APP.slice(i, i + 1200);
+  assert.ok(fn.includes('const ids=listasOciosas(listasDoDb,Date.now());'), 'a varredura mudou de fonte');
+  assert.ok(!/ids\.forEach|for\s*\(const .* of ids\)/.test(fn),
+    'voltou a arquivar várias de uma vez — cai na janela de 5s do save direto');
+  assert.ok(fn.includes('arquivarRef.current(true,alvo);'), 'a varredura parou de arquivar o alvo');
+  // Que a ativa e a vazia nunca saem é regra do módulo, com teste próprio lá.
+  const MOD = fs.readFileSync(
+    path.join(path.dirname(fileURLToPath(import.meta.url)), 'listasAbertas.js'), 'utf8');
+  assert.ok(MOD.includes('!l.ativa && l.itens > 0 && l.movimento > 0'),
+    'a lista ativa, a vazia ou a sem data voltaram a poder ser arquivadas sozinhas');
+});
+
+test('a barra mostra o nome da lista aberta, para todo mundo', () => {
+  // ⚠️ Com várias listas abertas, é o nome no topo que impede alguém de comprar
+  // da lista A olhando para a B. É o preço da mudança, e a barra é o que paga.
+  assert.ok(APP.includes('>LISTA ABERTA</div>'), 'a barra da lista aberta sumiu');
+  assert.ok(APP.includes('{listaAberta?.nome||"Lista"}'), 'o nome saiu da barra');
+  assert.ok(!APP.includes('{isAdmin&&subTab==="nova"&&<div className="card" style={{marginBottom:12,padding:"11px 13px"'),
+    'a barra virou só do admin — quem compra é quem precisa dela');
+  // Trocar de lista não pode ser adminOnly: quem compra é quem alterna.
+  const menu = APP.slice(APP.indexOf('{id:"lista-abertas"'), APP.indexOf('{id:"lista-abertas"') + 120);
+  assert.ok(!menu.includes('adminOnly'), 'o trocador de listas virou só do admin');
+});
+
+test('o nome em branco volta ao automático, e a prévia não congela', () => {
+  const i = APP.indexOf('const criarLista=(nomeDigitado:string)=>{');
+  assert.ok(i > 0, 'criarLista sumiu');
+  assert.ok(APP.slice(i, i + 900).includes('nomeDaLista(nomeDigitado,agora,login?.label||"")'),
+    'o nome parou de cair no automático quando vem em branco');
+  // ⚠️ A prévia é calculada na hora de mostrar: congelada ao abrir a tela, quem
+  // ficasse dois minutos decidindo criaria a lista com a hora errada no nome.
+  assert.ok(APP.includes('placeholder={nomeAutomatico(new Date(),login?.label||"")}'),
+    'a prévia do nome congelou');
 });

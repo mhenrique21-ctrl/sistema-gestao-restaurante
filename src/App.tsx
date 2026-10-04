@@ -17,6 +17,7 @@ import {separarImportadas,jaImportada,foldChave} from "./nfeImportadas.js";
 import {sugerirVinculo,itemDeEstoqueDaProducao,apelidosDoItem,normalizarNome as normProducao,fichasQueUsam,ehRecheio,candidatosDeVinculo} from "./vinculoProducao.js";
 import {decidirAutoSave,empresasComMudanca} from "./autoSave.js";
 import {proximaListaId,ID_LISTA_INICIAL} from "./listaId.js";
+import {nomeAutomatico,nomeDaLista,listasAbertas,listaPorId,listasOciosas,proximaAtiva,OCIOSA_HORAS} from "./listasAbertas.js";
 import {lerPlanilha} from "./planilha.js";
 import {lerRelatorio,conferirRelatorio,resumoPorDia,lancamentosDoRelatorio,conflitosDaPonte,automaticosDePlataforma,limparAutomaticos,ROTULO as ROTULO_PLAT} from "./relatorioPlataforma.js";
 import {compararPeriodos,formasDoPeriodo,porDiaDaSemana,porMes,periodoAnterior,compararProdutos,coberturaItens,topComResto,CANAIS as CANAIS_REL,FORMAS as FORMAS_REL} from "./relatorioPeriodo.js";
@@ -2084,6 +2085,9 @@ const mergeFromServer=(prev:any,updates:any)=>{
       // unionById: todo write aqui carimba atualizadoEm desde o início (ver
       // bug de produtosProducao perdendo categoria por falta desse carimbo).
       recibosVenda: mergeArrayById(s.recibosVenda||[],p.recibosVenda||[],_listaDeletados),
+      // Cadastro das listas de compra abertas (§3: todo campo novo entra nas
+      // DUAS fusões, senão o poll reverte a gravação antes do POST confirmar).
+      listasCompra: mergeArrayById(s.listasCompra||[],p.listasCompra||[],_listaDeletados),
       // Itens vendidos por dia, agregados por produto (agente do Eclética).
       // Campo novo: registrado AQUI e em mergeDocument.js, senão o poll de
       // ~100ms traria o valor cru do servidor e reverteria a gravação antes
@@ -2844,6 +2848,9 @@ export default function App() {
     ]},
     {id:"lista",label:"Lista",icon:"🛒",children:[
       {id:"lista-nova",label:"Nova Lista",icon:"➕",sub:"nova"},
+      // Trocar de lista NÃO é adminOnly: quem compra é quem precisa alternar
+      // entre a feira e a lista de bebidas.
+      {id:"lista-abertas",label:"Listas abertas",icon:"⇄",sub:"listas"},
       {id:"lista-arq",label:"Arquivo",icon:"📂",sub:"arquivo",adminOnly:true},
       {id:"lista-prod",label:"Produtos",icon:"📦",sub:"produtos",adminOnly:true},
       {id:"lista-cat",label:"Categorias",icon:"🏷️",sub:"categorias",adminOnly:true},
@@ -10961,6 +10968,14 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
   const cats=catOrdem.length>0?[...catOrdem.filter(c=>allCats.includes(c)),...allCats.filter(c=>!catOrdem.includes(c))]:allCats;
 
   const listaAtualId=db.listaAtualId;
+  // ---- Várias listas abertas (04/10/2026) ----------------------------------
+  // ⚠️ O cadastro é DERIVADO do db, nunca exigido: toda a operação de hoje tem
+  // itens com `listaId` e nenhuma entrada em `listasCompra`. Ver listasAbertas.js.
+  const listasDoDb:any[]=listasAbertas({
+    listasCompra:db.listasCompra||[],listaCompras:db.listaCompras||[],
+    listaAtualId,listaAtualAbertaEm:db.listaAtualAbertaEm});
+  const listaAberta=listaPorId(listasDoDb,listaAtualId);
+  const outrasListas=listasDoDb.filter((l:any)=>!l.ativa);
   const listaTodas:any[]=db.listaCompras||[];
   // Blindagem: só itens da lista atualmente aberta entram em qualquer visão/contagem.
   // Um item "órfão" (listaId de uma lista já fechada, sobrevivente de alguma corrida
@@ -11269,37 +11284,84 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
   // juntos; com `uid()` cada um criaria um registro próprio e o Arquivo
   // mostraria a mesma compra três vezes. Derivado da lista, a união por id
   // (`mergeListaCompras`) colapsa os três num só.
-  const arquivarLista=(auto:boolean)=>{
+  // ---- Criar / trocar / arquivar uma lista --------------------------------
+  const [novaListaNome,setNovaListaNome]=useState("");
+  const showNovaLista=subTab==="novalista";
+  const showTrocarLista=subTab==="listas";
+
+  // ⚠️ O nome sai do `d` da GRAVAÇÃO para a hora ser a do save, e volta para o
+  // automático quando vier em branco (nomeDaLista): lista sem nome na barra do
+  // topo é lista que ninguém sabe qual é.
+  const criarLista=(nomeDigitado:string)=>{
+    const agora=new Date();
+    const id=uid();
+    const nome=nomeDaLista(nomeDigitado,agora,login?.label||"");
+    (setDbAndSave||setDb)((d:any)=>({...d,
+      listasCompra:[...(d.listasCompra||[]),
+        {id,nome,criadaPor:login?.label||"",criadaEm:agora.toISOString(),updatedAt:Date.now()}],
+      // ⚠️ `abertaEm` é AGORA: é o que faz esta lista vencer a fusão e abrir
+      // em todos os aparelhos (a regra do §3 — vence o abertaEm maior).
+      listaAtualId:id,listaAtualAbertaEm:agora.toISOString()}));
+    setNovaListaNome("");
+    setSubTab("nova");
+  };
+
+  // Trocar de lista é trocar a ABERTA para todo mundo (decisão do dono): o
+  // nome fica no topo justamente para ninguém digitar na lista errada.
+  const abrirLista=(id:string)=>{
+    if(id===listaAtualId){setSubTab("nova");return;}
+    (setDbAndSave||setDb)((d:any)=>({...d,listaAtualId:id,listaAtualAbertaEm:new Date().toISOString()}));
+    setSubTab("nova");
+  };
+
+  // ⚠️ `alvoId` arquiva uma lista que NÃO é a aberta (o fechamento das 48 h, e
+  // o botão dentro do trocador). Sem ele, arquivar uma lista parada obrigaria
+  // a abri-la antes — e abrir troca a lista de TODO MUNDO de tela.
+  const arquivarLista=(auto:boolean,alvoId?:string)=>{
     (setDbAndSave||setDb)((d:any)=>{
       const atual=d.listaAtualId||listaAtualId;
-      const itens=(d.listaCompras||[]).filter((i:any)=>!i.listaId||i.listaId===atual);
+      const alvo=alvoId||atual;
+      const ehAtual=alvo===atual;
+      // Item sem `listaId` é de antes de a lista ter identidade: conta como da
+      // aberta, nunca de uma lista qualquer que esteja sendo arquivada.
+      const itens=(d.listaCompras||[]).filter((i:any)=>ehAtual?(!i.listaId||i.listaId===alvo):i.listaId===alvo);
       if(!itens.length)return d;
       const ids=itens.map((i:any)=>i.id);
       ids.forEach((id:string)=>_listaDeletados.add(id));
+      // O nome e o autor vão PARA DENTRO do arquivo: sem isso o histórico
+      // continuaria identificando a compra só pela data, que é o que esta
+      // mudança veio resolver.
+      const cad=(d.listasCompra||[]).find((l:any)=>l.id===alvo);
+      const derivada=listasAbertas({listasCompra:d.listasCompra||[],listaCompras:d.listaCompras||[],
+        listaAtualId:atual,listaAtualAbertaEm:d.listaAtualAbertaEm});
       const pedido={
-        id:"arq-"+atual,
-        listaId:atual,
+        id:"arq-"+alvo,
+        listaId:alvo,
+        nome:cad?.nome||listaPorId(derivada,alvo)?.nome||"",
+        criadaPor:cad?.criadaPor||"",
+        criadaEm:cad?.criadaEm||"",
         data:today(),
         automatico:!!auto,
         itens:itens.map((i:any)=>({nome:i.nome,quantidade:i.quantidade,quantidadeComprada:i.quantidadeComprada??null,unidade:i.unidade,categoria:i.categoria||"outros",obs:i.obs||"",urgente:!!i.urgente,estoqueQtd:i.estoqueQtd||"",estoqueUn:i.estoqueUn||"un",comprado:!!i.comprado,naoTem:!!i.naoTem})),
         criadoEm:new Date().toISOString(),
       };
-      return{
+      // ⚠️ O cadastro sai com TOMBSTONE: `listasCompra` é fundido por id (§3) e
+      // sem ele o poll devolve a lista arquivada para o trocador.
+      _listaDeletados.add(alvo);
+      const base={
         ...d,
         pedidosLista:[pedido,...(d.pedidosLista||[]).filter((pp:any)=>pp.id!==pedido.id)],
         listaCompras:(d.listaCompras||[]).filter((i:any)=>!ids.includes(i.id)),
-        // ⚠️ DETERMINÍSTICO, pelo mesmo motivo do `arq-` logo acima — e aqui
-        // custa mais caro. Com `uid()`, os aparelhos que disparam juntos no
-        // fechamento automático criavam cada um a SUA lista nova; a fusão
-        // ficava com a do último a gravar, e todo item inserido nesse meio
-        // nascia com o `listaId` perdedor. O item sobe, funde, chega em todo
-        // aparelho — e some da TELA, filtrado por `i.listaId===listaAtualId`.
-        // Ninguém vê, nada avisa: `recuperarOrfaos` é manual e só do admin.
-        // Ver src/listaId.js, que reproduz o caso em teste.
-        listaAtualId:proximaListaId(atual),
-        listaAtualAbertaEm:new Date().toISOString(),
+        listasCompra:(d.listasCompra||[]).filter((l:any)=>l.id!==alvo),
         listaDeletedIds:[...new Set([...(d.listaDeletedIds||[]),...ids])].slice(-5000),
       };
+      if(!ehAtual)return base;
+      // Arquivando a ABERTA: assume a lista aberta de movimento mais recente;
+      // não sobrando nenhuma, nasce uma. A aba Lista nunca fica sem lista.
+      const herdeira=proximaAtiva(derivada,alvo);
+      return{...base,
+        listaAtualId:herdeira||proximaListaId(alvo),
+        listaAtualAbertaEm:new Date().toISOString()};
     });
   };
 
@@ -11340,6 +11402,36 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     return()=>{clearInterval(tick);clearTimeout(fechar);};
   },[listaFinalizada,listaAtualId]);
   const cancelarAutoFechar=()=>{autoCanceladaRef.current=listaAtualId;setAutoFecharEm(null);};
+
+  // ---- Lista parada há 48 h sai sozinha (decisão do dono, 04/10/2026) ------
+  // ⚠️ ARQUIVA, não apaga. O pedido foi "deletar"; o que some é da TELA, e os
+  // itens ficam inteiros no Arquivo, de onde se consulta, imprime e retoma.
+  // Destruir de verdade não tem desfazer, e aqui o que se perderia é a compra
+  // que alguém montou — exatamente a mesma régua das contas de mês fechado, que
+  // a Conferência do RH mostra em vez de apagar sozinha. O admin continua
+  // podendo excluir do Arquivo, que é onde a decisão é explícita.
+  //
+  // ⚠️ A conta é de OCIOSIDADE, nunca de idade (ver listasAbertas.js): por
+  // idade, uma lista usada todo dia sumiria no meio da compra.
+  //
+  // ⚠️ UM POR CICLO. `arquivarLista` é um `setDbAndSave`, que liga o save
+  // direto por até 5 s (§3, armadilha nº 0): duas chamadas seguidas caem dentro
+  // da janela uma da outra. O efeito roda de novo quando o db muda e pega a
+  // próxima — e o intervalo de 10 min cobre o caso de ninguém mexer em nada.
+  const ociosaRef=useRef<string|null>(null);
+  useEffect(()=>{
+    const varrer=()=>{
+      const ids=listasOciosas(listasDoDb,Date.now());
+      const alvo=ids.find((id:string)=>id!==ociosaRef.current)||ids[0];
+      if(!alvo)return;
+      ociosaRef.current=alvo;
+      arquivarRef.current(true,alvo);
+    };
+    varrer();
+    const t=setInterval(varrer,10*60*1000);
+    return()=>clearInterval(t);
+  },[db.listaCompras,db.listasCompra,listaAtualId]);
+
 
   // Órfãos NUNCA voltam pra lista atual — isso misturaria itens de uma lista
   // (dia) antiga com os de hoje, o que é exatamente o que não pode acontecer.
@@ -12075,7 +12167,17 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
                 return <div key={p.id} style={{marginBottom:6,border:"1px solid var(--border)",borderRadius:8,overflow:"hidden"}}>
                   <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"var(--bg4)",cursor:"pointer"}} onClick={()=>setExpandedPedido(expanded?null:p.id)}>
                     <span style={{fontSize:13,color:"#fb923c"}}>{p.autoArquivado?"📋":"🛒"}</span>
-                    <span style={{flex:1,fontSize:13,fontWeight:700}}>{dataFmt}{p.autoArquivado?<span style={{fontSize:9,color:"#F59E0B",marginLeft:6}}>auto</span>:""}</span>
+                    {/* O nome e o autor vêm de dentro do pedido. ⚠️ Lista
+                        arquivada ANTES desta mudança não tem nenhum dos dois, e
+                        continua aparecendo pela data — inventar nome para
+                        período fechado seria chute. */}
+                    <span style={{flex:1,minWidth:0}}>
+                      <span style={{fontSize:13,fontWeight:700}}>{p.nome||dataFmt}</span>
+                      {p.autoArquivado?<span style={{fontSize:9,color:"#F59E0B",marginLeft:6}}>auto</span>:""}
+                      {(p.nome||p.criadaPor)&&<span style={{display:"block",fontSize:11,color:"var(--text3)",marginTop:1,whiteSpace:"nowrap" as const,overflow:"hidden",textOverflow:"ellipsis"}}>
+                        {dataFmt}{p.criadaPor?` · ${p.criadaPor}`:""}
+                      </span>}
+                    </span>
                     <span style={{fontSize:11,color:"var(--text2)",background:"var(--bg3)",border:"1px solid var(--border2)",borderRadius:12,padding:"1px 8px"}}>{(p.itens||[]).length} item(ns)</span>
                     <button onClick={e=>{e.stopPropagation();retomarLista(p);}} style={{background:"none",border:"1px solid #22C55E44",borderRadius:6,color:"#22C55E",cursor:"pointer",fontSize:11,padding:"3px 8px",fontWeight:700}}>↩ Retomar</button>
                     <button onClick={e=>{e.stopPropagation();imprimirPedido(p);}} style={{background:"none",border:"1px solid #555",borderRadius:6,color:"#ccc",cursor:"pointer",fontSize:11,padding:"3px 8px"}}>🖨️</button>
@@ -12699,6 +12801,118 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     </div>}
 
     {/* Form cadastro de produto */}
+    {/* ---- Trocar de lista ------------------------------------------------- */}
+    {showTrocarLista&&<BackBar label="Nova Lista" onClick={()=>setSubTab("nova")}/>}
+    {showTrocarLista&&<div>
+      <div className="section-title" style={{margin:"0 0 8px"}}>⇄ Listas abertas</div>
+      {listasDoDb.map((l:any)=>(
+        <div key={l.id} className="card" style={{marginBottom:9,padding:13,border:l.ativa?"2px solid var(--btnPrimary)":"1px solid var(--border)"}}>
+          <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:6,flexWrap:"wrap" as const}}>
+            <span style={{fontSize:15,fontWeight:700}}>{l.nome}</span>
+            {l.criadaPor&&<span style={{fontSize:13,color:"var(--text2)"}}>{l.criadaPor}</span>}
+            <span style={{flex:1}}/>
+            {l.ativa
+              ?<span className="tag" style={{background:"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)",fontWeight:700}}>ABERTA</span>
+              :<button className="btn" onClick={()=>abrirLista(l.id)}
+                 style={{background:"var(--bg4)",color:"var(--btnPrimary)",padding:"6px 12px",fontSize:12,fontWeight:700}}>abrir</button>}
+          </div>
+          <div style={{fontSize:12.5,color:"var(--text2)"}}>
+            <span style={{fontFamily:MONO}}>{l.pendentes}</span> a comprar · <span style={{fontFamily:MONO}}>{l.itens}</span> no total
+            {/* ⚠️ O aviso de ociosidade é ESCRITO, não só uma cor: a paleta
+                Tinta é monocromática (§9). */}
+            {!l.ativa&&l.movimento>0&&(Date.now()-l.movimento)>=OCIOSA_HORAS*3600*1000
+              ?<span style={{color:"var(--warningText)",fontWeight:700}}> · parada há mais de {OCIOSA_HORAS}h, vai para o Arquivo</span>:null}
+          </div>
+          {/* Arquivar sem precisar abrir: abrir trocaria a tela de todo mundo. */}
+          {isAdmin&&!l.ativa&&l.itens>0&&<div style={{marginTop:9,paddingTop:9,borderTop:"1px solid var(--border)"}}>
+            <button className="btn" onClick={()=>{if(confirm(`Arquivar "${l.nome}" (${l.itens} item(ns))?\n\nEla sai das listas abertas e fica no Arquivo, inteira.`))arquivarLista(false,l.id);}}
+              style={{background:"var(--bg4)",color:"var(--text2)",padding:"6px 11px",fontSize:11.5,fontWeight:700}}>📂 Arquivar esta</button>
+          </div>}
+        </div>
+      ))}
+      <button className="btn" onClick={()=>{setNovaListaNome("");setSubTab("novalista");}}
+        style={{background:"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)",width:"100%",padding:"14px",fontSize:14,fontWeight:700,marginBottom:14}}>
+        + Criar nova lista
+      </button>
+      <div className="card" style={{background:"var(--infoBg)",border:"1px solid var(--infoText)33"}}>
+        <div style={{fontSize:11.5,color:"var(--infoText)",lineHeight:1.55}}>
+          Abrir uma lista troca a lista de <b>todos os aparelhos</b> — é por isso que o nome dela fica
+          no alto da tela. Lista parada há mais de <b>{OCIOSA_HORAS} horas</b> vai para o Arquivo sozinha;
+          nada é apagado, e de lá dá para consultar, imprimir e retomar.
+        </div>
+      </div>
+    </div>}
+
+    {/* ---- Criar nova lista -------------------------------------------------
+        ⚠️ A prévia do nome é calculada NA HORA de mostrar. Congelando ao abrir
+        a tela, uma pessoa que ficasse dois minutos decidindo criaria a lista
+        com a hora errada no nome. */}
+    {showNovaLista&&<BackBar label="Nova Lista" onClick={()=>setSubTab("nova")}/>}
+    {showNovaLista&&<div>
+      <div className="card" style={{marginBottom:12}}>
+        <div className="section-title" style={{margin:"0 0 8px"}}>+ Nova lista</div>
+        <label htmlFor="nomeNovaLista" style={{display:"block",fontSize:10,fontWeight:700,letterSpacing:.9,color:"var(--text3)",marginBottom:6}}>NOME DA LISTA</label>
+        <input id="nomeNovaLista" value={novaListaNome} onChange={e=>setNovaListaNome(e.target.value)}
+          placeholder={nomeAutomatico(new Date(),login?.label||"")} className="inp"
+          style={{marginBottom:7,fontSize:16,fontWeight:600,fontFamily:MONO}}/>
+        <div style={{fontSize:11.5,color:"var(--text2)",lineHeight:1.5}}>
+          Vem com a <b>data</b>, a <b>hora</b> e <b>quem criou</b>. Pode trocar por um nome
+          ("Feira de sábado") — deixando em branco, vale o automático.
+        </div>
+      </div>
+
+      {listaAberta&&<div className="card" style={{marginBottom:12}}>
+        <div style={{fontSize:12.5,fontWeight:700,marginBottom:9}}>A lista de agora</div>
+        <div style={{fontSize:13,lineHeight:1.5,color:"var(--text2)"}}>
+          <b style={{color:"var(--text)"}}>{listaAberta.nome}</b> continua <b>aberta</b>, com {pendentes.length} item(ns) a comprar.
+          Você volta nela por <b>⇄ Listas abertas</b>. Nada é arquivado agora.
+        </div>
+      </div>}
+
+      <div className="card" style={{marginBottom:12,background:"var(--warningBg)",border:"1px solid var(--warningText)44"}}>
+        <div style={{fontSize:12,color:"var(--warningText)",lineHeight:1.5}}>
+          A lista nova abre <b>para todos</b>: quem estiver na aba Lista passa a ver esta.
+          O nome fica no alto, para ninguém digitar na lista errada.
+        </div>
+      </div>
+
+      <button className="btn" onClick={()=>criarLista(novaListaNome)}
+        style={{background:"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)",width:"100%",padding:"14px",fontSize:15,fontWeight:700}}>
+        Criar e abrir
+      </button>
+    </div>}
+
+    {/* ---- A barra da lista aberta ----------------------------------------
+        ⚠️ O nome fica SEMPRE à vista, e isso não é enfeite: com várias listas
+        abertas, é ele que impede alguém de comprar da lista A olhando para a B.
+        É o preço que esta mudança cobra, e a barra é o que o paga. */}
+    {subTab==="nova"&&<div className="card" style={{marginBottom:12,padding:"11px 13px",display:"flex",alignItems:"center",gap:9}}>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{fontSize:10,fontWeight:700,letterSpacing:.9,color:"var(--text3)"}}>LISTA ABERTA</div>
+        <div style={{fontSize:16,fontWeight:700,marginTop:2,whiteSpace:"nowrap" as const,overflow:"hidden",textOverflow:"ellipsis"}}>
+          {listaAberta?.nome||"Lista"}
+        </div>
+        <div style={{fontSize:11.5,color:"var(--text2)",marginTop:3}}>
+          <span style={{fontFamily:MONO}}>{pendentes.length}</span> a comprar · <span style={{fontFamily:MONO}}>{comprados.length}</span> comprados
+          {listaAberta?.criadaPor?<> · {listaAberta.criadaPor}</>:null}
+        </div>
+      </div>
+      <button className="btn" onClick={()=>setSubTab("listas")} title="Trocar de lista"
+        style={{background:"var(--bg4)",color:"var(--text2)",border:"1px solid var(--border)",width:46,height:46,fontSize:17,padding:0,flexShrink:0}}>⇄</button>
+      <button className="btn" onClick={()=>{setNovaListaNome("");setSubTab("novalista");}}
+        style={{background:"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)",height:46,padding:"0 13px",fontSize:13,fontWeight:700,flexShrink:0}}>+ Nova</button>
+    </div>}
+
+    {/* Há outra lista aberta: dito, nunca escondido. */}
+    {subTab==="nova"&&outrasListas.length>0&&<div style={{display:"flex",alignItems:"center",gap:9,marginBottom:12,padding:"9px 11px",background:"var(--warningBg)",border:"1px solid var(--warningText)44",borderRadius:10,fontSize:11.5,color:"var(--warningText)",lineHeight:1.45}}>
+      <span style={{flex:1}}>
+        Há <b>mais {outrasListas.length} lista{outrasListas.length>1?"s":""} aberta{outrasListas.length>1?"s":""}</b>
+        {outrasListas.length===1?<> ({outrasListas[0].nome}) com {outrasListas[0].pendentes} item(ns) a comprar.</>:<>.</>}
+      </span>
+      <button className="btn" onClick={()=>setSubTab("listas")}
+        style={{background:"transparent",color:"var(--warningText)",border:"1px solid var(--warningText)55",padding:"5px 10px",fontSize:11,fontWeight:700,flexShrink:0}}>ver</button>
+    </div>}
+
     {subTab==="nova"&&<>{!editId&&<div ref={listaFormRef} className="card" style={{marginBottom:14,border:"1px solid #E5E7EB"}}>
       <div className="section-title" style={{color:editId?"#F59E0B":"var(--btnPrimary)",marginBottom:10}}>{editId?"✏️ Editar Produto":"➕ Novo Produto"}</div>
       {/* Produto + urgente */}

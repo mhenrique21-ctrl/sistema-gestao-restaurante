@@ -45,6 +45,7 @@ src/nfeImportadas.js  quais NF-e já entraram, pela chave de 44 dígitos (com te
 src/vinculoProducao.js  liga o nome da produção ao produto do Eclética (com testes)
 src/autoSave.js       salvar, reagendar ou ignorar — a decisão que perdia dado (com testes)
 src/listaId.js        a identidade da lista que sucede uma arquivada (com testes)
+src/listasAbertas.js  várias listas abertas: nome, autor e as 48 h (com testes)
 src/planilha.js       .xlsx e .csv sem dependência nenhuma (com testes)
 src/relatorioPlataforma.js  o relatório do iFood/99Food vira Vendas (com testes)
 src/relatorioPeriodo.js  o período, os canais e as formas de pagamento (com testes)
@@ -2535,6 +2536,77 @@ seguinte — e o item some de novo.
 
 `src/listaId.test.js` **reproduz o caso**: dois aparelhos fechando a mesma lista,
 com `uid()` o item fica órfão; com `proximaListaId` ele aparece.
+
+### Várias listas abertas, com nome e autor — `src/listasAbertas.js` (com testes)
+
+Decisão do dono (04/10/2026). Até aqui existia **uma** lista aberta, identificada
+só por `listaAtualId`, sem nome e sem dono: quem precisava separar a feira da
+semana da compra de bebidas fechava uma para abrir a outra, e os pendentes da
+primeira iam para o Arquivo.
+
+⚠️ **ISTO NASCE DE UM DEFEITO, não de uma ideia nova.** Item cujo `listaId` não é
+o da lista aberta **já existia** — era o órfão invisível do `src/listaId.js`.
+Dando nome e tela às outras listas, o mesmo estado deixa de ser anomalia e passa
+a ser o recurso.
+
+| onde mora | o quê |
+|---|---|
+| `listasCompra` | `[{id, nome, criadaPor, criadaEm}]` — campo NOVO, nas duas fusões (§3) |
+| `listaAtualId` | continua sendo **qual está aberta**, e é compartilhado: trocar de lista troca a tela de TODO MUNDO (decisão do dono) |
+
+⚠️ **O CADASTRO É DERIVADO, NUNCA EXIGIDO** (`listasAbertas`). Toda a operação de
+hoje tem itens com `listaId` e nenhuma entrada em `listasCompra`: exigir o
+cadastro faria a lista em uso sumir da tela no deploy. Cada `listaId` que aparece
+nos itens vira uma lista; sem nome, o rótulo sai da data do item mais antigo.
+
+⚠️ **O nome em branco VOLTA para o automático** (`nomeDaLista`). Lista sem nome na
+barra do topo é lista que ninguém sabe qual é — e a barra existe justamente para
+não se digitar na lista errada.
+
+⚠️ **Data e hora LOCAIS** no nome automático: o Amapá é UTC−3 e às 21h o UTC já é
+o dia seguinte — uma lista criada à noite nasceria com a data de amanhã.
+
+⚠️ **A prévia do nome é calculada na hora de MOSTRAR**, não ao abrir a tela: quem
+ficasse dois minutos decidindo criaria a lista com a hora errada dentro do nome.
+
+⚠️ **A barra do topo é de TODO MUNDO, não do admin**, e o trocador também. Com
+várias listas abertas dá para comprar da lista A olhando para a B — esse é o
+preço da mudança, e a barra com o nome é o que o paga.
+
+#### Lista parada há 48 h sai sozinha
+
+⚠️ **ARQUIVA, NÃO APAGA.** O pedido foi "deletar"; o que some é da **tela**, e os
+itens ficam inteiros no Arquivo, de onde se consulta, imprime e retoma. Destruir
+não tem desfazer, e o que se perderia é a compra que alguém montou — a mesma
+régua das contas de mês fechado, que a Conferência do RH **mostra** em vez de
+apagar sozinha. O admin continua podendo excluir do Arquivo, onde a decisão é
+explícita.
+
+⚠️ **A CONTA É DE OCIOSIDADE, NUNCA DE IDADE.** Por idade, uma lista aberta na
+segunda e usada todo dia sumiria na quarta no meio da compra. O relógio reinicia
+a cada item inserido ou marcado.
+
+⚠️ **A ATIVA NUNCA SAI SOZINHA.** Ela está na tela de todo mundo, e o motivo de
+estar parada pode ser só a loja ter fechado no fim de semana. Lista **vazia**
+também não sai: não há o que arquivar, e é a que alguém acabou de criar.
+
+⚠️ **UMA POR CICLO.** `arquivarLista` é um `setDbAndSave`, que liga o save direto
+por até 5 s (§3, armadilha nº 0): duas chamadas seguidas caem na janela uma da
+outra. O efeito roda de novo quando o `db` muda e pega a próxima; o intervalo de
+10 min cobre o caso de ninguém mexer em nada.
+
+⚠️ **`arquivarLista` ganhou `alvoId`** para arquivar uma lista que NÃO é a aberta.
+Sem ele, arquivar uma lista parada obrigaria a abri-la antes — e abrir troca a
+tela de todo mundo. Arquivando a **aberta**, a próxima lista aberta é **herdada**
+(`proximaAtiva`); não sobrando nenhuma, nasce uma com id derivado
+(`proximaListaId`, §a identidade da lista). A aba Lista nunca fica sem lista.
+
+⚠️ **O cadastro sai com TOMBSTONE** (`_listaDeletados.add(alvo)`): `listasCompra`
+é fundido por id, e sem ele o poll devolve a lista arquivada para o trocador.
+
+⚠️ **O nome e o autor vão PARA DENTRO do pedido do arquivo.** Lista arquivada
+ANTES desta mudança não tem nenhum dos dois e continua aparecendo **pela data** —
+inventar nome para período fechado seria chute.
 
 #### Fecha sozinha quando acaba
 

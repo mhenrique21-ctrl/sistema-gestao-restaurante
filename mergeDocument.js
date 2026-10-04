@@ -24,6 +24,11 @@ export const MERGEABLE_FIELDS = [
   // Sem isto, dois aparelhos emitindo recibo perto um do outro faziam o
   // último POST apagar o recibo do outro.
   'recibosEntrega',
+  // O cadastro das listas de compra abertas (nome, autor, criação). Array com
+  // id: fusão por id como os demais. Sem ele aqui, um aparelho com o bundle
+  // antigo — que não conhece o campo e posta sem ele — apagaria do servidor a
+  // lista que outro acabou de criar.
+  'listasCompra',
 ];
 
 // Mapas {chave: valor}: união chave a chave, incoming vencendo. Nada é removido
