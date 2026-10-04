@@ -12841,7 +12841,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
                  style={{background:"var(--bg4)",color:"var(--btnPrimary)",padding:"6px 12px",fontSize:12,fontWeight:700}}>abrir</button>}
           </div>
           <div style={{fontSize:12.5,color:"var(--text2)"}}>
-            <span style={{fontFamily:MONO}}>{l.pendentes}</span> a comprar · <span style={{fontFamily:MONO}}>{l.itens}</span> no total
+            <span style={{...MONO_REL}}>{l.pendentes}</span> a comprar · <span style={{...MONO_REL}}>{l.itens}</span> no total
             {/* ⚠️ A CONTAGEM APARECE ANTES, não depois. Apagar não tem
                 desfazer: sem isto a pessoa abre o trocador num dia e a lista
                 que ela montou simplesmente não está mais lá. Só nas últimas
@@ -12890,7 +12890,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
         <label htmlFor="nomeNovaLista" style={{display:"block",fontSize:10,fontWeight:700,letterSpacing:.9,color:"var(--text3)",marginBottom:6}}>NOME DA LISTA</label>
         <input id="nomeNovaLista" value={novaListaNome} onChange={e=>setNovaListaNome(e.target.value)}
           placeholder={nomeAutomatico(new Date(),login?.label||"")} className="inp"
-          style={{marginBottom:7,fontSize:16,fontWeight:600,fontFamily:MONO}}/>
+          style={{marginBottom:7,fontSize:16,fontWeight:600,...MONO_REL}}/>
         <div style={{fontSize:11.5,color:"var(--text2)",lineHeight:1.5}}>
           Vem com a <b>data</b>, a <b>hora</b> e <b>quem criou</b>. Pode trocar por um nome
           ("Feira de sábado") — deixando em branco, vale o automático.
@@ -12929,7 +12929,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
           {listaAberta?.nome||"Lista"}
         </div>
         <div style={{fontSize:11.5,color:"var(--text2)",marginTop:3}}>
-          <span style={{fontFamily:MONO}}>{pendentes.length}</span> a comprar · <span style={{fontFamily:MONO}}>{comprados.length}</span> comprados
+          <span style={{...MONO_REL}}>{pendentes.length}</span> a comprar · <span style={{...MONO_REL}}>{comprados.length}</span> comprados
           {listaAberta?.criadaPor?<> · {listaAberta.criadaPor}</>:null}
         </div>
       </div>

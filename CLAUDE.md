@@ -46,6 +46,7 @@ src/vinculoProducao.js  liga o nome da produção ao produto do Eclética (com t
 src/autoSave.js       salvar, reagendar ou ignorar — a decisão que perdia dado (com testes)
 src/listaId.js        a identidade da lista que sucede uma arquivada (com testes)
 src/listasAbertas.js  várias listas abertas: nome, autor e as 48 h (com testes)
+abreTela.js           abre o app num navegador e reprova TELA BRANCA (pula sem playwright)
 src/planilha.js       .xlsx e .csv sem dependência nenhuma (com testes)
 src/relatorioPlataforma.js  o relatório do iFood/99Food vira Vendas (com testes)
 src/relatorioPeriodo.js  o período, os canais e as formas de pagamento (com testes)
@@ -3038,6 +3039,20 @@ devolvem cor usadas nas duas pontas — substituição cega quebra a impressão.
   timestamp).
 - `MoneyInput` para dinheiro; `parseMoney` / `fmtMoney` para converter.
 - Antes de commitar: `node --check new_server.js && npm run build && npm test`.
+- ⚠️ **E `node abreTela.js` quando mexer no JSX** — nem o build nem o `npm test`
+  pegam **tela branca**. Identificador que não existe naquele escopo é
+  JavaScript válido: o bundler emite a referência e o erro só acontece quando o
+  React renderiza aquele trecho. Em 04/10/2026 a barra da lista usou `MONO`, que
+  é um `const` declarado DENTRO de outro componente — build limpo, 944 testes
+  passando, e o app abriu **em branco em produção**
+  (`ReferenceError: MONO is not defined`). Os testes que leem o `App.tsx`
+  também não pegam: conferem que o texto está lá, não que ele renderiza. É a
+  mesma família do `ABA_REL_ANTIGA` e do `sub` sem bloco (§6).
+  O script abre o app num Chromium de verdade, **entra e visita cinco abas**
+  (abrir só o Dashboard teria passado), e **PULA** — nunca reprova — sem
+  `playwright` (`npm i -D playwright`) ou com dado real em `dados/`: ele sobe um
+  segundo servidor na mesma pasta, então é conferência de máquina de
+  desenvolvimento, **nunca da VPS**.
 - `npm test` (node --test) cobre as fusões — o lugar certo pra travar regressão de sync.
 
 ---
