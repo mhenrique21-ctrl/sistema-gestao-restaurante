@@ -377,12 +377,30 @@ const applyBothProdutos = (setState:any, setDb:any, fn:(d:any)=>any) => {
         const r = await fetchSync(`/api/dados/${emp}?_=${Date.now()}`);
         const serverData = await r.json();
         if (!serverData) return;
+        // ⚠️ `flushSync` NÃO É ENFEITE, e a falta dele é um POST QUE NUNCA
+        // ACONTECE. Em React 18 toda atualização é agrupada, inclusive dentro de
+        // promessa: um `setState` puro aqui NÃO roda o updater na hora, então
+        // `atualizado` continuava `null`, o `if` abaixo era falso e a gravação
+        // simplesmente não saía. A mudança ficava só na memória do aparelho e o
+        // poll seguinte a revertia — o sintoma relatado em 04/10/2026 como
+        // "edito a rua do produto, salvo, e volta como antes".
+        //
+        // ⚠️ E era INTERMITENTE, que é o que fazia parecer outra coisa: o React
+        // chama o updater na hora quando a fila está VAZIA (otimização de
+        // bail-out). Num momento parado salvava; com o poll de 800 ms e o SSE
+        // mexendo no estado, não salvava. Medido num React 18.3 de verdade:
+        // sem flushSync a variável fica `null`, com flushSync vem preenchida.
+        //
+        // É o mesmo motivo pelo qual `setDbAndSave` já usava `flushSync` — esta
+        // função nasceu copiando o resto do padrão e ficou sem essa parte.
         let atualizado: any = null;
-        setState((prev: any) => {
-          if (!prev[emp] || typeof prev[emp] !== "object" || !("produtosLista" in prev[emp])) return prev;
-          const merged = mergeFromServer(prev, { [emp]: serverData });
-          atualizado = merged[emp];
-          return merged;
+        flushSync(() => {
+          setState((prev: any) => {
+            if (!prev[emp] || typeof prev[emp] !== "object" || !("produtosLista" in prev[emp])) return prev;
+            const merged = mergeFromServer(prev, { [emp]: serverData });
+            atualizado = merged[emp];
+            return merged;
+          });
         });
         if (atualizado) {
           await fetchSync(`/api/dados/${emp}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(withDeletedIds(atualizado)) });
