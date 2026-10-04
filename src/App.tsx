@@ -17,7 +17,7 @@ import {separarImportadas,jaImportada,foldChave} from "./nfeImportadas.js";
 import {sugerirVinculo,itemDeEstoqueDaProducao,apelidosDoItem,normalizarNome as normProducao,fichasQueUsam,ehRecheio,candidatosDeVinculo} from "./vinculoProducao.js";
 import {decidirAutoSave,empresasComMudanca} from "./autoSave.js";
 import {proximaListaId,ID_LISTA_INICIAL} from "./listaId.js";
-import {nomeAutomatico,nomeDaLista,listasAbertas,listaPorId,listasOciosas,proximaAtiva,OCIOSA_HORAS} from "./listasAbertas.js";
+import {nomeAutomatico,nomeDaLista,listasAbertas,listaPorId,listasOciosas,horasAteApagar,proximaAtiva,OCIOSA_HORAS} from "./listasAbertas.js";
 import {lerPlanilha} from "./planilha.js";
 import {lerRelatorio,conferirRelatorio,resumoPorDia,lancamentosDoRelatorio,conflitosDaPonte,automaticosDePlataforma,limparAutomaticos,ROTULO as ROTULO_PLAT} from "./relatorioPlataforma.js";
 import {compararPeriodos,formasDoPeriodo,porDiaDaSemana,porMes,periodoAnterior,compararProdutos,coberturaItens,topComResto,CANAIS as CANAIS_REL,FORMAS as FORMAS_REL} from "./relatorioPeriodo.js";
@@ -11314,6 +11314,30 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     setSubTab("nova");
   };
 
+  // ---- Apagar uma lista DE VERDADE ----------------------------------------
+  // Decisão do dono (04/10/2026): propus arquivar, ele reafirmou apagar. Os
+  // itens somem do banco e NÃO há desfazer — nada vai para `pedidosLista`.
+  //
+  // ⚠️ TOMBSTONE EM TUDO (itens e cadastro), senão a fusão devolve a lista
+  // inteira no poll seguinte e ela "renasce" em todo aparelho (§3).
+  //
+  // ⚠️ NUNCA a lista aberta: quem chama é a varredura das 48 h, que já a
+  // exclui (`listasOciosas`), e o botão do trocador, que não aparece nela.
+  const apagarLista=(alvoId:string)=>{
+    if(!alvoId||alvoId===listaAtualId)return;
+    (setDbAndSave||setDb)((d:any)=>{
+      // Do `d` da GRAVAÇÃO (§3): item que outro operador inseriu entre a
+      // decisão e o save pertence à lista e tem que sair com ela.
+      const ids=(d.listaCompras||[]).filter((i:any)=>i.listaId===alvoId).map((i:any)=>i.id);
+      ids.forEach((id:string)=>_listaDeletados.add(id));
+      _listaDeletados.add(alvoId);
+      return{...d,
+        listaCompras:(d.listaCompras||[]).filter((i:any)=>i.listaId!==alvoId),
+        listasCompra:(d.listasCompra||[]).filter((l:any)=>l.id!==alvoId),
+        listaDeletedIds:[...new Set([...(d.listaDeletedIds||[]),...ids,alvoId])].slice(-5000)};
+    });
+  };
+
   // ⚠️ `alvoId` arquiva uma lista que NÃO é a aberta (o fechamento das 48 h, e
   // o botão dentro do trocador). Sem ele, arquivar uma lista parada obrigaria
   // a abri-la antes — e abrir troca a lista de TODO MUNDO de tela.
@@ -11403,13 +11427,11 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
   },[listaFinalizada,listaAtualId]);
   const cancelarAutoFechar=()=>{autoCanceladaRef.current=listaAtualId;setAutoFecharEm(null);};
 
-  // ---- Lista parada há 48 h sai sozinha (decisão do dono, 04/10/2026) ------
-  // ⚠️ ARQUIVA, não apaga. O pedido foi "deletar"; o que some é da TELA, e os
-  // itens ficam inteiros no Arquivo, de onde se consulta, imprime e retoma.
-  // Destruir de verdade não tem desfazer, e aqui o que se perderia é a compra
-  // que alguém montou — exatamente a mesma régua das contas de mês fechado, que
-  // a Conferência do RH mostra em vez de apagar sozinha. O admin continua
-  // podendo excluir do Arquivo, que é onde a decisão é explícita.
+  // ---- Lista parada há 48 h é APAGADA sozinha (decisão do dono, 04/10/2026) -
+  // ⚠️ APAGA MESMO: os itens somem do banco e não há desfazer. Propus arquivar,
+  // o dono reafirmou apagar. Por isso a tela conta as horas ANTES
+  // (`horasAteApagar`) em vez de a lista simplesmente deixar de existir — é o
+  // único aviso que vai existir.
   //
   // ⚠️ A conta é de OCIOSIDADE, nunca de idade (ver listasAbertas.js): por
   // idade, uma lista usada todo dia sumiria no meio da compra.
@@ -11419,13 +11441,15 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
   // da janela uma da outra. O efeito roda de novo quando o db muda e pega a
   // próxima — e o intervalo de 10 min cobre o caso de ninguém mexer em nada.
   const ociosaRef=useRef<string|null>(null);
+  const apagarRef=useRef(apagarLista);
+  apagarRef.current=apagarLista;
   useEffect(()=>{
     const varrer=()=>{
       const ids=listasOciosas(listasDoDb,Date.now());
       const alvo=ids.find((id:string)=>id!==ociosaRef.current)||ids[0];
       if(!alvo)return;
       ociosaRef.current=alvo;
-      arquivarRef.current(true,alvo);
+      apagarRef.current(alvo);
     };
     varrer();
     const t=setInterval(varrer,10*60*1000);
@@ -12818,15 +12842,26 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
           </div>
           <div style={{fontSize:12.5,color:"var(--text2)"}}>
             <span style={{fontFamily:MONO}}>{l.pendentes}</span> a comprar · <span style={{fontFamily:MONO}}>{l.itens}</span> no total
-            {/* ⚠️ O aviso de ociosidade é ESCRITO, não só uma cor: a paleta
-                Tinta é monocromática (§9). */}
-            {!l.ativa&&l.movimento>0&&(Date.now()-l.movimento)>=OCIOSA_HORAS*3600*1000
-              ?<span style={{color:"var(--warningText)",fontWeight:700}}> · parada há mais de {OCIOSA_HORAS}h, vai para o Arquivo</span>:null}
+            {/* ⚠️ A CONTAGEM APARECE ANTES, não depois. Apagar não tem
+                desfazer: sem isto a pessoa abre o trocador num dia e a lista
+                que ela montou simplesmente não está mais lá. Só nas últimas
+                12 h, senão vira enfeite em toda linha e ninguém lê.
+                ⚠️ E é ESCRITO, não só cor — a paleta Tinta é monocromática (§9). */}
+            {(()=>{const h=horasAteApagar(l,Date.now());
+              if(h===null||h>12)return null;
+              return <span style={{color:"var(--warningText)",fontWeight:700}}>
+                {h>0?<> · parada: some em {h}h</>:<> · parada há mais de {OCIOSA_HORAS}h, vai ser apagada</>}
+              </span>;})()}
           </div>
-          {/* Arquivar sem precisar abrir: abrir trocaria a tela de todo mundo. */}
-          {isAdmin&&!l.ativa&&l.itens>0&&<div style={{marginTop:9,paddingTop:9,borderTop:"1px solid var(--border)"}}>
-            <button className="btn" onClick={()=>{if(confirm(`Arquivar "${l.nome}" (${l.itens} item(ns))?\n\nEla sai das listas abertas e fica no Arquivo, inteira.`))arquivarLista(false,l.id);}}
-              style={{background:"var(--bg4)",color:"var(--text2)",padding:"6px 11px",fontSize:11.5,fontWeight:700}}>📂 Arquivar esta</button>
+          {/* Sem precisar abrir: abrir trocaria a tela de todo mundo.
+              ⚠️ São DUAS ações, e a diferença é o desfazer. Arquivar guarda a
+              compra inteira no histórico; apagar não deixa nada. Um botão só,
+              com as duas atrás dele, é como se apaga querendo guardar. */}
+          {isAdmin&&!l.ativa&&<div style={{marginTop:9,paddingTop:9,borderTop:"1px solid var(--border)",display:"flex",gap:7,flexWrap:"wrap" as const}}>
+            {l.itens>0&&<button className="btn" onClick={()=>{if(confirm(`Arquivar "${l.nome}" (${l.itens} item(ns))?\n\nEla sai das listas abertas e fica no Arquivo, inteira.`))arquivarLista(false,l.id);}}
+              style={{background:"var(--bg4)",color:"var(--text2)",padding:"6px 11px",fontSize:11.5,fontWeight:700}}>📂 Arquivar</button>}
+            <button className="btn" onClick={()=>{if(confirm(`APAGAR "${l.nome}"${l.itens?` e os ${l.itens} item(ns) dela`:""}?\n\nNão vai para o Arquivo e NÃO TEM COMO DESFAZER.`))apagarLista(l.id);}}
+              style={{background:"var(--dangerBg)",color:"var(--btnDanger)",padding:"6px 11px",fontSize:11.5,fontWeight:700}}>🗑️ Apagar</button>
           </div>}
         </div>
       ))}
@@ -12837,8 +12872,9 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       <div className="card" style={{background:"var(--infoBg)",border:"1px solid var(--infoText)33"}}>
         <div style={{fontSize:11.5,color:"var(--infoText)",lineHeight:1.55}}>
           Abrir uma lista troca a lista de <b>todos os aparelhos</b> — é por isso que o nome dela fica
-          no alto da tela. Lista parada há mais de <b>{OCIOSA_HORAS} horas</b> vai para o Arquivo sozinha;
-          nada é apagado, e de lá dá para consultar, imprimir e retomar.
+          no alto da tela. Lista parada há mais de <b>{OCIOSA_HORAS} horas</b> é <b>apagada</b> sozinha,
+          com os itens, e isso <b>não tem como desfazer</b> — a contagem aparece aqui nas últimas horas.
+          A lista aberta nunca é apagada sozinha. Para guardar uma compra, use <b>Arquivar</b> antes.
         </div>
       </div>
     </div>}

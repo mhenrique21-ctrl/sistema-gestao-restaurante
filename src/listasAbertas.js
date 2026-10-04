@@ -100,6 +100,11 @@ export function listaPorId(listas, id) {
 }
 
 // ── As que passaram de 48 h ─────────────────────────────────────────────────
+// ⚠️ ELAS SÃO APAGADAS, NÃO ARQUIVADAS (decisão do dono, 04/10/2026, depois de
+// eu ter proposto arquivar e ele ter reafirmado). Os itens somem do banco e não
+// há desfazer — por isso tudo abaixo, e por isso a tela avisa ANTES
+// (`horasAteApagar`), em vez de a lista simplesmente deixar de existir.
+//
 // ⚠️ A CONTA É DE OCIOSIDADE, NÃO DE IDADE. Por idade, uma lista aberta na
 // segunda e usada todo dia sumiria na quarta no meio da compra. O relógio
 // reinicia a cada item inserido ou marcado.
@@ -108,13 +113,26 @@ export function listaPorId(listas, id) {
 // desaparecer no meio do expediente é o pior desfecho possível, e o motivo de
 // ela estar parada pode ser simplesmente a loja ter fechado no fim de semana.
 //
-// ⚠️ E lista VAZIA também não sai: não há o que arquivar, e ela é justamente a
-// que alguém acabou de criar para usar.
+// ⚠️ Lista SEM MOVIMENTO CONHECIDO não sai: chutar "ninguém mexeu" apagaria
+// uma lista sobre a qual não se sabe nada. A vazia sai — não há o que perder,
+// e deixá-la para sempre encheria o trocador de lista vazia, que é justamente
+// o que a limpeza existe para evitar.
 export function listasOciosas(listas, agoraMs = Date.now(), horas = OCIOSA_HORAS) {
   const limite = horas * 3600 * 1000;
   return (listas || [])
-    .filter((l) => !l.ativa && l.itens > 0 && l.movimento > 0 && (agoraMs - l.movimento) >= limite)
+    .filter((l) => !l.ativa && l.movimento > 0 && (agoraMs - l.movimento) >= limite)
     .map((l) => l.id);
+}
+
+// Quantas horas faltam para esta lista ser apagada. `null` = não está na fila
+// (é a ativa, ou não se sabe quando mexeram nela).
+//
+// ⚠️ EXISTE PORQUE APAGAR NÃO TEM DESFAZER. Sem o aviso, a pessoa abre o
+// trocador num dia e a lista que ela montou simplesmente não está mais lá.
+export function horasAteApagar(lista, agoraMs = Date.now(), horas = OCIOSA_HORAS) {
+  if (!lista || lista.ativa || !lista.movimento) return null;
+  const restam = (lista.movimento + horas * 3600 * 1000) - agoraMs;
+  return Math.max(0, Math.ceil(restam / 3600000));
 }
 
 // Qual lista fica aberta quando a ativa é arquivada: a de movimento mais

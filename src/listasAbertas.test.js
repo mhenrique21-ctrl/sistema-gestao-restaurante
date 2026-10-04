@@ -2,7 +2,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   nomeAutomatico, nomeDaLista, listasAbertas, listaPorId,
-  listasOciosas, proximaAtiva, OCIOSA_HORAS,
+  listasOciosas, horasAteApagar, proximaAtiva, OCIOSA_HORAS,
 } from './listasAbertas.js';
 
 const H = 3600 * 1000;
@@ -140,9 +140,21 @@ describe('as 48 horas', () => {
     assert.deepEqual(listasOciosas([comMovimento('ativa', 500, { ativa: true })], agora), []);
   });
 
-  test('lista VAZIA não sai', () => {
-    // Não há o que arquivar, e é a que alguém acabou de criar para usar.
-    assert.deepEqual(listasOciosas([comMovimento('vazia', 500, { itens: 0 })], agora), []);
+  test('lista VAZIA sai — não há o que perder', () => {
+    // ⚠️ Mudou junto com "apagar em vez de arquivar": o motivo de poupá-la era
+    // "não há o que arquivar". Apagando, deixá-la para sempre encheria o
+    // trocador de lista vazia, que é o que a limpeza existe para evitar. E as
+    // 48 h de ociosidade já protegem a que alguém acabou de criar.
+    assert.deepEqual(listasOciosas([comMovimento('vazia', 500, { itens: 0 })], agora), ['vazia']);
+  });
+
+  test('avisa ANTES, porque apagar não tem desfazer', () => {
+    assert.equal(horasAteApagar(comMovimento('x', 47), agora), 1);
+    assert.equal(horasAteApagar(comMovimento('x', 49), agora), 0);
+    assert.equal(horasAteApagar(comMovimento('x', 0), agora), OCIOSA_HORAS);
+    // A ativa e a sem data não estão na fila — logo, não têm contagem.
+    assert.equal(horasAteApagar(comMovimento('x', 99, { ativa: true }), agora), null);
+    assert.equal(horasAteApagar(comMovimento('x', 99, { movimento: 0 }), agora), null);
   });
 
   test('sem movimento conhecido, não sai', () => {

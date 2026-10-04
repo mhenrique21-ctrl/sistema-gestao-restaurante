@@ -2573,22 +2573,35 @@ ficasse dois minutos decidindo criaria a lista com a hora errada dentro do nome.
 várias listas abertas dá para comprar da lista A olhando para a B — esse é o
 preço da mudança, e a barra com o nome é o que o paga.
 
-#### Lista parada há 48 h sai sozinha
+#### Lista parada há 48 h é APAGADA sozinha
 
-⚠️ **ARQUIVA, NÃO APAGA.** O pedido foi "deletar"; o que some é da **tela**, e os
-itens ficam inteiros no Arquivo, de onde se consulta, imprime e retoma. Destruir
-não tem desfazer, e o que se perderia é a compra que alguém montou — a mesma
-régua das contas de mês fechado, que a Conferência do RH **mostra** em vez de
-apagar sozinha. O admin continua podendo excluir do Arquivo, onde a decisão é
-explícita.
+⚠️ **APAGA MESMO — não arquiva.** Propus arquivar; o dono **reafirmou apagar**
+(04/10/2026). Os itens somem do banco, nada vai para `pedidosLista`, e **não há
+desfazer**. Toda a cautela abaixo existe por causa disso.
+
+⚠️ **A TELA CONTA AS HORAS ANTES** (`horasAteApagar`, nas últimas 12 h). É o
+único aviso que vai existir: sem ele a pessoa abre o trocador num dia e a lista
+que montou simplesmente não está mais lá. Só nas últimas horas — em toda linha
+vira enfeite, e enfeite ninguém lê.
+
+⚠️ **ARQUIVAR E APAGAR SÃO DOIS BOTÕES**, e a diferença entre eles é o desfazer.
+Um botão só, com as duas coisas atrás dele, é como se apaga querendo guardar.
+
+⚠️ **TOMBSTONE EM TUDO** — itens e cadastro. Sem ele a fusão devolve a lista
+inteira no poll seguinte e ela renasce em todo aparelho (§3).
 
 ⚠️ **A CONTA É DE OCIOSIDADE, NUNCA DE IDADE.** Por idade, uma lista aberta na
 segunda e usada todo dia sumiria na quarta no meio da compra. O relógio reinicia
 a cada item inserido ou marcado.
 
 ⚠️ **A ATIVA NUNCA SAI SOZINHA.** Ela está na tela de todo mundo, e o motivo de
-estar parada pode ser só a loja ter fechado no fim de semana. Lista **vazia**
-também não sai: não há o que arquivar, e é a que alguém acabou de criar.
+estar parada pode ser só a loja ter fechado no fim de semana. Lista **sem
+movimento conhecido** também não sai: chutar "ninguém mexeu" apagaria uma lista
+sobre a qual não se sabe nada.
+
+⚠️ **A VAZIA SAI**, e isso mudou junto com o "apagar": o motivo de poupá-la era
+"não há o que arquivar". Apagando, não há o que perder — e deixá-la para sempre
+encheria o trocador de lista vazia, que é o que a limpeza existe para evitar.
 
 ⚠️ **UMA POR CICLO.** `arquivarLista` é um `setDbAndSave`, que liga o save direto
 por até 5 s (§3, armadilha nº 0): duas chamadas seguidas caem na janela uma da

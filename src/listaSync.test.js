@@ -238,7 +238,37 @@ test('arquivar uma lista tira o cadastro dela COM tombstone', () => {
     'o arquivo parou de guardar nome e autor');
 });
 
-test('o fechamento das 48 h arquiva UMA por ciclo e nunca a aberta', () => {
+test('as 48 h APAGAM de verdade — nada vai para o Arquivo', () => {
+  // Decisão do dono: propus arquivar, ele reafirmou apagar. Os itens somem do
+  // banco e não há desfazer.
+  const i = APP.indexOf('const apagarLista=(alvoId:string)=>{');
+  assert.ok(i > 0, 'apagarLista sumiu');
+  const fn = APP.slice(i, i + 1500);
+  assert.ok(!/pedidosLista/.test(fn), 'voltou a guardar no Arquivo — era para apagar');
+  // ⚠️ Tombstone em TUDO: sem ele a fusão devolve a lista inteira no poll
+  // seguinte e ela "renasce" em todo aparelho (§3).
+  assert.ok(fn.includes('_listaDeletados.add(alvoId);'), 'o cadastro sai sem tombstone');
+  assert.ok(fn.includes("ids.forEach((id:string)=>_listaDeletados.add(id));"), 'os itens saem sem tombstone');
+  // §3: do `d` da gravação — item inserido entre a decisão e o save tem que sair junto.
+  assert.ok(fn.includes('(d.listaCompras||[]).filter((i:any)=>i.listaId===alvoId)'),
+    'passou a ler os itens do render em vez do `d` da gravação');
+  // ⚠️ E nunca a lista aberta, que está na tela de todo mundo.
+  assert.ok(fn.includes('if(!alvoId||alvoId===listaAtualId)return;'),
+    'a trava que impede apagar a lista aberta sumiu');
+});
+
+test('a contagem aparece ANTES de apagar', () => {
+  // Apagar não tem desfazer: sem o aviso, a pessoa abre o trocador num dia e a
+  // lista que montou simplesmente não está mais lá.
+  assert.ok(APP.includes('const h=horasAteApagar(l,Date.now());'), 'a contagem sumiu do trocador');
+  assert.ok(APP.includes('some em {h}h'), 'o texto da contagem sumiu');
+  // Arquivar e apagar ficam SEPARADOS: a diferença entre eles é o desfazer.
+  assert.ok(APP.includes('>🗑️ Apagar</button>') && APP.includes('>📂 Arquivar</button>'),
+    'as duas ações viraram uma só — é assim que se apaga querendo guardar');
+  assert.ok(APP.includes('NÃO TEM COMO DESFAZER'), 'a confirmação parou de dizer que não desfaz');
+});
+
+test('a varredura das 48 h roda UMA por ciclo e nunca na aberta', () => {
   // ⚠️ `arquivarLista` é um setDbAndSave, que liga o save direto por até 5 s
   // (§3, armadilha nº 0): duas chamadas seguidas caem na janela uma da outra.
   const i = APP.indexOf('const ociosaRef=useRef<string|null>(null);');
@@ -247,12 +277,12 @@ test('o fechamento das 48 h arquiva UMA por ciclo e nunca a aberta', () => {
   assert.ok(fn.includes('const ids=listasOciosas(listasDoDb,Date.now());'), 'a varredura mudou de fonte');
   assert.ok(!/ids\.forEach|for\s*\(const .* of ids\)/.test(fn),
     'voltou a arquivar várias de uma vez — cai na janela de 5s do save direto');
-  assert.ok(fn.includes('arquivarRef.current(true,alvo);'), 'a varredura parou de arquivar o alvo');
+  assert.ok(fn.includes('apagarRef.current(alvo);'), 'a varredura parou de apagar o alvo');
   // Que a ativa e a vazia nunca saem é regra do módulo, com teste próprio lá.
   const MOD = fs.readFileSync(
     path.join(path.dirname(fileURLToPath(import.meta.url)), 'listasAbertas.js'), 'utf8');
-  assert.ok(MOD.includes('!l.ativa && l.itens > 0 && l.movimento > 0'),
-    'a lista ativa, a vazia ou a sem data voltaram a poder ser arquivadas sozinhas');
+  assert.ok(MOD.includes('!l.ativa && l.movimento > 0'),
+    'a lista ativa, ou a sem movimento conhecido, voltaram a poder ser apagadas sozinhas');
 });
 
 test('a barra mostra o nome da lista aberta, para todo mundo', () => {
