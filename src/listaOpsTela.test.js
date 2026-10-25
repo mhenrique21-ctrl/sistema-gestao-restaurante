@@ -106,7 +106,11 @@ test('um teto só para o tombstone, e nenhum .slice(-5000) sobrando', () => {
 
 test('a virada das 12h é do SERVIDOR, idempotente e com interruptor explícito', () => {
   assert.ok(SRV.includes("const LISTA_CICLO_LIGADO = String(process.env.LISTA_CICLO_12H || 'sim')"), 'o interruptor sumiu');
-  assert.ok(SRV.includes('virarListaNoCorte(doc, agora)'), 'o servidor não usa a regra testada');
+  // ⚠️ Com a config do .env (dias fechados e feriados): sem ela o servidor
+  // cortaria no domingo enquanto a regra testada diz que domingo não tem corte.
+  assert.ok(SRV.includes('virarListaNoCorte(doc, agora, CICLO)'), 'o servidor não usa a regra testada com a config do .env');
+  assert.ok(SRV.includes('const CICLO = configDoCiclo(process.env);'), 'a config de dias fechados/feriados deixou de ser lida do .env');
+  assert.ok(SRV.includes('proximoCorte(agora, CICLO)'), 'o "nada a fazer até o próximo corte" ignora os dias fechados');
   assert.ok(SRV.includes('setInterval(virarListasNoCorte, 60 * 1000)'), 'o relógio de 1 min sumiu');
 });
 

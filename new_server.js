@@ -12,7 +12,7 @@ import { DOMParser } from '@xmldom/xmldom';
 import { mergeDocument } from './mergeDocument.js';
 import { idDoRegistroPdv } from './registroPdv.js';
 import { aplicarOpsLista, MAX_TOMBSTONES } from './src/listaOps.js';
-import { virarListaNoCorte, proximoCorte } from './src/listaCiclo.js';
+import { virarListaNoCorte, proximoCorte, configDoCiclo, nomeDaCompra, diaDaCompra } from './src/listaCiclo.js';
 import { paraGemini, respostaDoGemini, erroDoGemini, valeTentarReserva, filaDeModelos } from './iaGemini.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -1268,6 +1268,16 @@ _vigia.unref?.();
 // `COMANDAS_ENVIAR` (§4): desligado de propósito tem que ser distinguível de
 // quebrado.
 const LISTA_CICLO_LIGADO = String(process.env.LISTA_CICLO_12H || 'sim').trim().toLowerCase() !== 'nao';
+// Domingo (e o que mais o .env fechar) e feriados NÃO TÊM CORTE: a lista de
+// sábado 12h vai até segunda 12h e se chama "compra de segunda".
+//   LISTA_DIAS_FECHADOS=0            (0=domingo … 6=sábado; padrão: domingo)
+//   LISTA_FERIADOS=2026-12-25,2027-01-01
+// Lido UMA vez, na subida (mudou o .env → `pm2 restart`). Valor inválido cai
+// no padrão e avisa — nunca derruba (ver configDoCiclo).
+const CICLO = configDoCiclo(process.env);
+console.log(`[lista 12h] corte às ${CICLO.horaCorte}h (America/Belem) · dias fechados: ${[...CICLO.diasFechados].join(',')}`
+  + ` · feriados: ${CICLO.feriados.size ? [...CICLO.feriados].sort().join(', ') : 'nenhum'}`
+  + ` · agora é a "${nomeDaCompra(diaDaCompra(Date.now(), CICLO))}"`);
 const _cicloVisto = new Map();
 function virarListasNoCorte() {
   for (const emp of ['CONFRARIA', 'SEAMA']) {
@@ -1279,16 +1289,16 @@ function virarListasNoCorte() {
     try { doc = JSON.parse(fs.readFileSync(file, 'utf-8')); } catch { continue; }
     const agora = Date.now();
     let r = null;
-    try { r = virarListaNoCorte(doc, agora); } catch (e) { console.error(`[lista 12h ${emp}] falhou:`, e); }
+    try { r = virarListaNoCorte(doc, agora, CICLO); } catch (e) { console.error(`[lista 12h ${emp}] falhou:`, e); }
     if (r) {
       try {
         backupRotativo(emp, file);
         gravarDocumento(file, r.doc);
         _cacheLista.delete(emp);
-        console.log(`[lista 12h ${emp}] "${r.pedido.nome}" arquivada (${r.arquivados} item(ns)); ${r.movidos} lançado(s) depois do corte seguem na lista nova.`);
+        console.log(`[lista 12h ${emp}] "${r.pedido.nome}" arquivada (${r.arquivados} item(ns)); ${r.movidos} lançado(s) depois do corte seguem na "${r.novoNome}".`);
       } catch (e) { console.error(`[lista 12h ${emp}] não consegui gravar:`, e.message); continue; }
     }
-    _cicloVisto.set(emp, { marca: marcaDoArquivo(emp), ate: proximoCorte(agora) });
+    _cicloVisto.set(emp, { marca: marcaDoArquivo(emp), ate: proximoCorte(agora, CICLO) });
   }
 }
 if (LISTA_CICLO_LIGADO) {

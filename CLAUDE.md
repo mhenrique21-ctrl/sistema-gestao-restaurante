@@ -2418,13 +2418,43 @@ em segundo plano e só quando preciso); sem essa lista, **não poda nada**.
 ### A virada das 12h — `src/listaCiclo.js` (com testes)
 
 Decisão do dono: o dia da Lista vai das **12h às 12h** (America/Belem, UTC−3
-fixo). Item de 24/10 18h30 é da "Compra de 25/10". Um relógio **no servidor**
-(1 min) arquiva no corte os itens da lista aberta lançados ANTES dele, como
-"Compra de DD/MM" (`automatico: true`, id `arq-<listaId>`, a forma do
-`arquivarLista`), e abre a lista `proximaListaId`. ⚠️ **O que entrou depois das
-12h passa para a lista nova**, com carimbo. Idempotente; desliga com
+fixo). Item de segunda 18h30 é da "Compra de terça · 27/10". Um relógio **no
+servidor** (1 min) arquiva no corte os itens da lista aberta lançados ANTES
+dele (`automatico: true`, id `arq-<listaId>`, a forma do `arquivarLista`), e
+abre a lista `proximaListaId` **já com nome no cadastro** ("Compra de terça ·
+27/10" — é o que fica no alto da tela). ⚠️ **O que entrou depois das 12h passa
+para a lista nova**, com carimbo. Idempotente; desliga com
 `LISTA_CICLO_12H=nao` no `.env`. Órfão "de hoje" agora é o do mesmo
 `diaDaCompra`, não o do `today()`.
+
+**Domingo a loja não abre e NÃO EXISTE CORTE NO DOMINGO** (dono, 25/10/2026):
+a lista que começa sábado 12h vai até **segunda** 12h e se chama "Compra de
+segunda · 26/10" — item de sábado à tarde e de domingo inteiro é dela.
+**Feriado segue a mesma lógica.** `diaDaCompra`, `ultimoCorte` e
+`proximoCorte` andam até um dia ABERTO (`ehDiaFechado`), e as três contas saem
+da mesma função de propósito: o dia da compra é sempre o dia do próximo corte
+(há teste varrendo a semana hora a hora). Config no `.env` da VPS, lida na
+subida por `configDoCiclo` (`pm2 restart` depois de mudar):
+
+```
+LISTA_DIAS_FECHADOS=0                  0=domingo … 6=sábado; padrão: domingo
+LISTA_FERIADOS=2026-12-25,2027-01-01   AAAA-MM-DD, por vírgula
+```
+
+⚠️ Configuração inválida **cai no padrão e avisa**, nunca derruba: fechar os
+sete dias seria laço infinito na subida (régua do `APP_SESSION_SECRET`); data
+fora do formato ou inexistente (2026-02-30) é descartada sem levar as outras.
+A TELA usa o padrão (só domingo): o `.env` mora no servidor, e o único uso
+dela é separar órfão "de hoje" — na véspera de feriado isso pode divergir por
+um dia, sem efeito na virada, que é do servidor.
+
+> Histórico (25/10/2026): esta regra foi escrita TRÊS vezes no mesmo dia, por
+> três sessões sem ver uma à outra — esta (na VPS, com a Etapa 1), uma só de
+> servidor (`listaCiclo.js` com timer SSE, no origin) e uma só de tela
+> (`compraDoDia.js`, com listas `compra-<dia>`). Ficou esta, que já rodava em
+> produção, com a config e os testes de calendário das outras duas
+> incorporados. As outras duas morreram na fusão; estão no histórico do git
+> (`vps/lista-etapa1`, `claude/sunday-closure-rule-22520d`).
 
 ⚠️ **As 48 h passaram a ARQUIVAR** (com itens) — só a lista VAZIA é apagada.
 A seção abaixo ("APAGA MESMO") descreve o comportamento de 04/10 a 25/10.
