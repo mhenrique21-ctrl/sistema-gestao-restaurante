@@ -82,6 +82,19 @@ describe('feriado segue a mesma lógica do domingo', () => {
     assert.equal(diaDaCompra(em(27, 13), '2026-10-28'), '2026-10-29');
     assert.equal(diaDaCompra(em(27, 13), undefined), '2026-10-28');
   });
+  test('aceita o objeto de /api/feriados, com os dias fechados do servidor', () => {
+    // A MESMA config do timer do servidor (LISTA_DIAS_FECHADOS): loja que
+    // fecha domingo E segunda → sábado 12h vira compra de terça.
+    const cfg = { feriados: ['2026-10-28'], diasFechados: [0, 1], horaCorte: 12 };
+    assert.equal(diaDaCompra(em(24, 13), cfg), '2026-10-27');
+    assert.equal(diaDaCompra(em(27, 13), cfg), '2026-10-29');   // feriado quarta
+    assert.equal(diaFechado('2026-10-26', cfg), true);
+    assert.equal(inicioDaCompra('2026-10-27', cfg), '2026-10-24T12:00');
+    // sem diasFechados válidos, volta para domingo — nunca "nenhum dia fechado"
+    assert.equal(diaDaCompra(em(24, 13), { feriados: [], diasFechados: [] }), '2026-10-26');
+    assert.equal(diaDaCompra(em(24, 13), { feriados: [], diasFechados: [0, 1, 2, 3, 4, 5, 6] }), '2026-10-26');
+    assert.equal(diaDaCompra(em(24, 13), { feriados: [] }), '2026-10-26');
+  });
   test('um .env absurdo não trava a tela', () => {
     const todos = [];
     for (let i = 0; i < 400; i++) todos.push(isoLocal(new Date(2026, 9, 20 + i, 12)));

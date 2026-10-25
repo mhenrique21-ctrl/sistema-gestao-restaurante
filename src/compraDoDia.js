@@ -71,7 +71,22 @@ function dataValida(t) {
   return dt.getFullYear() === a && dt.getMonth() === m - 1 && dt.getDate() === d;
 }
 
-// Aceita Set, array ou string (o `.env` cru) e devolve sempre um Set.
+// A configuração pode vir de três jeitos e vira sempre `{ feriados, diasFechados }`:
+//   • Set / array / string crua do .env → só feriados; fechado = domingo;
+//   • o objeto de `GET /api/feriados` ({ feriados:[...], diasFechados:[0] }),
+//     que é a MESMA config do timer do servidor (src/listaCiclo.js).
+// `diasFechados` sem nada válido volta para domingo: nunca "nenhum dia
+// fechado" por acidente de formato.
+export const DIAS_FECHADOS_PADRAO = [0];
+function normalizar(cfg) {
+  if (cfg && typeof cfg === 'object' && !(cfg instanceof Set) && !Array.isArray(cfg) && ('feriados' in cfg || 'diasFechados' in cfg)) {
+    const dias = [...new Set((Array.isArray(cfg.diasFechados) || cfg.diasFechados instanceof Set ? [...cfg.diasFechados] : [])
+      .map(Number).filter((n) => Number.isInteger(n) && n >= 0 && n <= 6))];
+    return { feriados: comoSet(cfg.feriados), diasFechados: new Set(dias.length && dias.length < 7 ? dias : DIAS_FECHADOS_PADRAO) };
+  }
+  return { feriados: comoSet(cfg), diasFechados: new Set(DIAS_FECHADOS_PADRAO) };
+}
+
 function comoSet(feriados) {
   if (feriados instanceof Set) return feriados;
   if (Array.isArray(feriados)) return new Set(feriados);
@@ -79,9 +94,10 @@ function comoSet(feriados) {
   return new Set();
 }
 
-// Dia em que NÃO há compra: domingo ou feriado.
-export function diaFechado(iso, feriados = new Set()) {
-  return meioDia(iso).getDay() === 0 || comoSet(feriados).has(iso);
+// Dia em que NÃO há compra: dia fechado da semana (padrão domingo) ou feriado.
+export function diaFechado(iso, cfg = new Set()) {
+  const c = normalizar(cfg);
+  return c.diasFechados.has(meioDia(iso).getDay()) || c.feriados.has(iso);
 }
 
 // ── A regra ─────────────────────────────────────────────────────────────────
@@ -92,19 +108,19 @@ export function diaDaCompra(quando = new Date(), feriados = new Set()) {
   const d = quando instanceof Date ? quando : new Date(quando);
   let dia = isoLocal(d);
   if (d.getHours() >= HORA_CORTE) dia = somaDias(dia, 1);
-  const fer = comoSet(feriados);
+  const cfg = normalizar(feriados);
   // Limite de segurança: um .env que marcasse o ano inteiro como feriado não
   // pode travar a tela num laço infinito.
-  for (let i = 0; i < 60 && diaFechado(dia, fer); i++) dia = somaDias(dia, 1);
+  for (let i = 0; i < 60 && diaFechado(dia, cfg); i++) dia = somaDias(dia, 1);
   return dia;
 }
 
 // Quando a lista desse dia ABRE (o corte anterior): 12h do último dia aberto
 // antes dele. Sábado 12h para a compra de segunda; sexta 12h para a de sábado.
 export function inicioDaCompra(dia, feriados = new Set()) {
-  const fer = comoSet(feriados);
+  const cfg = normalizar(feriados);
   let ant = somaDias(dia, -1);
-  for (let i = 0; i < 60 && diaFechado(ant, fer); i++) ant = somaDias(ant, -1);
+  for (let i = 0; i < 60 && diaFechado(ant, cfg); i++) ant = somaDias(ant, -1);
   return `${ant}T${p2(HORA_CORTE)}:00`;
 }
 

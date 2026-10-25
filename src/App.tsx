@@ -1906,7 +1906,8 @@ const migrateDb=(m:any)=>{
 // Feriados do `.env` do servidor (LISTA_FERIADOS), baixados UMA vez por
 // sessão — a aba Lista monta e desmonta a cada troca de aba e não pode bater
 // na rota toda vez. `null` = ainda não chegou (ver ListaComprasPanel).
-let _feriadosCache:Set<string>|null=null;
+type CfgCompraDoDia={feriados:string[],diasFechados:number[]};
+let _feriadosCache:CfgCompraDoDia|null=null;
 const _listaDeletados=new Set<string>(
   (()=>{try{return JSON.parse(localStorage.getItem("_delIds")||"[]");}catch{return[];}})()
 );
@@ -10998,15 +10999,19 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
   // "compra do feriado" por um instante, e o item inserido nesse instante
   // ficaria preso nela. A inserção não espera (usa o que tiver): item nunca
   // pode deixar de entrar por causa de uma rota.
-  const [feriados,setFeriados]=useState<Set<string>|null>(_feriadosCache);
+  // O objeto vem inteiro (`{feriados, diasFechados}`): é a MESMA config do
+  // timer do servidor (src/listaCiclo.js), para a tela e o servidor nunca
+  // discordarem de que dia é a compra.
+  const [feriados,setFeriados]=useState<CfgCompraDoDia|null>(_feriadosCache);
   useEffect(()=>{
     if(_feriadosCache){setFeriados(_feriadosCache);return;}
     let vivo=true;
-    fetch("/api/feriados",{cache:"no-store"}).then(r=>r.ok?r.json():{feriados:[]}).catch(()=>({feriados:[]}))
-      .then(d=>{const s=new Set<string>(Array.isArray(d?.feriados)?d.feriados:[]);_feriadosCache=s;if(vivo)setFeriados(s);});
+    fetch("/api/feriados",{cache:"no-store"}).then(r=>r.ok?r.json():{}).catch(()=>({}))
+      .then(d=>{const cfg:CfgCompraDoDia={feriados:Array.isArray(d?.feriados)?d.feriados:[],diasFechados:Array.isArray(d?.diasFechados)?d.diasFechados:[0]};
+        _feriadosCache=cfg;if(vivo)setFeriados(cfg);});
     return()=>{vivo=false;};
   },[]);
-  const feriadosSet:Set<string>=feriados||new Set<string>();
+  const feriadosSet:CfgCompraDoDia=feriados||{feriados:[],diasFechados:[0]};
   // ---- Várias listas abertas (04/10/2026) ----------------------------------
   // ⚠️ O cadastro é DERIVADO do db, nunca exigido: toda a operação de hoje tem
   // itens com `listaId` e nenhuma entrada em `listasCompra`. Ver listasAbertas.js.
