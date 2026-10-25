@@ -1,4 +1,5 @@
 import { mergeListaCompras } from './mergeListaCompras.js';
+import { MAX_TOMBSTONES, lixeiraValida } from './src/listaOps.js';
 
 // Campos do documento que são arrays de objetos com `id` — union por id,
 // com desempate por timestamp (updatedAt/atualizadoEm) quando presente dos
@@ -29,6 +30,10 @@ export const MERGEABLE_FIELDS = [
   // antigo — que não conhece o campo e posta sem ele — apagaria do servidor a
   // lista que outro acabou de criar.
   'listasCompra',
+  // A lixeira da Lista de Compras: `{id:"lx-<item>", item, excluidoEm,
+  // excluidoPor}`. Array com id, fusão por id; restaurar ou descartar põe o id
+  // da ENTRADA no tombstone genérico, senão o aparelho atrasado a devolve.
+  'listaLixeira',
 ];
 
 // Mapas {chave: valor}: união chave a chave, incoming vencendo. Nada é removido
@@ -167,21 +172,25 @@ export function mergeArrayById(existingArr, incomingArr, deletedIds, isVendas = 
 // o último POST sobrescrever o arquivo inteiro, apagando silenciosamente
 // qualquer mudança (marcar conta como paga, editar um funcionário etc.) que
 // o outro lado já tinha salvo um instante antes.
-export function mergeDocument(existing, incoming) {
+// `opts.vivos` segue para a fusão da Lista (poda do tombstone sem perda).
+export function mergeDocument(existing, incoming, opts = {}) {
   if (!existing) return incoming;
 
   // Lista de Compras primeiro (mantém a semântica própria já testada).
-  const afterLista = mergeListaCompras(existing, incoming);
+  const afterLista = mergeListaCompras(existing, incoming, opts);
 
   // deletedIds genérico: união de tudo que qualquer dispositivo já excluiu,
   // de qualquer entidade (o cliente manda o snapshot completo do seu
   // _listaDeletados local em todo POST — ver withDeletedIds em App.tsx).
   const deletedIds = new Set([...(existing.deletedIds || []), ...(incoming.deletedIds || [])]);
 
-  const merged = { ...afterLista, deletedIds: [...deletedIds].slice(-5000) };
+  const merged = { ...afterLista, deletedIds: [...deletedIds].slice(-MAX_TOMBSTONES) };
   for (const field of MERGEABLE_FIELDS) {
     merged[field] = mergeArrayById(existing[field], afterLista[field], deletedIds, field === 'vendas');
   }
+  // Entrada com mais de 30 dias sai — senão um aparelho com dado velho a
+  // devolveria para sempre, já que a união só sabe adicionar.
+  if (existing.listaLixeira || afterLista.listaLixeira) merged.listaLixeira = lixeiraValida(merged.listaLixeira);
 
   // Mapas (não arrays com id), que por isso não passam por mergeArrayById.
   // Como o documento mesclado nasce do incoming, um aparelho com o bundle

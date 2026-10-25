@@ -1,6 +1,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { mergeListaCompras } from './mergeListaCompras.js';
+import { MAX_TOMBSTONES } from './src/listaOps.js';
 
 // Análise do código sob teste (mergeListaCompras.js):
 // - Input: dois documentos JSON (o que está de fato salvo no servidor
@@ -83,12 +84,31 @@ describe('mergeListaCompras', () => {
     assert.deepEqual([...result.listaDeletedIds].sort(), ['x', 'y', 'z']);
   });
 
-  test('listaDeletedIds é limitado aos últimos 5000', () => {
+  // ⚠️ Mudou em 25/10/2026: era "limitado aos últimos 5000", e o real chegou
+  // nos 5000 — dali em diante cada exclusão empurrava a mais antiga para fora
+  // e um aparelho atrasado ressuscitava o item. Ver src/listaOps.js.
+  test('listaDeletedIds NÃO perde nada abaixo de MAX_TOMBSTONES', () => {
     const many = Array.from({ length: 6000 }, (_, i) => `id${i}`);
     const existing = { listaDeletedIds: many };
     const incoming = { listaDeletedIds: [] };
     const result = mergeListaCompras(existing, incoming);
-    assert.equal(result.listaDeletedIds.length, 5000);
+    assert.equal(result.listaDeletedIds.length, 6000);
+  });
+
+  test('acima do teto, sem saber quem está vivo nos backups, não poda nada', () => {
+    const many = Array.from({ length: MAX_TOMBSTONES + 10 }, (_, i) => `id${i}`);
+    const result = mergeListaCompras({ listaDeletedIds: many }, { listaDeletedIds: [] });
+    assert.equal(result.listaDeletedIds.length, MAX_TOMBSTONES + 10);
+  });
+
+  test('acima do teto, poda só quem não existe em backup nenhum', () => {
+    const many = Array.from({ length: MAX_TOMBSTONES + 10 }, (_, i) => `id${i}`);
+    const vivos = new Set(['id0', 'id1']);   // os mais antigos, mas ainda em backup
+    const result = mergeListaCompras({ listaDeletedIds: many }, { listaDeletedIds: [] }, { vivos });
+    assert.ok(result.listaDeletedIds.length < MAX_TOMBSTONES, 'não podou');
+    assert.ok(result.listaDeletedIds.includes('id0') && result.listaDeletedIds.includes('id1'),
+      'podou um id que ainda existe num backup — um aparelho atrasado o ressuscitaria');
+    assert.ok(!result.listaDeletedIds.includes('id2'), 'a poda não começou pelos mais antigos');
   });
 
   test('regressão: uma identidade forjada com timestamp "época" (migração de dispositivo desatualizado) nunca pode vencer a lista real', () => {

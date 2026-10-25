@@ -18,6 +18,8 @@ import {sugerirVinculo,itemDeEstoqueDaProducao,apelidosDoItem,normalizarNome as 
 import {decidirAutoSave,empresasComMudanca} from "./autoSave.js";
 import {proximaListaId,ID_LISTA_INICIAL} from "./listaId.js";
 import {nomeAutomatico,nomeDaLista,listasAbertas,listaPorId,listasOciosas,horasAteApagar,proximaAtiva,OCIOSA_HORAS} from "./listasAbertas.js";
+import {MAX_TOMBSTONES,idDaLixeira,lixeiraValida} from "./listaOps.js";
+import {diaDaCompra} from "./listaCiclo.js";
 import {lerPlanilha} from "./planilha.js";
 import {lerRelatorio,conferirRelatorio,resumoPorDia,lancamentosDoRelatorio,conflitosDaPonte,automaticosDePlataforma,limparAutomaticos,ROTULO as ROTULO_PLAT} from "./relatorioPlataforma.js";
 import {compararPeriodos,formasDoPeriodo,porDiaDaSemana,porMes,periodoAnterior,compararProdutos,coberturaItens,topComResto,CANAIS as CANAIS_REL,FORMAS as FORMAS_REL} from "./relatorioPeriodo.js";
@@ -1887,7 +1889,7 @@ const migrateDb=(m:any)=>{
 const _listaDeletados=new Set<string>(
   (()=>{try{return JSON.parse(localStorage.getItem("_delIds")||"[]");}catch{return[];}})()
 );
-const _persistDel=()=>{try{const arr=[..._listaDeletados].slice(-5000);localStorage.setItem("_delIds",JSON.stringify(arr));}catch{}};
+const _persistDel=()=>{try{const arr=[..._listaDeletados].slice(-MAX_TOMBSTONES);localStorage.setItem("_delIds",JSON.stringify(arr));}catch{}};
 const _origAdd=_listaDeletados.add.bind(_listaDeletados);
 _listaDeletados.add=(id:string)=>{_origAdd(id);_persistDel();return _listaDeletados;};
 
@@ -1895,7 +1897,7 @@ _listaDeletados.add=(id:string)=>{_origAdd(id);_persistDel();return _listaDeleta
 // compras, funcionários etc., não só a lista de compras) em todo POST pro
 // servidor. É o que permite ao servidor fundir o documento sem "ressuscitar"
 // um registro que algum dispositivo já excluiu (ver mergeDocument.js).
-const withDeletedIds=(doc:any)=>({...doc,deletedIds:[..._listaDeletados].slice(-5000)});
+const withDeletedIds=(doc:any)=>({...doc,deletedIds:[..._listaDeletados].slice(-MAX_TOMBSTONES)});
 
 // Merge listaCompras por ID: versão com updatedAt mais recente vence.
 // Itens novos do servidor são adicionados. Deletados são filtrados.
@@ -2088,6 +2090,10 @@ const mergeFromServer=(prev:any,updates:any)=>{
       // Cadastro das listas de compra abertas (§3: todo campo novo entra nas
       // DUAS fusões, senão o poll reverte a gravação antes do POST confirmar).
       listasCompra: mergeArrayById(s.listasCompra||[],p.listasCompra||[],_listaDeletados),
+      // Lixeira da Lista (campo novo — §3, as DUAS fusões). A entrada que outro
+      // aparelho restaurou ou descartou vem no tombstone GERAL do servidor.
+      listaLixeira: lixeiraValida(mergeArrayById(s.listaLixeira||[],p.listaLixeira||[],
+        new Set([..._listaDeletados,...(Array.isArray(s.deletedIds)?s.deletedIds:[])]))),
       // Itens vendidos por dia, agregados por produto (agente do Eclética).
       // Campo novo: registrado AQUI e em mergeDocument.js, senão o poll de
       // ~100ms traria o valor cru do servidor e reverteria a gravação antes
@@ -2205,7 +2211,7 @@ const mergeFromServer=(prev:any,updates:any)=>{
       }
     }
     // listaDeletedIds: unir local e servidor
-    next[emp].listaDeletedIds=[...new Set([...(s.listaDeletedIds||[]),...(p.listaDeletedIds||[])])].slice(-5000);
+    next[emp].listaDeletedIds=[...new Set([...(s.listaDeletedIds||[]),...(p.listaDeletedIds||[])])].slice(-MAX_TOMBSTONES);
     // listaCategorias, listaRuas, ruaCatMap: unir
     next[emp].listaCategorias=[...new Set([...(s.listaCategorias||[]),...(p.listaCategorias||[])])];
     next[emp].listaRuas=[...new Set([...(s.listaRuas||[]),...(p.listaRuas||[])])];
@@ -2303,6 +2309,15 @@ const senhaJaEmUso=async(senha:string,exceto?:string):Promise<boolean>=>{
 };
 let _aoPerderSessao:(()=>void)|null=null;
 const registrarQuedaDeSessao=(fn:(()=>void)|null)=>{_aoPerderSessao=fn;};
+// ---- Fila das operações da Lista (gravação item a item) --------------------
+// ⚠️ NO localStorage, não em memória: o celular trava a tela, troca de app, o
+// navegador mata a aba — e a operação que não subiu tem que subir quando o app
+// voltar. Cada operação leva o próprio `opId`, e a do item leva o id que NASCEU
+// NO APARELHO: reenviar a mesma operação é inócuo (ver src/listaOps.js).
+const FILA_OPS_KEY="_listaOpsPendentes";
+const lerFilaOps=():any[]=>{try{const a=JSON.parse(localStorage.getItem(FILA_OPS_KEY)||"[]");return Array.isArray(a)?a:[];}catch{return[];}};
+const gravarFilaOps=(f:any[])=>{try{localStorage.setItem(FILA_OPS_KEY,JSON.stringify(f));}catch{}};
+
 const fetchSync=(url:string,opts:any={},ms=SYNC_TIMEOUT_MS)=>{
   const ctrl=new AbortController();
   const t=setTimeout(()=>ctrl.abort(),ms);
@@ -2357,6 +2372,9 @@ export default function App() {
   const reagendarRef = useRef<any>(null);
   const [saveTick,setSaveTick] = useState(0);
   const directSaveEndRef = useRef(0);
+  // Estados de empresa produzidos SÓ por operações da Lista que já foram (ou
+  // vão) para o servidor item a item — o auto-save não os posta de novo.
+  const listaLimpaRef = useRef(new WeakSet<object>());
   // Última versão vista de cada empresa (data+tamanho do arquivo no servidor).
   // É o que permite ao polling decidir se precisa baixar o documento.
   const versaoRef = useRef<Record<string,string>>({});
@@ -2579,7 +2597,11 @@ export default function App() {
     // Capturado ANTES de qualquer atualização: é contra este valor que se
     // decide o que mudou, e é ele que precisa sobreviver ao save direto.
     const antes=prevState.current;
-    const changed=empresasComMudanca(state,antes);
+    // ⚠️ A mudança da Lista que já subiu ITEM A ITEM não vira POST do documento
+    // inteiro (ver `aplicarLocalLista`). Só é tirada da conta quando o estado da
+    // empresa é exatamente o que a operação produziu sobre uma base já salva —
+    // qualquer outra mudança por cima gera um objeto novo e é salva normalmente.
+    const changed=empresasComMudanca(state,antes).filter(e=>!listaLimpaRef.current.has(state[e]));
     const d=decidirAutoSave({
       primeiroRender:firstRender.current,
       veioDoPoll:fromPollRef.current,
@@ -2715,6 +2737,124 @@ export default function App() {
     })();
   };
   flushRef.current=setDbAndSave;
+
+  // ---- Lista de Compras: gravação ITEM A ITEM (Etapa 1 do plano da Lista) ----
+  // Cada toque na Lista virava um POST do documento inteiro (vários MB), e no
+  // 4G da loja isso demora, cai ou fica pendurado — e o aparelho para de
+  // RECEBER enquanto não termina (§3). Agora a tela aplica a mudança na hora e
+  // manda só a OPERAÇÃO para `/api/lista-op/<emp>`; a resposta já traz o
+  // recorte da Lista com o que os outros fizeram.
+  //
+  // ⚠️ A "BASE LIMPA" É O QUE IMPEDE O POST DO DOCUMENTO — e é também o que
+  // impede a armadilha nº 0 (§3) de voltar por aqui. O estado novo só entra em
+  // `listaLimpaRef` quando a base dele já estava salva (`prevState`) ou também
+  // era limpa. Se havia QUALQUER mudança pendente por baixo (um `setDb` ainda
+  // não salvo), o estado novo não é marcado e o auto-save posta o documento
+  // inteiro como sempre — com a mudança pendente E a da Lista juntas.
+  const baseLimpa=(emp:string,obj:any)=>prevState.current?.[emp]===obj||listaLimpaRef.current.has(obj);
+  const aplicarLocalLista=(fn:(d:any)=>any)=>{
+    const emp=empresa;
+    setState(prev=>{
+      const antes=prev[emp];
+      const depois=fn(antes);
+      if(depois===antes)return prev;
+      if(depois&&typeof depois==="object"&&baseLimpa(emp,antes))listaLimpaRef.current.add(depois);
+      return{...prev,[emp]:depois};
+    });
+  };
+  // O recorte que volta da operação entra pela MESMA fusão do poll — deitado
+  // sobre o estado local, como no `buscarRecorteDaLista` (nunca cru).
+  const aplicarRecorteDaOp=(emp:string,recorte:any)=>{
+    if(!recorte||typeof recorte!=="object"||Array.isArray(recorte))return;
+    if(syncTimer.current||directSaveRef.current)return;
+    setState(prev=>{
+      if(!prev[emp])return prev;
+      const n=mergeFromServer(prev,{[emp]:{...prev[emp],...recorte}});
+      if(baseLimpa(emp,prev[emp])&&n[emp]&&typeof n[emp]==="object")listaLimpaRef.current.add(n[emp]);
+      return n;
+    });
+  };
+  const [opsPendentes,setOpsPendentes]=useState<any[]>(()=>lerFilaOps());
+  const enviandoOpsRef=useRef(false);
+  // `false` = o servidor NÃO entende a rota (build novo antes do `pm2 restart`):
+  // a Lista volta ao POST do documento até a página recarregar.
+  const suporteOpsRef=useRef(true);
+  const enviarFilaOps=async()=>{
+    if(enviandoOpsRef.current)return;
+    const fila=lerFilaOps();
+    if(!fila.length){setOpsPendentes([]);return;}
+    if(typeof navigator!=="undefined"&&navigator.onLine===false){setOpsPendentes(fila);return;}
+    enviandoOpsRef.current=true;
+    let deNovo=false;
+    try{
+      const porEmp=new Map<string,any[]>();
+      fila.forEach((o:any)=>{const e=o.emp||empresa;if(!porEmp.has(e))porEmp.set(e,[]);porEmp.get(e)!.push(o);});
+      for(const [emp,ops] of porEmp){
+        const r=await fetchSync(`/api/lista-op/${emp}`,{method:"POST",headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({ops:ops.map(({emp:_e,opId:_o,...o}:any)=>o)})},15000);
+        let resp:any=null;
+        try{resp=await r.json();}catch{}
+        const enviados=new Set(ops.map((o:any)=>o.opId));
+        if(r.ok&&resp?.listaOp===1){
+          gravarFilaOps(lerFilaOps().filter((o:any)=>!enviados.has(o.opId)));
+          aplicarRecorteDaOp(emp,resp.recorte);
+          deNovo=true;
+          continue;
+        }
+        // ⚠️ RESPOSTA SEM A MARCA = SERVIDOR QUE NÃO CONHECE A ROTA (devolveu
+        // o index.html), ou corpo recusado (400). Insistir não adianta: as
+        // operações saem da fila e a mudança, que já está no estado local, sobe
+        // pelo POST do DOCUMENTO — o caminho antigo, que nunca deixou de existir.
+        if((r.ok&&resp?.listaOp!==1)||r.status===400||r.status===404||r.status===405){
+          if(r.status!==400)suporteOpsRef.current=false;
+          gravarFilaOps(lerFilaOps().filter((o:any)=>!enviados.has(o.opId)));
+          // Um objeto NOVO para a empresa: fora de `listaLimpaRef`, o auto-save
+          // vê a diferença e posta o documento (vale para as duas empresas).
+          setState(prev=>prev[emp]?{...prev,[emp]:{...prev[emp]}}:prev);
+          continue;
+        }
+        // 401, 5xx, 413: fica na fila e tenta de novo (o 401 já derruba a sessão).
+      }
+    }catch{/* sem rede: fica na fila */}
+    finally{
+      enviandoOpsRef.current=false;
+      const resto=lerFilaOps();
+      setOpsPendentes(resto);
+      // O que entrou na fila durante o envio sai logo atrás, sem esperar 10 s.
+      if(deNovo&&resto.length)setTimeout(()=>enviarFilaRef.current?.(),50);
+    }
+  };
+  const enviarFilaRef=useRef<(()=>void)|null>(null);
+  enviarFilaRef.current=enviarFilaOps;
+  // `null` quando o caminho novo não está disponível — a tela usa o antigo.
+  const listaOp=(ops:any[])=>{
+    if(!suporteOpsRef.current)return false;
+    const em=Date.now();
+    const novos=ops.map((o:any)=>({...o,emp:empresa,opId:uid(),em:o.em??em,por:o.por??(login?.label||"")}));
+    const f=[...lerFilaOps(),...novos];
+    gravarFilaOps(f);
+    // Sem espaço no localStorage a fila não guardou nada: melhor o caminho
+    // antigo (POST do documento) que uma operação que só existe na memória.
+    if(lerFilaOps().length!==f.length)return false;
+    setOpsPendentes(f);
+    setTimeout(()=>enviarFilaRef.current?.(),0);
+    return true;
+  };
+  const idsListaPendentes=new Set<string>(opsPendentes.map((o:any)=>o.item?.id??o.id).filter(Boolean));
+  // ⚠️ TRÊS GATILHOS, porque cada um cobre o buraco do outro: `online` é o
+  // aviso do navegador (que nem sempre vem no 4G que "voltou" sem trocar de
+  // rede), o intervalo de 10 s é a rede de segurança, e `visibilitychange` é o
+  // celular saindo do bolso — quando o timer ficou congelado em segundo plano.
+  useEffect(()=>{
+    if(!login)return;
+    const ir=()=>enviarFilaRef.current?.();
+    const vis=()=>{if(document.visibilityState==="visible")ir();};
+    ir();
+    const t=setInterval(ir,10000);
+    window.addEventListener("online",ir);
+    document.addEventListener("visibilitychange",vis);
+    return()=>{clearInterval(t);window.removeEventListener("online",ir);document.removeEventListener("visibilitychange",vis);};
+  },[login]);
 
   const isOp=login?.role==="op"||login?.role==="op_lista"||login?.role==="op_producao"||login?.role==="op_enc";
   const isAdmin=login?.role==="admin";
@@ -2852,6 +2992,9 @@ export default function App() {
       // entre a feira e a lista de bebidas.
       {id:"lista-abertas",label:"Listas abertas",icon:"⇄",sub:"listas"},
       {id:"lista-arq",label:"Arquivo",icon:"📂",sub:"arquivo",adminOnly:true},
+      // Restaurar o que foi excluído NÃO é adminOnly: é desfazer, e quem errou
+      // o toque é quem precisa desfazer.
+      {id:"lista-lixeira",label:"Lixeira",icon:"🗑️",sub:"lixeira"},
       {id:"lista-prod",label:"Produtos",icon:"📦",sub:"produtos",adminOnly:true},
       {id:"lista-cat",label:"Categorias",icon:"🏷️",sub:"categorias",adminOnly:true},
       {id:"lista-rua",label:"Ruas",icon:"🛣️",sub:"ruas",adminOnly:true},
@@ -3220,12 +3363,12 @@ export default function App() {
             ? <ProducaoPanel db={db} setDb={setDb} login={login} onLogout={doLogout} pendingSub={pendingSub} setPendingSub={setPendingSub} setDbAndSave={setDbAndSave} empresa={empresa} state={state} setState={setState}/>
             : tab==="agenda"
             ? <AgendaPanel db={db} setDb={setDb} empresa={empresa} isAdmin={false} pendingSub={pendingSub} setPendingSub={setPendingSub}/>
-            : <ListaComprasPanel db={db} setDb={setDb} setState={setState} isAdmin={false} onNavigate={()=>{}} onLogout={doLogout} login={login} setDbAndSave={setDbAndSave}/>)
+            : <ListaComprasPanel db={db} setDb={setDb} setState={setState} isAdmin={false} onNavigate={()=>{}} onLogout={doLogout} login={login} setDbAndSave={setDbAndSave} aplicarLocalLista={aplicarLocalLista} listaOp={listaOp} idsListaPendentes={idsListaPendentes}/>)
           : <>
               {tab==="dashboard"  && <Dashboard db={db} setDb={setDb} setDbAndSave={setDbAndSave} empresa={empresa} onNavigate={setTab} setPendingSub={setPendingSub}/>}
               {tab==="vendas"     && <VendasPanel db={db} setDb={setDb} setDbAndSave={setDbAndSave} state={state} empresa={empresa} login={login} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="compras"    && <Compras db={db} setDb={setDb} empresa={empresa} state={state} setState={setState} setDbAndSave={setDbAndSave} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
-              {tab==="lista"      && <ListaComprasPanel db={db} setDb={setDb} setState={setState} isAdmin={isAdmin} onNavigate={setTab} login={login} setDbAndSave={setDbAndSave} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
+              {tab==="lista"      && <ListaComprasPanel db={db} setDb={setDb} setState={setState} isAdmin={isAdmin} onNavigate={setTab} login={login} setDbAndSave={setDbAndSave} pendingSub={pendingSub} setPendingSub={setPendingSub} aplicarLocalLista={aplicarLocalLista} listaOp={listaOp} idsListaPendentes={idsListaPendentes}/>}
               {tab==="producao"   && <ProducaoPanel db={db} setDb={setDb} login={login} pendingSub={pendingSub} setPendingSub={setPendingSub} setDbAndSave={setDbAndSave} onNavigate={setTab} empresa={empresa} state={state} setState={setState}/>}
               {tab==="estoque"    && <EstoqueTab db={db} setDb={setDb} setDbAndSave={setDbAndSave} empresa={empresa} pendingSub={pendingSub} setPendingSub={setPendingSub} onNavigate={setTab}/>}
               {tab==="contas"     && <Contas db={db} setDb={setDb} empresa={empresa} setDbAndSave={setDbAndSave} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
@@ -10906,7 +11049,7 @@ function ConciliarPanel({item,prodsCatalog,materiasPrimas,concBusca,setConcBusca
   </div>;
 }
 
-function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSave,pendingSub,setPendingSub}:{db:any,setDb:any,isAdmin?:boolean,onNavigate?:(tab:string)=>void,onLogout?:()=>void,setState?:any,login?:any,setDbAndSave?:(fn:(d:any)=>any,fnAmbas?:(d:any)=>any)=>void,pendingSub?:string|null,setPendingSub?:(v:string|null)=>void}){
+function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSave,pendingSub,setPendingSub,aplicarLocalLista,listaOp,idsListaPendentes}:{db:any,setDb:any,isAdmin?:boolean,onNavigate?:(tab:string)=>void,onLogout?:()=>void,setState?:any,login?:any,setDbAndSave?:(fn:(d:any)=>any,fnAmbas?:(d:any)=>any)=>void,pendingSub?:string|null,setPendingSub?:(v:string|null)=>void,aplicarLocalLista?:(fn:(d:any)=>any)=>void,listaOp?:(ops:any[])=>boolean,idsListaPendentes?:Set<string>}){
   const setBothDb=setDb;
   const [subTab,setSubTab]=useState(pendingSub||"nova");
   useEffect(()=>{if(pendingSub){setSubTab(pendingSub);setPendingSub?.(null);}},[pendingSub]);
@@ -10989,8 +11132,14 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
   // assinatura do fechamento simultâneo (ver src/listaId.js): dois aparelhos
   // criaram listas irmãs no mesmo instante e o item caiu na que perdeu a fusão.
   // Esse volta para a lista — é da compra que está acontecendo agora.
-  const orfaosDeHoje:any[]=orfaosTodos.filter((i:any)=>(i.criadoEm||"").slice(0,10)===today());
-  const orfaos:any[]=orfaosTodos.filter((i:any)=>(i.criadoEm||"").slice(0,10)!==today());
+  //
+  // ⚠️ "HOJE" É O DIA DA COMPRA (12h–12h, src/listaCiclo.js), não o dia civil.
+  // Com `today()` o item lançado às 23h e o lançado às 9h do dia seguinte —
+  // os dois da MESMA compra — caíam em dias diferentes, e a comparação ainda
+  // misturava a data UTC do `criadoEm` com a data local.
+  const compraDeHoje=diaDaCompra(Date.now());
+  const orfaosDeHoje:any[]=orfaosTodos.filter((i:any)=>diaDaCompra(i.criadoEm)===compraDeHoje);
+  const orfaos:any[]=orfaosTodos.filter((i:any)=>diaDaCompra(i.criadoEm)!==compraDeHoje);
   // "não tem" foi removido: item legado com essa marca antiga volta a contar como pendente normal.
   const pendentes=lista.filter((i:any)=>!i.comprado);
   const comprados=lista.filter((i:any)=>i.comprado);
@@ -11105,13 +11254,28 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
 
   const setF=(k:string,v:any)=>setForm(f=>({...f,[k]:v}));
 
+  // O caminho ÚNICO de escrita de um item da Lista. Com a rota leve, a tela
+  // muda na hora e a operação vai para a fila (`listaOp`); sem ela (prop
+  // ausente, ou servidor que ainda não conhece a rota), volta ao POST do
+  // documento — nunca `setDb` puro (§3, armadilha nº 0).
+  const gravarLista=(fn:(d:any)=>any,ops:any[])=>{
+    if(aplicarLocalLista&&listaOp&&listaOp(ops)){aplicarLocalLista(fn);return;}
+    (setDbAndSave||setDb)(fn);
+  };
+
   // ⚠️ UMA GRAVAÇÃO, NÃO TRÊS. A lista é da empresa ativa e o catálogo é
   // compartilhado, então antes eram duas chamadas seguidas — `setDbAndSave` e
   // `applyBothProd` — e a segunda gravava nas DUAS empresas por conta própria:
   // três GET + três POST do documento inteiro por item digitado. O segundo
   // parâmetro de `setDbAndSave` resolve isso numa volta só (ver o comentário
   // dele). Sem o prop, cai no caminho antigo em vez de perder o catálogo calado.
-  const salvarListaECatalogo=(fnLista:(d:any)=>any,fnCat?:((d:any)=>any)|null)=>{
+  //
+  // ⚠️ COM `ops`, a Lista sobe ITEM A ITEM (`gravarLista`). Só quando o
+  // catálogo também muda (produto novo, rua nova) o caminho continua sendo o
+  // POST do documento: o catálogo é compartilhado entre as empresas (§1) e não
+  // tem rota leve ainda (Etapa 3 do plano). Esse POST leva o item junto.
+  const salvarListaECatalogo=(fnLista:(d:any)=>any,fnCat?:((d:any)=>any)|null,ops?:any[])=>{
+    if(ops&&!(fnCat&&fnCat(db).produtosLista!==db.produtosLista)){gravarLista(fnLista,ops);return;}
     if(setDbAndSave){setDbAndSave(fnLista,fnCat||undefined);return;}
     setDb(fnLista);
     if(fnCat)applyBothProd(fnCat);
@@ -11137,14 +11301,17 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     if(editId){
       const editNome=nome;
       const nlEdit=editNome.toLowerCase();
-      const fnLista=(d:any)=>({...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===editId?{...i,nome:editNome,quantidade:parseFloat(form.qtd)||1,unidade:form.unidade,categoria:form.cat||i.categoria||"outros",rua:form.rua,estoqueQtd:form.estoqueQtd,estoqueUn:form.estoqueUn||"un",obs:form.obs,urgente:form.urgente,updatedAt:Date.now()}:i)});
+      const ts=Date.now();
+      const campos=(i:any)=>({nome:editNome,quantidade:parseFloat(form.qtd)||1,unidade:form.unidade,categoria:form.cat||i?.categoria||"outros",rua:form.rua,estoqueQtd:form.estoqueQtd,estoqueUn:form.estoqueUn||"un",obs:form.obs,urgente:form.urgente});
+      const fnLista=(d:any)=>({...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===editId?{...i,...campos(i),updatedAt:ts}:i)});
+      const atual=(db.listaCompras||[]).find((i:any)=>i.id===editId);
       // Carimba `atualizadoEm` (§3): sem ele um poll no meio do caminho reverte a
       // edição para a versão que já estava no servidor.
       const fnCat=pendingMpLinks!==null
         ?(d:any)=>({...d,produtosLista:(d.produtosLista||[]).map((p:any)=>p.nome.trim().toLowerCase()===nlEdit
             ?{...p,mpVinculados:pendingMpLinks,mpVinculadoId:undefined,atualizadoEm:tsCat}:p)})
         :null;
-      salvarListaECatalogo(fnLista,fnCat);
+      salvarListaECatalogo(fnLista,fnCat,[{tipo:"update",id:editId,campos:campos(atual),em:ts}]);
       setEditId(null);
       setPendingMpLinks(null);
     }else{
@@ -11162,13 +11329,16 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
         i.nome.trim().toLowerCase()===nl &&
         (i.adicionadoPor||"").trim().toLowerCase()===quem);
       let fnLista:(d:any)=>any;
+      let ops:any[];
       if(pendenteExistente){
         const ts=Date.now();
         fnLista=(d:any)=>({...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===pendenteExistente.id?{...i,quantidade:(i.quantidade||0)+qtdNova,updatedAt:ts}:i)});
+        ops=[{tipo:"update",id:pendenteExistente.id,campos:{quantidade:(pendenteExistente.quantidade||0)+qtdNova},em:ts}];
       }else{
         const maxOrdem=lista.length>0?Math.max(...lista.map((i:any)=>i.ordem||0))+1:0;
         const newItem={id:uid(),listaId:listaAtualId,nome,quantidade:qtdNova,unidade:form.unidade,categoria:cat,rua:ruaVal,estoqueQtd:form.estoqueQtd,estoqueUn:form.estoqueUn||"un",obs:form.obs,urgente:form.urgente,comprado:false,ordem:maxOrdem,adicionadoPor:login?.label||"",criadoEm:new Date().toISOString(),updatedAt:Date.now()};
         fnLista=(d:any)=>({...d,listaCompras:[...(d.listaCompras||[]).filter((i:any)=>i.id!==newItem.id),newItem]});
+        ops=[{tipo:"add",item:newItem,em:newItem.updatedAt}];
       }
       // O catálogo, numa função só — antes eram três ramos, cada um chamando a
       // própria gravação. A comparação do nome vai TRIMADA nos dois lados (era o
@@ -11199,7 +11369,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
         }
         return{...d,produtosLista:[...(d.produtosLista||[]),{id:idNovoProd,nome,cat,unidade:form.unidade,rua:ruaVal,criadoEm:tsCat,atualizadoEm:tsCat}]};
       };
-      salvarListaECatalogo(fnLista,fnCat);
+      salvarListaECatalogo(fnLista,fnCat,ops);
     }
     setForm(EMPTY_FORM_LISTA);
     setPendingMpLinks(null);
@@ -11219,37 +11389,99 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     if(travandoIds.has(id))return;
     travar(id);
     const ts=Date.now();
-    (setDbAndSave||setDb)((d:any)=>{
+    // A operação leva o RESULTADO (comprado sim/não), não "inverta": reenviada
+    // da fila, "inverta" desfaria a si mesma.
+    const it0=(db.listaCompras||[]).find((i:any)=>i.id===id);if(!it0)return;
+    const nowComprado=!it0.comprado;
+    const maxOrdem0=(db.listaCompras||[]).reduce((m:number,i:any)=>Math.max(m,i.ordem||0),0);
+    gravarLista((d:any)=>{
       const arr=[...(d.listaCompras||[])];
       const it=arr.find(i=>i.id===id);if(!it)return d;
-      const nowComprado=!it.comprado;
       const maxOrdem=arr.reduce((m:number,i:any)=>Math.max(m,i.ordem||0),0);
       return{...d,listaCompras:arr.map(i=>i.id===id?{...i,comprado:nowComprado,naoTem:false,quantidadeComprada:nowComprado?i.quantidadeComprada:undefined,ordem:nowComprado?maxOrdem+1:i.ordem,updatedAt:ts}:i)};
-    });
+    },[{tipo:"marcar",id,em:ts,campos:{comprado:nowComprado,naoTem:false,
+      quantidadeComprada:nowComprado?(it0.quantidadeComprada??null):null,
+      ordem:nowComprado?maxOrdem0+1:(it0.ordem??0)}}]);
   };
   const setQtd=(id:string,novaQtd:number)=>{
     if(!(novaQtd>0))return;
     const ts=Date.now();
-    (setDbAndSave||setDb)((d:any)=>({...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===id?{...i,quantidade:novaQtd,updatedAt:ts}:i)}));
+    gravarLista((d:any)=>({...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===id?{...i,quantidade:novaQtd,updatedAt:ts}:i)}),
+      [{tipo:"update",id,campos:{quantidade:novaQtd},em:ts}]);
   };
   // Quantidade efetivamente comprada, separada da quantidade pedida original —
   // preserva o pedido do Admin mesmo quando o Operador compra menos do que foi pedido.
   const setQtdComprada=(id:string,novaQtd:number)=>{
     if(!(novaQtd>0))return;
     const ts=Date.now();
-    (setDbAndSave||setDb)((d:any)=>({...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===id?{...i,quantidadeComprada:novaQtd,updatedAt:ts}:i)}));
+    gravarLista((d:any)=>({...d,listaCompras:(d.listaCompras||[]).map((i:any)=>i.id===id?{...i,quantidadeComprada:novaQtd,updatedAt:ts}:i)}),
+      [{tipo:"marcar",id,campos:{quantidadeComprada:novaQtd},em:ts}]);
   };
   const del=(id:string)=>{
     _listaDeletados.add(id);
+    const ts=Date.now();
+    const quem=login?.label||"";
+    const item=(db.listaCompras||[]).find((i:any)=>i.id===id);
 
-    // setDbAndSave, não setDb: excluir PRECISA persistir. Com setDb puro, a
+    // Nunca `setDb` puro: excluir PRECISA persistir. Com setDb puro, a
     // exclusão feita durante a janela de outro save sumia e o item
     // continuava na lista de todo mundo.
-    (setDbAndSave||setDb)((d:any)=>({
-      ...d,
-      listaCompras:(d.listaCompras||[]).filter((i:any)=>i.id!==id),
-      listaDeletedIds:[...new Set([...(d.listaDeletedIds||[]),id])].slice(-5000),
-    }));
+    //
+    // ⚠️ E NADA SOME SEM VOLTA: o item vai para a LIXEIRA (30 dias) e a tela
+    // oferece "Desfazer" por 10 s. O id continua MORTO no tombstone — desfazer
+    // cunha um id novo, senão a fusão brigaria com a própria exclusão (§3).
+    gravarLista((d:any)=>{
+      const it=(d.listaCompras||[]).find((i:any)=>i.id===id);
+      const lx=idDaLixeira(id);
+      return{
+        ...d,
+        listaCompras:(d.listaCompras||[]).filter((i:any)=>i.id!==id),
+        listaDeletedIds:[...new Set([...(d.listaDeletedIds||[]),id])].slice(-MAX_TOMBSTONES),
+        listaLixeira:it&&!(d.listaLixeira||[]).some((e:any)=>e.id===lx)
+          ?[...(d.listaLixeira||[]),{id:lx,item:it,excluidoEm:new Date(ts).toISOString(),excluidoPor:quem}]
+          :(d.listaLixeira||[]),
+      };
+    },[{tipo:"remove",id,por:quem,em:ts}]);
+    if(item)mostrarDesfazer({id:idDaLixeira(id),item,excluidoEm:new Date(ts).toISOString(),excluidoPor:quem});
+  };
+
+  // ---- Lixeira + desfazer ---------------------------------------------------
+  const [desfazer,setDesfazer]=useState<any>(null);
+  const desfazerTimer=useRef<any>(null);
+  const mostrarDesfazer=(entrada:any)=>{
+    clearTimeout(desfazerTimer.current);
+    setDesfazer(entrada);
+    desfazerTimer.current=setTimeout(()=>setDesfazer(null),10000);
+  };
+  useEffect(()=>()=>clearTimeout(desfazerTimer.current),[]);
+  // ⚠️ VOLTA COM ID NOVO, na lista ABERTA e com `criadoEm` de AGORA. Id novo
+  // porque o antigo está no tombstone e lá fica (§3). Lista aberta porque a
+  // original pode já ter ido para o Arquivo. E `criadoEm` de agora porque é ele
+  // que diz de que compra o item é (12h–12h): com o carimbo antigo, o relógio
+  // das 12h do servidor veria um item "de ontem" na lista aberta e a viraria
+  // inteira para o Arquivo no minuto seguinte.
+  const restaurarDaLixeira=(entrada:any)=>{
+    if(!entrada?.item)return;
+    const ts=Date.now();
+    const novo={...entrada.item,id:uid(),listaId:db.listaAtualId||listaAtualId,
+      criadoEm:new Date(ts).toISOString(),updatedAt:ts,restauradoDe:entrada.item.id};
+    _listaDeletados.add(entrada.id);
+    gravarLista((d:any)=>({...d,
+      listaCompras:[...(d.listaCompras||[]),novo],
+      listaLixeira:(d.listaLixeira||[]).filter((e:any)=>e.id!==entrada.id)}),
+      [{tipo:"add",item:novo,em:ts},{tipo:"descartar",id:entrada.id,em:ts}]);
+    if(desfazer?.id===entrada.id){clearTimeout(desfazerTimer.current);setDesfazer(null);}
+  };
+  const lixeira:any[]=lixeiraValida(db.listaLixeira||[])
+    .slice().sort((a:any,b:any)=>String(b.excluidoEm||"").localeCompare(String(a.excluidoEm||"")));
+  // Para as exclusões em lote (limpar comprados, apagar lista, retomar):
+  // a mesma lixeira, na MESMA gravação — duas gravações seguidas cairiam na
+  // janela de 5 s do save direto (§3).
+  const paraLixeira=(d:any,itens:any[])=>{
+    const ja=new Set((d.listaLixeira||[]).map((e:any)=>e.id));
+    const em=new Date().toISOString(),por=login?.label||"";
+    return[...(d.listaLixeira||[]),...itens.filter((i:any)=>i?.id&&!ja.has(idDaLixeira(i.id)))
+      .map((i:any)=>({id:idDaLixeira(i.id),item:i,excluidoEm:em,excluidoPor:por}))];
   };
   const limparComprados=()=>{
     if(!comprados.length)return;
@@ -11264,8 +11496,9 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       ids.forEach((id:string)=>_listaDeletados.add(id));
       return{
         ...d,
+        listaLixeira:paraLixeira(d,(d.listaCompras||[]).filter((i:any)=>i.comprado)),
         listaCompras:(d.listaCompras||[]).filter((i:any)=>!i.comprado),
-        listaDeletedIds:[...new Set([...(d.listaDeletedIds||[]),...ids])].slice(-5000),
+        listaDeletedIds:[...new Set([...(d.listaDeletedIds||[]),...ids])].slice(-MAX_TOMBSTONES),
       };
     });
   };
@@ -11332,9 +11565,10 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       ids.forEach((id:string)=>_listaDeletados.add(id));
       _listaDeletados.add(alvoId);
       return{...d,
+        listaLixeira:paraLixeira(d,(d.listaCompras||[]).filter((i:any)=>i.listaId===alvoId)),
         listaCompras:(d.listaCompras||[]).filter((i:any)=>i.listaId!==alvoId),
         listasCompra:(d.listasCompra||[]).filter((l:any)=>l.id!==alvoId),
-        listaDeletedIds:[...new Set([...(d.listaDeletedIds||[]),...ids,alvoId])].slice(-5000)};
+        listaDeletedIds:[...new Set([...(d.listaDeletedIds||[]),...ids,alvoId])].slice(-MAX_TOMBSTONES)};
     });
   };
 
@@ -11377,7 +11611,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
         pedidosLista:[pedido,...(d.pedidosLista||[]).filter((pp:any)=>pp.id!==pedido.id)],
         listaCompras:(d.listaCompras||[]).filter((i:any)=>!ids.includes(i.id)),
         listasCompra:(d.listasCompra||[]).filter((l:any)=>l.id!==alvo),
-        listaDeletedIds:[...new Set([...(d.listaDeletedIds||[]),...ids])].slice(-5000),
+        listaDeletedIds:[...new Set([...(d.listaDeletedIds||[]),...ids])].slice(-MAX_TOMBSTONES),
       };
       if(!ehAtual)return base;
       // Arquivando a ABERTA: assume a lista aberta de movimento mais recente;
@@ -11427,11 +11661,12 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
   },[listaFinalizada,listaAtualId]);
   const cancelarAutoFechar=()=>{autoCanceladaRef.current=listaAtualId;setAutoFecharEm(null);};
 
-  // ---- Lista parada há 48 h é APAGADA sozinha (decisão do dono, 04/10/2026) -
-  // ⚠️ APAGA MESMO: os itens somem do banco e não há desfazer. Propus arquivar,
-  // o dono reafirmou apagar. Por isso a tela conta as horas ANTES
-  // (`horasAteApagar`) em vez de a lista simplesmente deixar de existir — é o
-  // único aviso que vai existir.
+  // ---- Lista parada há 48 h vai para o ARQUIVO sozinha ----------------------
+  // ⚠️ ARQUIVA, NÃO APAGA MAIS (25/10/2026, plano da Lista, regra "nada some
+  // sem volta"). De 04/10 a 25/10 ela APAGAVA os itens, sem desfazer. Agora a
+  // lista com itens vai inteira para `pedidosLista` (`automatico: true`); só a
+  // lista VAZIA é apagada — é só o cadastro, não há item a perder. A tela
+  // continua contando as horas antes (`horasAteApagar`).
   //
   // ⚠️ A conta é de OCIOSIDADE, nunca de idade (ver listasAbertas.js): por
   // idade, uma lista usada todo dia sumiria no meio da compra.
@@ -11449,7 +11684,8 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       const alvo=ids.find((id:string)=>id!==ociosaRef.current)||ids[0];
       if(!alvo)return;
       ociosaRef.current=alvo;
-      apagarRef.current(alvo);
+      if((listaPorId(listasDoDb,alvo)?.itens||0)>0)arquivarRef.current(true,alvo);
+      else apagarRef.current(alvo);
     };
     varrer();
     const t=setInterval(varrer,10*60*1000);
@@ -11469,12 +11705,12 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
   // listaId perdedor) no poll seguinte e o item some de novo.
   const trazerOrfaosDeHoje=()=>{
     if(!orfaosDeHoje.length)return;
-    const hoje=today();
+    const hoje=diaDaCompra(Date.now());
     (setDbAndSave||setDb)((d:any)=>{
       const alvo=d.listaAtualId||listaAtualId;
       const ts=Date.now();
       return{...d,listaCompras:(d.listaCompras||[]).map((i:any)=>
-        (i.listaId&&i.listaId!==alvo&&(i.criadoEm||"").slice(0,10)===hoje)
+        (i.listaId&&i.listaId!==alvo&&diaDaCompra(i.criadoEm)===hoje)
           ?{...i,listaId:alvo,updatedAt:ts}:i)};
     });
   };
@@ -11510,7 +11746,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       ...d,
       pedidosLista:[...novosPedidos,...(d.pedidosLista||[])],
       listaCompras:(d.listaCompras||[]).filter((i:any)=>!idsArquivados.includes(i.id)),
-      listaDeletedIds:[...new Set([...(d.listaDeletedIds||[]),...idsArquivados])].slice(-5000),
+      listaDeletedIds:[...new Set([...(d.listaDeletedIds||[]),...idsArquivados])].slice(-MAX_TOMBSTONES),
     }));
     alert(`✅ ${orfaos.length} item(ns) arquivado(s) no histórico — nada foi misturado com a lista de hoje.`);
   };
@@ -11769,7 +12005,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       // Desocultar: tira da lista de exclusão local e persiste no localStorage.
       if(ocultosAqui.length){
         ocultosAqui.forEach((p:any)=>_listaDeletados.delete(p.id));
-        try{localStorage.setItem("_delIds",JSON.stringify([..._listaDeletados].slice(-5000)));}catch{}
+        try{localStorage.setItem("_delIds",JSON.stringify([..._listaDeletados].slice(-MAX_TOMBSTONES)));}catch{}
       }
       // Enviar. Sem produto banido, a identidade basta: applyBothProdutos busca
       // o servidor, funde (local vence por id, então o que só existe aqui
@@ -11957,8 +12193,9 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       const jaComprados=(d.listaCompras||[]).filter((i:any)=>i.comprado);
       return{
         ...d,
+        listaLixeira:paraLixeira(d,(d.listaCompras||[]).filter((i:any)=>!i.comprado)),
         listaCompras:[...novosItens,...jaComprados],
-        listaDeletedIds:[...new Set([...(d.listaDeletedIds||[]),...pendIds])].slice(-5000),
+        listaDeletedIds:[...new Set([...(d.listaDeletedIds||[]),...pendIds])].slice(-MAX_TOMBSTONES),
       };
     });
     setSubTab("nova");
@@ -12826,6 +13063,33 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
 
     {/* Form cadastro de produto */}
     {/* ---- Trocar de lista ------------------------------------------------- */}
+    {/* ---- Lixeira --------------------------------------------------------
+        Item excluído fica 30 dias aqui (`listaLixeira`). Restaurar põe uma
+        CÓPIA na lista aberta, com id novo — o antigo segue no tombstone. */}
+    {subTab==="lixeira"&&<BackBar label="Nova Lista" onClick={()=>setSubTab("nova")}/>}
+    {subTab==="lixeira"&&<div>
+      <div className="section-title" style={{margin:"0 0 8px"}}>🗑️ Lixeira</div>
+      <div style={{fontSize:12,color:"var(--text2)",marginBottom:10,lineHeight:1.5}}>
+        Itens excluídos da lista nos últimos 30 dias. <b>Restaurar</b> devolve o item para a lista aberta
+        ({listaAberta?.nome||"Lista"}).
+      </div>
+      {!lixeira.length&&<EmptyState msg="Nada na lixeira."/>}
+      {lixeira.map((e:any)=>(
+        <div key={e.id} className="card" style={{marginBottom:8,padding:"10px 12px",display:"flex",alignItems:"center",gap:10}}>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:13.5,fontWeight:700}}>{e.item?.nome||"(sem nome)"}</div>
+            <div style={{fontSize:11.5,color:"var(--text2)",marginTop:2}}>
+              {e.item?.quantidade} {e.item?.unidade||"un"}{e.item?.categoria?` · ${e.item.categoria}`:""}
+              {" · excluído"}{e.excluidoPor?` por ${e.excluidoPor}`:""}
+              {e.excluidoEm?` em ${new Date(e.excluidoEm).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit",timeZone:"America/Belem"})}`:""}
+            </div>
+          </div>
+          <button className="btn" onClick={()=>restaurarDaLixeira(e)}
+            style={{background:"var(--btnPrimary)",color:"var(--onPrimary,#FFFFFF)",padding:"7px 12px",fontSize:12,fontWeight:700,flexShrink:0}}>↩ Restaurar</button>
+        </div>
+      ))}
+    </div>}
+
     {showTrocarLista&&<BackBar label="Nova Lista" onClick={()=>setSubTab("nova")}/>}
     {showTrocarLista&&<div>
       <div className="section-title" style={{margin:"0 0 8px"}}>⇄ Listas abertas</div>
@@ -12850,7 +13114,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
             {(()=>{const h=horasAteApagar(l,Date.now());
               if(h===null||h>12)return null;
               return <span style={{color:"var(--warningText)",fontWeight:700}}>
-                {h>0?<> · parada: some em {h}h</>:<> · parada há mais de {OCIOSA_HORAS}h, vai ser apagada</>}
+                {h>0?<> · parada: vai para o Arquivo em {h}h</>:<> · parada há mais de {OCIOSA_HORAS}h, vai para o Arquivo</>}
               </span>;})()}
           </div>
           {/* Sem precisar abrir: abrir trocaria a tela de todo mundo.
@@ -12860,7 +13124,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
           {isAdmin&&!l.ativa&&<div style={{marginTop:9,paddingTop:9,borderTop:"1px solid var(--border)",display:"flex",gap:7,flexWrap:"wrap" as const}}>
             {l.itens>0&&<button className="btn" onClick={()=>{if(confirm(`Arquivar "${l.nome}" (${l.itens} item(ns))?\n\nEla sai das listas abertas e fica no Arquivo, inteira.`))arquivarLista(false,l.id);}}
               style={{background:"var(--bg4)",color:"var(--text2)",padding:"6px 11px",fontSize:11.5,fontWeight:700}}>📂 Arquivar</button>}
-            <button className="btn" onClick={()=>{if(confirm(`APAGAR "${l.nome}"${l.itens?` e os ${l.itens} item(ns) dela`:""}?\n\nNão vai para o Arquivo e NÃO TEM COMO DESFAZER.`))apagarLista(l.id);}}
+            <button className="btn" onClick={()=>{if(confirm(`APAGAR "${l.nome}"${l.itens?` e os ${l.itens} item(ns) dela`:""}?\n\nNão vai para o Arquivo. Os itens ficam 30 dias na Lixeira, de onde podem ser restaurados um a um.`))apagarLista(l.id);}}
               style={{background:"var(--dangerBg)",color:"var(--btnDanger)",padding:"6px 11px",fontSize:11.5,fontWeight:700}}>🗑️ Apagar</button>
           </div>}
         </div>
@@ -12872,9 +13136,10 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       <div className="card" style={{background:"var(--infoBg)",border:"1px solid var(--infoText)33"}}>
         <div style={{fontSize:11.5,color:"var(--infoText)",lineHeight:1.55}}>
           Abrir uma lista troca a lista de <b>todos os aparelhos</b> — é por isso que o nome dela fica
-          no alto da tela. Lista parada há mais de <b>{OCIOSA_HORAS} horas</b> é <b>apagada</b> sozinha,
-          com os itens, e isso <b>não tem como desfazer</b> — a contagem aparece aqui nas últimas horas.
-          A lista aberta nunca é apagada sozinha. Para guardar uma compra, use <b>Arquivar</b> antes.
+          no alto da tela. Lista parada há mais de <b>{OCIOSA_HORAS} horas</b> vai sozinha para o
+          <b> Arquivo</b>, com os itens — a contagem aparece aqui nas últimas horas. Lista vazia
+          simplesmente some. A lista aberta nunca sai sozinha por isso; ela vira às <b>12h</b>, quando
+          vira a <b>Compra do dia</b> no Arquivo.
         </div>
       </div>
     </div>}
@@ -13131,6 +13396,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
             <div style={{flex:1,minWidth:0}}>
               <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap" as const}}>
                 <span style={{fontSize:13,fontWeight:600,color:item.urgente?"#ff9aa8":"inherit"}}>{item.nome}</span>
+                {idsListaPendentes?.has(item.id)&&<span title="Ainda não chegou ao servidor — sobe sozinho quando a rede voltar" style={{fontSize:11}}>⏳</span>}
                 {item.urgente&&<span style={{fontSize:9,background:"var(--btnDanger)",color:"var(--onDanger,#FFFFFF)",borderRadius:8,padding:"1px 5px",fontWeight:800}}>URGENTE</span>}
                 {isAdmin&&(item.rua||getRuaProd(item.nome))&&<span style={{fontSize:9,color:"#22C55E",background:"#22C55E18",borderRadius:4,padding:"1px 5px"}}>🛤️ {item.rua||getRuaProd(item.nome)}</span>}
               </div>
@@ -13194,6 +13460,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
             <div style={{flex:1,minWidth:0}}>
               <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap" as const}}>
                 <span style={{fontSize:13,fontWeight:600,color:item.urgente?"#ff9aa8":"inherit"}}>{item.nome}</span>
+                {idsListaPendentes?.has(item.id)&&<span title="Ainda não chegou ao servidor — sobe sozinho quando a rede voltar" style={{fontSize:11}}>⏳</span>}
                 {item.urgente&&<span style={{fontSize:9,background:"var(--btnDanger)",color:"var(--onDanger,#FFFFFF)",borderRadius:8,padding:"1px 5px",fontWeight:800}}>URGENTE</span>}
                 <span style={{fontSize:10,color:"var(--category)",background:"#8B5CF618",borderRadius:4,padding:"1px 5px"}}>{catIcon(item.categoria||"outros")} {item.categoria||"outros"}</span>
               </div>
@@ -13243,6 +13510,7 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
           </button>
           <div style={{flex:1,minWidth:0}}>
             <span style={{fontSize:13,fontWeight:600,textDecoration:"line-through",color:"#555"}}>{item.nome}</span>
+            {idsListaPendentes?.has(item.id)&&<span title="Ainda não chegou ao servidor — sobe sozinho quando a rede voltar" style={{fontSize:11,marginLeft:4}}>⏳</span>}
             <div style={{fontSize:11,color:"#444",marginTop:1,display:"flex",alignItems:"center",gap:6}} onClick={(e:any)=>e.stopPropagation()}>
               <span>Pedido: {item.quantidade} {item.unidade}{item.categoria&&` · ${item.categoria}`}</span>
               <span style={{display:"flex",alignItems:"center",gap:3}}>
@@ -13260,6 +13528,13 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     </div>}
 
     </>}
+
+    {/* "Desfazer" por 10 s depois de excluir. ⚠️ O rótulo é ESCRITO, não só
+        ícone (§9): a paleta Tinta é monocromática. */}
+    {desfazer&&<div role="status" style={{position:"fixed",left:12,right:12,bottom:"calc(76px + env(safe-area-inset-bottom, 0px))",zIndex:60,display:"flex",alignItems:"center",gap:10,padding:"11px 14px",background:"var(--text)",color:"var(--bg3)",borderRadius:12,boxShadow:"0 6px 20px #0004",fontSize:13}}>
+      <span style={{flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>Excluído: <b>{desfazer.item?.nome}</b></span>
+      <button onClick={()=>restaurarDaLixeira(desfazer)} style={{background:"none",border:"1px solid currentColor",borderRadius:8,color:"inherit",padding:"5px 12px",fontSize:12.5,fontWeight:800,cursor:"pointer",flexShrink:0}}>Desfazer</button>
+    </div>}
   </div>;
 }
 

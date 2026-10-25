@@ -11,6 +11,8 @@ import { SignedXml } from 'xml-crypto';
 import { DOMParser } from '@xmldom/xmldom';
 import { mergeDocument } from './mergeDocument.js';
 import { idDoRegistroPdv } from './registroPdv.js';
+import { aplicarOpsLista, MAX_TOMBSTONES } from './src/listaOps.js';
+import { virarListaNoCorte, proximoCorte } from './src/listaCiclo.js';
 import { paraGemini, respostaDoGemini, erroDoGemini, valeTentarReserva, filaDeModelos } from './iaGemini.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -1246,6 +1248,55 @@ const _vigia = setInterval(() => {
 }, 250);
 _vigia.unref?.();
 
+// ---- A VIRADA DAS 12h DA LISTA DE COMPRAS ---------------------------------
+// Decisão do dono (25/10/2026): o dia da lista vai das 12h às 12h. No corte, a
+// lista aberta vai para o Arquivo ("Compra de DD/MM") e abre uma nova — o que
+// foi lançado depois das 12h passa para ela (ver src/listaCiclo.js).
+//
+// ⚠️ NO SERVIDOR, não na tela: é um relógio só. Em cada aparelho haveria um
+// relógio por celular, com a hora de cada celular — e o fechamento dependeria
+// de alguém estar com a aba aberta ao meio-dia.
+//
+// ⚠️ IDEMPOTENTE: depois de virar, a lista aberta não tem item anterior ao
+// corte, e `virarListaNoCorte` devolve null. Para não ler o arquivo inteiro a
+// cada minuto à toa, a resposta "nada a fazer" vale até o próximo corte OU até
+// o arquivo mudar.
+//
+// ⚠️ O INTERRUPTOR É EXPLÍCITO (`LISTA_CICLO_12H=nao` no .env), pela lição do
+// `COMANDAS_ENVIAR` (§4): desligado de propósito tem que ser distinguível de
+// quebrado.
+const LISTA_CICLO_LIGADO = String(process.env.LISTA_CICLO_12H || 'sim').trim().toLowerCase() !== 'nao';
+const _cicloVisto = new Map();
+function virarListasNoCorte() {
+  for (const emp of ['CONFRARIA', 'SEAMA']) {
+    const file = path.join(DADOS_DIR, `${emp.toLowerCase()}.json`);
+    const marca = marcaDoArquivo(emp);
+    const visto = _cicloVisto.get(emp);
+    if (visto && visto.marca === marca && Date.now() < visto.ate) continue;
+    let doc;
+    try { doc = JSON.parse(fs.readFileSync(file, 'utf-8')); } catch { continue; }
+    const agora = Date.now();
+    let r = null;
+    try { r = virarListaNoCorte(doc, agora); } catch (e) { console.error(`[lista 12h ${emp}] falhou:`, e); }
+    if (r) {
+      try {
+        backupRotativo(emp, file);
+        gravarDocumento(file, r.doc);
+        _cacheLista.delete(emp);
+        console.log(`[lista 12h ${emp}] "${r.pedido.nome}" arquivada (${r.arquivados} item(ns)); ${r.movidos} lançado(s) depois do corte seguem na lista nova.`);
+      } catch (e) { console.error(`[lista 12h ${emp}] não consegui gravar:`, e.message); continue; }
+    }
+    _cicloVisto.set(emp, { marca: marcaDoArquivo(emp), ate: proximoCorte(agora) });
+  }
+}
+if (LISTA_CICLO_LIGADO) {
+  const _ciclo = setInterval(virarListasNoCorte, 60 * 1000);
+  _ciclo.unref?.();
+  setTimeout(virarListasNoCorte, 20 * 1000).unref?.();
+} else {
+  console.log('[lista 12h] DESLIGADA por LISTA_CICLO_12H=nao — a lista só fecha à mão.');
+}
+
 // ---- RECORTE DA LISTA DE COMPRAS -----------------------------------------
 // O documento inteiro tem alguns MB e a aba Lista precisa de uma fração dele.
 // Baixar tudo é o que faz o item do outro operador levar ~2 s para aparecer no
@@ -1263,8 +1314,15 @@ const CAMPOS_LISTA = [
   'listaCatOrdemV2', 'listaCatOrdemV3', 'listaCatDeleted',
   'listaAtualId', 'listaAtualAbertaEm',
   'produtosLista', 'pedidosLista', 'listaRuas', 'ruaCatMap',
+  'listaLixeira',
 ];
 const _cacheLista = new Map();
+
+function textoDoRecorte(doc) {
+  const out = {};
+  if (doc) for (const k of CAMPOS_LISTA) if (doc[k] !== undefined) out[k] = doc[k];
+  return JSON.stringify(out);
+}
 
 function recorteDaLista(emp) {
   const marca = marcaDoArquivo(emp);
@@ -1272,11 +1330,77 @@ function recorteDaLista(emp) {
   if (cache && cache.marca === marca) return cache.texto;
   let doc = null;
   try { doc = JSON.parse(fs.readFileSync(path.join(DADOS_DIR, `${emp.toLowerCase()}.json`), 'utf-8')); } catch {}
-  const out = {};
-  if (doc) for (const k of CAMPOS_LISTA) if (doc[k] !== undefined) out[k] = doc[k];
-  const texto = JSON.stringify(out);
+  const texto = textoDoRecorte(doc);
   _cacheLista.set(emp, { marca, texto });
   return texto;
+}
+
+// ---- GRAVAÇÃO ITEM A ITEM DA LISTA ----------------------------------------
+// O backup rotativo do POST, num lugar só: o POST do documento, a operação da
+// Lista e a virada das 12h gravam o MESMO arquivo, e uma cópia da rotina que
+// ficasse para trás deixaria uma dessas gravações sem rede.
+function backupRotativo(emp, file) {
+  try {
+    if (!fs.existsSync(file)) return;
+    const backDir = path.join(DADOS_DIR, 'backups', emp.toLowerCase());
+    fs.mkdirSync(backDir, { recursive: true });
+    // Regular rotating backup every ~1h (check if last backup is older than 30min)
+    const backups = fs.readdirSync(backDir).filter(f => f.endsWith('.json') && !f.startsWith('safety_')).sort();
+    const lastBack = backups[backups.length - 1];
+    const lastTs = lastBack ? parseInt(lastBack.replace('backup_','').replace('.json','')) : 0;
+    if (Date.now() - lastTs > 30 * 60 * 1000) {
+      const backFile = path.join(backDir, `backup_${Date.now()}.json`);
+      fs.writeFileSync(backFile, fs.readFileSync(file));
+      // Keep only last 48 regular backups
+      const allBackups = fs.readdirSync(backDir).filter(f => f.startsWith('backup_')).sort();
+      if (allBackups.length > 48) {
+        allBackups.slice(0, allBackups.length - 48).forEach(f => {
+          try { fs.unlinkSync(path.join(backDir, f)); } catch {}
+        });
+      }
+      _vivosLista.delete(emp);   // backup novo: a lista de vivos precisa ser refeita
+    }
+  } catch (e) {
+    console.error(`[backup ${emp}] falha na rotina de backup (salvamento seguiu normalmente):`, e.message);
+  }
+}
+
+// Grava por arquivo temporário + rename: um processo derrubado no meio da
+// escrita deixaria o arquivo da empresa pela metade.
+function gravarDocumento(file, doc) {
+  const tmp = file + '.op.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(doc));
+  fs.renameSync(tmp, file);
+}
+
+// ⚠️ OS "VIVOS" DOS BACKUPS — de quem o tombstone pode se esquecer.
+// Um id só sai do tombstone quando não existe em nenhuma `listaCompras` dos
+// backups recentes: aí não há cópia de onde ele possa voltar. Ler os backups
+// é caro (dezenas de arquivos de alguns MB), então:
+//   - só é lido quando a poda é NECESSÁRIA (o tombstone passou do teto)
+//   - é lido em segundo plano, um arquivo por vez, sem travar o event loop
+//   - enquanto não terminou, NÃO se poda nada (`podarTombstones` sem `vivos`)
+const _vivosLista = new Map();   // emp -> { ids:Set, em } | 'lendo'
+function idsVivosLista(emp, tamanhoTombstone) {
+  if (tamanhoTombstone <= MAX_TOMBSTONES) return null;
+  const c = _vivosLista.get(emp);
+  if (c && c !== 'lendo' && Date.now() - c.em < 30 * 60 * 1000) return c.ids;
+  if (c !== 'lendo') lerVivosDosBackups(emp);
+  return null;
+}
+function lerVivosDosBackups(emp) {
+  _vivosLista.set(emp, 'lendo');
+  const backDir = path.join(DADOS_DIR, 'backups', emp.toLowerCase());
+  let arqs = [];
+  try { arqs = fs.readdirSync(backDir).filter(f => f.startsWith('backup_')).sort(); } catch {}
+  const ids = new Set();
+  const passo = (k) => {
+    if (k >= arqs.length) { _vivosLista.set(emp, { ids, em: Date.now() }); return; }
+    fs.promises.readFile(path.join(backDir, arqs[k]), 'utf-8').then((t) => {
+      try { for (const i of JSON.parse(t)?.listaCompras || []) if (i?.id) ids.add(i.id); } catch {}
+    }).catch(() => {}).finally(() => setImmediate(() => passo(k + 1)));
+  };
+  passo(0);
 }
 
 // ---- HTTP Server ----
@@ -3541,6 +3665,67 @@ REGRAS:
     return;
   }
 
+  // Gravação ITEM A ITEM da Lista de Compras. Corpo: `{ops:[{tipo, item|id,
+  // campos, por, em}]}` (ver src/listaOps.js). Responde com o recorte da Lista,
+  // que é o que a tela precisa para ficar igual à dos outros.
+  //
+  // ⚠️ FORA DE `/api/dados/`, de propósito. O POST genérico de lá casava por
+  // `startsWith`: num servidor que ainda não conhece esta rota (build novo sem
+  // `pm2 restart`), `/api/dados/<emp>/lista-op` seria lido como o DOCUMENTO
+  // INTEIRO e a fusão apagaria todo campo que o corpo não trouxesse. Aqui, o
+  // servidor antigo responde com o index.html — e o app só aceita a resposta
+  // que traz `listaOp: 1`; sem ela, volta ao POST do documento.
+  //
+  // ⚠️ LER-APLICAR-GRAVAR É SÍNCRONO, de propósito: dentro do 'end' nada mais
+  // roda no meio, então duas operações (ou uma operação e um POST do
+  // documento) nunca se intercalam sobre o mesmo arquivo.
+  if (req.method === 'POST' && /^\/api\/lista-op\/[^/]+$/.test(urlPath)) {
+    const emp = (urlPath.split('/')[3] || '').toUpperCase();
+    if (!['CONFRARIA','SEAMA'].includes(emp)) { res.writeHead(400); res.end('{}'); return; }
+    if (barrouDados(req, res)) return;
+    const chunks = [];
+    let tam = 0;
+    req.on('data', (c) => {
+      tam += c.length;
+      if (tam > 2 * 1024 * 1024) { res.writeHead(413); res.end('{"error":"Operações demais de uma vez."}'); req.destroy(); return; }
+      chunks.push(c);
+    });
+    req.on('end', () => {
+      if (res.writableEnded) return;
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Cache-Control', 'no-store');
+      let ops;
+      try { ops = JSON.parse(Buffer.concat(chunks).toString('utf-8'))?.ops; } catch {}
+      if (!Array.isArray(ops) || ops.length > 1000) { res.writeHead(400); res.end('{"error":"Corpo inválido."}'); return; }
+      const file = path.join(DADOS_DIR, `${emp.toLowerCase()}.json`);
+      let doc;
+      try { doc = JSON.parse(fs.readFileSync(file, 'utf-8')); } catch (e) {
+        // Sem o arquivo (ou ilegível) não se aplica nada: gravar só a Lista
+        // criaria um documento sem o resto. O app guarda a operação na fila.
+        res.writeHead(503); res.end(JSON.stringify({ error: 'Documento da empresa indisponível.' })); return;
+      }
+      try {
+        const nTomb = (doc.listaDeletedIds || []).length + ops.length;
+        const r = aplicarOpsLista(doc, ops, { agora: Date.now(), vivos: idsVivosLista(emp, nTomb) });
+        let texto;
+        if (r.mudou) {
+          backupRotativo(emp, file);
+          gravarDocumento(file, r.doc);
+          texto = textoDoRecorte(r.doc);
+          _cacheLista.set(emp, { marca: marcaDoArquivo(emp), texto });
+        } else {
+          texto = recorteDaLista(emp);
+        }
+        res.writeHead(200);
+        res.end(`{"ok":true,"listaOp":1,"resultados":${JSON.stringify(r.resultados)},"recorte":${texto}}`);
+      } catch (e) {
+        console.error(`[lista-op ${emp}] falhou, nada gravado:`, e);
+        res.writeHead(500); res.end(JSON.stringify({ error: 'Falha ao aplicar a operação. Nada foi gravado.' }));
+      }
+    });
+    return;
+  }
+
   // Aviso de mudança, por SSE. O cliente abre isto uma vez e fica ouvindo; o
   // poll continua rodando devagar por baixo, de rede de segurança.
   if (req.method === 'GET' && urlPath === '/api/eventos') {
@@ -4186,6 +4371,11 @@ REGRAS:
 
   // Dados da empresa — POST (salvar)
   if (req.method === 'POST' && urlPath.startsWith('/api/dados/')) {
+    // ⚠️ SÓ `/api/dados/<empresa>`, nada pendurado depois. Com o `startsWith`
+    // puro, um POST para `/api/dados/CONFRARIA/qualquer-coisa` caía aqui e o
+    // corpo dele era tratado como o DOCUMENTO INTEIRO — a fusão nasce do
+    // incoming, então o campo que o corpo não trouxesse sumia do arquivo.
+    if (urlPath.split('/').filter(Boolean).length !== 3) { res.writeHead(404); res.end('{}'); return; }
     const emp = (urlPath.split('/')[3] || '').toUpperCase();
     if (!['CONFRARIA','SEAMA'].includes(emp)) { res.writeHead(400); res.end('{}'); return; }
     // ⚠️ E aqui dava para SOBRESCREVER o banco inteiro, também sem pedir nada.
@@ -4220,7 +4410,8 @@ REGRAS:
           // é recusado, para o cliente tentar de novo (o dado continua nele).
           if (existing) {
             try {
-              incoming = mergeDocument(existing, incoming);
+              const nTomb = new Set([...(existing.listaDeletedIds || []), ...(incoming?.listaDeletedIds || [])]).size;
+              incoming = mergeDocument(existing, incoming, { vivos: idsVivosLista(emp, nTomb) });
               // ⚠️ DEPOIS DA FUSÃO, E SEMPRE. O cliente recebe os usuários SEM
               // senha (Fase 4) e devolve o documento inteiro: sem restaurar
               // aqui, a PRIMEIRA gravação de qualquer tela — uma venda, um item
@@ -4254,21 +4445,7 @@ REGRAS:
               fs.writeFileSync(safetyFile, fs.readFileSync(file));
               console.warn(`[Backup] SAFETY backup criado para ${emp}: contas ${existingContas}->${incomingContas} vendas ${existingVendas}->${incomingVendas}`);
             }
-            // Regular rotating backup every ~1h (check if last backup is older than 30min)
-            const backups = fs.readdirSync(backDir).filter(f => f.endsWith('.json') && !f.startsWith('safety_')).sort();
-            const lastBack = backups[backups.length - 1];
-            const lastTs = lastBack ? parseInt(lastBack.replace('backup_','').replace('.json','')) : 0;
-            if (Date.now() - lastTs > 30 * 60 * 1000) {
-              const backFile = path.join(backDir, `backup_${Date.now()}.json`);
-              fs.writeFileSync(backFile, fs.readFileSync(file));
-              // Keep only last 48 regular backups
-              const allBackups = fs.readdirSync(backDir).filter(f => f.startsWith('backup_')).sort();
-              if (allBackups.length > 48) {
-                allBackups.slice(0, allBackups.length - 48).forEach(f => {
-                  try { fs.unlinkSync(path.join(backDir, f)); } catch {}
-                });
-              }
-            }
+            backupRotativo(emp, file);
           } catch (e) {
             console.error(`[POST ${emp}] falha na rotina de backup (salvamento seguiu normalmente):`, e.message);
           }

@@ -64,13 +64,20 @@ test('toda escrita da lista persiste — nunca setDb puro', () => {
   const i = APP.indexOf('function ListaComprasPanel(');
   const j = APP.indexOf('\nfunction ', i + 30);
   const PANEL = APP.slice(i, j > 0 ? j : i + 90000);
+  // ⚠️ 25/10/2026: toggle/del/setQtd passaram a gravar ITEM A ITEM por
+  // `gravarLista` (src/listaOps.js) — e `gravarLista` cai no POST do documento,
+  // nunca em setDb puro, quando a rota leve não está disponível.
   for (const fn of ['const toggle=', 'const del=', 'const limparComprados=', 'const setQtd=']) {
     const k = PANEL.indexOf(fn);
     assert.ok(k > 0, `${fn} sumiu`);
-    const corpo = PANEL.slice(k, k + 700);
-    assert.ok(corpo.includes('(setDbAndSave||setDb)') || corpo.includes('salvarListaECatalogo'),
+    const corpo = PANEL.slice(k, k + 1200);
+    assert.ok(corpo.includes('(setDbAndSave||setDb)') || corpo.includes('salvarListaECatalogo') || corpo.includes('gravarLista('),
       `${fn} voltou a gravar com setDb puro`);
   }
+  const g = PANEL.indexOf('const gravarLista=');
+  assert.ok(g > 0, 'gravarLista sumiu');
+  assert.ok(PANEL.slice(g, g + 300).includes('(setDbAndSave||setDb)(fn);'),
+    'gravarLista perdeu o caminho de volta para o POST do documento');
 });
 
 const SRV = fs.readFileSync(
@@ -238,13 +245,15 @@ test('arquivar uma lista tira o cadastro dela COM tombstone', () => {
     'o arquivo parou de guardar nome e autor');
 });
 
-test('as 48 h APAGAM de verdade — nada vai para o Arquivo', () => {
-  // Decisão do dono: propus arquivar, ele reafirmou apagar. Os itens somem do
-  // banco e não há desfazer.
+test('apagar uma lista à mão não a arquiva — os itens vão para a LIXEIRA', () => {
+  // ⚠️ 25/10/2026: as 48 h passaram a ARQUIVAR (plano da Lista, "nada some sem
+  // volta"); `apagarLista` ficou para o botão "Apagar" e para a lista VAZIA.
+  // Os itens dela vão para a lixeira (30 dias), não somem.
   const i = APP.indexOf('const apagarLista=(alvoId:string)=>{');
   assert.ok(i > 0, 'apagarLista sumiu');
   const fn = APP.slice(i, i + 1500);
-  assert.ok(!/pedidosLista/.test(fn), 'voltou a guardar no Arquivo — era para apagar');
+  assert.ok(!/pedidosLista/.test(fn), 'apagar passou a arquivar — são dois botões diferentes');
+  assert.ok(fn.includes('listaLixeira:paraLixeira(d,'), 'os itens da lista apagada sumiram sem passar pela lixeira');
   // ⚠️ Tombstone em TUDO: sem ele a fusão devolve a lista inteira no poll
   // seguinte e ela "renasce" em todo aparelho (§3).
   assert.ok(fn.includes('_listaDeletados.add(alvoId);'), 'o cadastro sai sem tombstone');
@@ -261,11 +270,11 @@ test('a contagem aparece ANTES de apagar', () => {
   // Apagar não tem desfazer: sem o aviso, a pessoa abre o trocador num dia e a
   // lista que montou simplesmente não está mais lá.
   assert.ok(APP.includes('const h=horasAteApagar(l,Date.now());'), 'a contagem sumiu do trocador');
-  assert.ok(APP.includes('some em {h}h'), 'o texto da contagem sumiu');
+  assert.ok(APP.includes('vai para o Arquivo em {h}h'), 'o texto da contagem sumiu');
   // Arquivar e apagar ficam SEPARADOS: a diferença entre eles é o desfazer.
   assert.ok(APP.includes('>🗑️ Apagar</button>') && APP.includes('>📂 Arquivar</button>'),
     'as duas ações viraram uma só — é assim que se apaga querendo guardar');
-  assert.ok(APP.includes('NÃO TEM COMO DESFAZER'), 'a confirmação parou de dizer que não desfaz');
+  assert.ok(APP.includes('ficam 30 dias na Lixeira'), 'a confirmação parou de dizer para onde os itens vão');
 });
 
 test('a varredura das 48 h roda UMA por ciclo e nunca na aberta', () => {
@@ -277,7 +286,9 @@ test('a varredura das 48 h roda UMA por ciclo e nunca na aberta', () => {
   assert.ok(fn.includes('const ids=listasOciosas(listasDoDb,Date.now());'), 'a varredura mudou de fonte');
   assert.ok(!/ids\.forEach|for\s*\(const .* of ids\)/.test(fn),
     'voltou a arquivar várias de uma vez — cai na janela de 5s do save direto');
-  assert.ok(fn.includes('apagarRef.current(alvo);'), 'a varredura parou de apagar o alvo');
+  // ⚠️ 25/10/2026: lista parada com itens vai para o ARQUIVO; só a vazia é apagada.
+  assert.ok(fn.includes('arquivarRef.current(true,alvo);'), 'a varredura parou de arquivar — voltaria a apagar itens');
+  assert.ok(fn.includes('else apagarRef.current(alvo);'), 'a lista vazia parada ficaria no trocador para sempre');
   // Que a ativa e a vazia nunca saem é regra do módulo, com teste próprio lá.
   const MOD = fs.readFileSync(
     path.join(path.dirname(fileURLToPath(import.meta.url)), 'listasAbertas.js'), 'utf8');

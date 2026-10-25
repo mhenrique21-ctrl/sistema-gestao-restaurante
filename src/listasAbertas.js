@@ -100,10 +100,10 @@ export function listaPorId(listas, id) {
 }
 
 // ── As que passaram de 48 h ─────────────────────────────────────────────────
-// ⚠️ ELAS SÃO APAGADAS, NÃO ARQUIVADAS (decisão do dono, 04/10/2026, depois de
-// eu ter proposto arquivar e ele ter reafirmado). Os itens somem do banco e não
-// há desfazer — por isso tudo abaixo, e por isso a tela avisa ANTES
-// (`horasAteApagar`), em vez de a lista simplesmente deixar de existir.
+// ⚠️ DESDE 25/10/2026 ELAS VÃO PARA O ARQUIVO (plano da Lista, "nada some sem
+// volta"); só a VAZIA é apagada. De 04/10 a 25/10 eram apagadas com os itens,
+// sem desfazer. O nome `horasAteApagar` ficou do tempo em que apagava — a tela
+// continua avisando ANTES de a lista sair das abertas.
 //
 // ⚠️ A CONTA É DE OCIOSIDADE, NÃO DE IDADE. Por idade, uma lista aberta na
 // segunda e usada todo dia sumiria na quarta no meio da compra. O relógio

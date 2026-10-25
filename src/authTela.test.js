@@ -114,7 +114,7 @@ test('a senha guardada SOBREVIVE ao POST do cliente', () => {
   assert.ok(SRV.includes('preservarSenhas(incoming.usuarios, existing.usuarios)'),
     'a preservação da senha saiu do POST');
   // Tem que rodar DEPOIS da fusão: antes dela, o mergeDocument sobrescreveria.
-  const iMerge = SRV.indexOf('incoming = mergeDocument(existing, incoming);');
+  const iMerge = SRV.indexOf('incoming = mergeDocument(existing, incoming');
   const iPres = SRV.indexOf('preservarSenhas(incoming.usuarios');
   assert.ok(iMerge > 0 && iPres > iMerge, 'a preservação foi para antes da fusão');
 });

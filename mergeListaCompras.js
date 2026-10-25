@@ -6,7 +6,12 @@
 // inteiro), o que perdia mudanças silenciosamente quando dois dispositivos
 // escreviam perto um do outro. Ver commit "fix: fusão da Lista de Compras
 // no servidor" pro contexto completo.
-export function mergeListaCompras(existing, incoming) {
+import { podarTombstones } from './src/listaOps.js';
+
+// `opts.vivos`: ids que ainda existem em alguma `listaCompras` dos backups
+// recentes. É o que permite podar o tombstone sem ressuscitar nada (ver
+// `podarTombstones`). Sem ele, o tombstone não é podado.
+export function mergeListaCompras(existing, incoming, opts = {}) {
   if (!existing) return incoming;
   const merged = { ...incoming };
 
@@ -22,7 +27,10 @@ export function mergeListaCompras(existing, incoming) {
   // União dos ids excluídos/arquivados — uma exclusão já registrada por
   // qualquer lado nunca "volta" por causa do outro lado não saber dela ainda.
   const deletedIds = new Set([...(existing.listaDeletedIds || []), ...(incoming.listaDeletedIds || [])]);
-  merged.listaDeletedIds = [...deletedIds].slice(-5000);
+  // ⚠️ Era um corte fixo nos últimos 5000, e o real chegou lá: cada exclusão nova
+  // empurrava a mais antiga para fora, e um aparelho atrasado ressuscitava o
+  // item. O filtro abaixo usa o conjunto INTEIRO; só o que é gravado é podado.
+  merged.listaDeletedIds = podarTombstones([...deletedIds], { vivos: opts.vivos || null });
 
   // Por item: quem tem updatedAt mais recente vence (mesma regra do
   // mergeFromServer no cliente, só que aplicada contra o arquivo real).

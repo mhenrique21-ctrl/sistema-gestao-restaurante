@@ -46,6 +46,8 @@ src/vinculoProducao.js  liga o nome da produção ao produto do Eclética (com t
 src/autoSave.js       salvar, reagendar ou ignorar — a decisão que perdia dado (com testes)
 src/listaId.js        a identidade da lista que sucede uma arquivada (com testes)
 src/listasAbertas.js  várias listas abertas: nome, autor e as 48 h (com testes)
+src/listaOps.js       a Lista gravada ITEM A ITEM; tombstone e lixeira (com testes)
+src/listaCiclo.js     o dia da Lista é 12h–12h; a virada das 12h (com testes)
 abreTela.js           abre o app num navegador e reprova TELA BRANCA (pula sem playwright)
 src/planilha.js       .xlsx e .csv sem dependência nenhuma (com testes)
 src/relatorioPlataforma.js  o relatório do iFood/99Food vira Vendas (com testes)
@@ -229,6 +231,8 @@ tipoInsumo               {foldNome(insumo): "producao"|"revenda"|"interno"} — 
                          insumo É. Marcado em Compras → Insumos; quem não é
                          marcado cai na regra por categoria contábil
                          (src/tipoInsumo.js, com testes)
+listaLixeira             [{id:"lx-<itemId>", item, excluidoEm, excluidoPor}] — item
+                         excluído da Lista, 30 dias (src/listaOps.js)
 mapaProdutoFicha         {foldNome(produto): {modo:"ficha"|"produto"|"auto"|"ignorar",
                          fichaId|prodId, fichaNome|prodNome, origemAprendizado,
                          ultimaAtualizacao}}  — ver §6, "Produto vendido → compra"
@@ -2369,6 +2373,62 @@ A conversão é `materiasPrimas[].unidadesPorEmbalagem`. Sem ela, comparar
 "40 vendidas" com "7 compradas" inventa um rombo — por isso a tela avisa em vez
 de mostrar o número quando a conversão não está configurada.
 
+### A Lista grava ITEM A ITEM (25/10/2026) — `src/listaOps.js` (com testes)
+
+Etapa 1 do `LISTA-PLANO-CLAUDE-CODE.md`. Inserir, editar, marcar, mudar
+quantidade e excluir não postam mais o documento inteiro: a tela aplica na hora
+(`aplicarLocalLista`) e manda só a OPERAÇÃO para **`POST /api/lista-op/<emp>`**,
+que aplica com a mesma regra da fusão (carimbo maior vence, tombstone não volta)
+e responde com o recorte da Lista.
+
+⚠️ **A ROTA MORA FORA DE `/api/dados/`.** O POST genérico de lá casava por
+`startsWith`: num servidor que ainda não conhece a rota (build novo antes do
+`pm2 restart`), o corpo `{ops}` seria lido como o DOCUMENTO INTEIRO e a fusão
+apagaria o que ele não trouxesse. Agora o POST genérico recusa sufixo (404), e o
+app só aceita resposta com **`listaOp: 1`** — sem a marca (servidor antigo
+devolve o index.html), volta ao POST do documento.
+
+⚠️ **"BASE LIMPA" (`listaLimpaRef`).** O auto-save só deixa de postar quando o
+estado da empresa é exatamente o que a operação produziu sobre uma base JÁ
+salva. Mudança pendente por baixo (um `setDb` não salvo) ⇒ não marca ⇒ o
+documento sobe como sempre, com as duas mudanças. É a armadilha nº 0 (§3) que
+não pode voltar por aqui.
+
+⚠️ **FILA OFFLINE** em `localStorage._listaOpsPendentes`, reenviada no `online`,
+a cada 10 s e no `visibilitychange`; item pendente mostra ⏳. A operação de
+marcar leva o RESULTADO (comprado sim/não), nunca "inverta" — reenviada, se
+desfaria. Sem espaço no localStorage, cai no caminho antigo.
+
+⚠️ **O catálogo ainda vai pelo documento**: `saveItem` de produto NOVO (ou rua
+nova) continua em `setDbAndSave(fnLista, fnCat)` — rota leve do catálogo é a
+Etapa 3.
+
+**Lixeira + desfazer.** Excluir põe o item em `listaLixeira` (30 dias) e mostra
+"Desfazer" por 10 s; Lista → Lixeira restaura. ⚠️ **Restaurar cunha id NOVO**
+(o antigo segue no tombstone, lição do §3) **e `criadoEm` de AGORA** — com o
+carimbo antigo, o relógio das 12h veria um item "de ontem" na lista aberta e a
+viraria inteira. Limpar comprados, apagar lista e retomar lista também passam
+pela lixeira.
+
+**Tombstone: `MAX_TOMBSTONES` = 30000, um número só** (era `.slice(-5000)` em
+dez lugares, e o real chegou nos 5000). Acima do teto, `podarTombstones` só tira
+id que não existe em nenhuma `listaCompras` dos backups (`idsVivosLista`, lidos
+em segundo plano e só quando preciso); sem essa lista, **não poda nada**.
+
+### A virada das 12h — `src/listaCiclo.js` (com testes)
+
+Decisão do dono: o dia da Lista vai das **12h às 12h** (America/Belem, UTC−3
+fixo). Item de 24/10 18h30 é da "Compra de 25/10". Um relógio **no servidor**
+(1 min) arquiva no corte os itens da lista aberta lançados ANTES dele, como
+"Compra de DD/MM" (`automatico: true`, id `arq-<listaId>`, a forma do
+`arquivarLista`), e abre a lista `proximaListaId`. ⚠️ **O que entrou depois das
+12h passa para a lista nova**, com carimbo. Idempotente; desliga com
+`LISTA_CICLO_12H=nao` no `.env`. Órfão "de hoje" agora é o do mesmo
+`diaDaCompra`, não o do `today()`.
+
+⚠️ **As 48 h passaram a ARQUIVAR** (com itens) — só a lista VAZIA é apagada.
+A seção abaixo ("APAGA MESMO") descreve o comportamento de 04/10 a 25/10.
+
 ### Sincronização da Lista: o servidor AVISA (29/09/2026)
 
 O relato é sempre o mesmo — *"o item que eu insiro não aparece para os
@@ -2574,7 +2634,7 @@ ficasse dois minutos decidindo criaria a lista com a hora errada dentro do nome.
 várias listas abertas dá para comprar da lista A olhando para a B — esse é o
 preço da mudança, e a barra com o nome é o que o paga.
 
-#### Lista parada há 48 h é APAGADA sozinha
+#### Lista parada há 48 h é APAGADA sozinha (até 25/10/2026 — hoje ARQUIVA, ver acima)
 
 ⚠️ **APAGA MESMO — não arquiva.** Propus arquivar; o dono **reafirmou apagar**
 (04/10/2026). Os itens somem do banco, nada vai para `pedidosLista`, e **não há
@@ -3251,5 +3311,11 @@ Depois: `nginx -t && systemctl reload nginx`. O `X-Accel-Buffering: no` que o
 servidor manda cobre a maior parte dos casos sozinho; o bloco acima é o que
 garante o `proxy_read_timeout`, senão a conexão cai a cada 60 s e o navegador
 reconecta sem parar.
+
+⚠️ **Lista item a item (25/10/2026): o build novo é seguro antes do restart**
+— o app só usa `/api/lista-op` quando o servidor responde com `listaOp: 1`.
+Mas a **virada das 12h só existe depois do `pm2 restart`**, e começa a valer no
+primeiro minuto: a lista aberta perde para o Arquivo tudo o que foi lançado
+antes do último corte. Para subir sem ela, `LISTA_CICLO_12H=nao` no `.env`.
 
 VPS Hostinger. Nginx com um bloco por subdomínio, todos com certbot.
