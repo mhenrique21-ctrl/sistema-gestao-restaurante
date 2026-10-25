@@ -46,6 +46,7 @@ src/vinculoProducao.js  liga o nome da produção ao produto do Eclética (com t
 src/autoSave.js       salvar, reagendar ou ignorar — a decisão que perdia dado (com testes)
 src/listaId.js        a identidade da lista que sucede uma arquivada (com testes)
 src/listasAbertas.js  várias listas abertas: nome, autor e as 48 h (com testes)
+src/listaCiclo.js     o corte das 12h e de que dia é a compra (com testes)
 abreTela.js           abre o app num navegador e reprova TELA BRANCA (pula sem playwright)
 src/planilha.js       .xlsx e .csv sem dependência nenhuma (com testes)
 src/relatorioPlataforma.js  o relatório do iFood/99Food vira Vendas (com testes)
@@ -2537,6 +2538,86 @@ seguinte — e o item some de novo.
 
 `src/listaId.test.js` **reproduz o caso**: dois aparelhos fechando a mesma lista,
 com `uid()` o item fica órfão; com `proximaListaId` ele aparece.
+
+### O ciclo da compra: corte às 12h — `src/listaCiclo.js` (com testes)
+
+**Decisão do dono (25/10/2026): domingo a loja não abre, e DIA FECHADO NÃO TEM
+CORTE.** A lista que começa **sábado 12h** vai até **segunda 12h** e leva o nome
+da **compra de segunda** — não existe um corte no domingo partindo esse ciclo em
+dois.
+
+A regra inteira numa frase: **antes das 12h o dia da compra é hoje; a partir das
+12h é o próximo — e depois disso anda até achar um dia ABERTO.**
+
+```
+sábado 11:59  → sábado      domingo 15:00 → segunda      segunda 12:00 → terça
+sábado 12:00  → segunda     segunda 11:59 → segunda
+```
+
+⚠️ **`diaDaCompra` é, por construção, o dia de `proximoCorte`**, e há teste que
+varre a semana de hora em hora cobrando isso. Fossem duas contas, um dia a tela
+diria "compra de segunda" com o servidor cortando na terça — e nada denunciaria
+até alguém conferir o papel.
+
+⚠️ **TUDO EM HORÁRIO DE BELÉM, nunca no fuso do servidor.** A VPS pode estar em
+UTC: com `getHours()` o corte das 12h cairia às 9h da manhã na loja. É a mesma
+lição do `hojeISO` da ponte do Eclética (§4) e do `faltaClt.js`.
+
+⚠️ **Pelo nome do fuso (`Intl`), não por um `-3` cravado.** Hoje dá no mesmo — o
+Brasil aboliu o horário de verão em 2019 e Belém nunca teve —, mas se voltar, a
+constante erraria uma hora durante meses e ninguém ligaria o corte estranho a
+ela. Há teste conferindo janeiro, julho e dezembro.
+
+⚠️ **O instante do corte é montado em DUAS passadas** (`instanteEmBelem`): o
+deslocamento do fuso é lido NUM instante, e o instante é o que se procura. Uma
+passada só erraria exatamente na virada de um horário de verão — o caso raro que
+ninguém testa e que volta a cada seis meses.
+
+#### Configuração, no `.env` da VPS
+
+```
+LISTA_DIAS_FECHADOS=0                      0=domingo … 6=sábado. Padrão: "0"
+LISTA_FERIADOS=2026-12-25,2027-01-01       AAAA-MM-DD, por vírgula
+```
+
+Feriado segue a **mesma lógica do domingo**: não tem corte, e a compra passa
+para o próximo dia aberto. Feriado numa quarta → a compra da terça 12h vai até
+quinta 12h e se chama *Compra de quinta*.
+
+⚠️ **CONFIGURAÇÃO INVÁLIDA CAI NO PADRÃO E AVISA, nunca derruba.** Fechar os
+sete dias não é "loja sem compra": é **laço infinito** na subida do servidor.
+Falhar fechado bricaria o sistema por causa de uma vírgula no `.env` — mesma
+régua do `APP_SESSION_SECRET` (§10.1). Valor ilegível em `LISTA_DIAS_FECHADOS`
+também volta ao padrão (abrir o domingo por causa de um texto errado seria o
+pior desfecho), e feriado fora do formato é descartado com aviso, sem levar os
+outros junto. O laço ainda tem teto de 400 dias, que vira exceção com o motivo
+escrito.
+
+#### O timer do servidor
+
+`new_server.js`, ao lado do vigia do SSE: dorme até o corte, anuncia e se
+reagenda.
+
+⚠️ **DORME EM SALTOS DE NO MÁXIMO 1 HORA**, recalculando do relógio a cada
+volta. Um `setTimeout` de dois dias atravessa suspensão de máquina, acerto de
+relógio e o teto de ~24,8 dias do `setTimeout` — e erra calado. Em saltos, um
+atraso vira uma hora de erro no pior caso, nunca um corte perdido.
+
+⚠️ **O alvo fica no fechamento, não é recalculado ao acordar.** Passado o corte,
+`proximoCorte` já devolve o SEGUINTE: comparar com ele faria o anúncio nunca
+acontecer. Há teste correndo a semana inteira e cobrando que nenhum corte saia
+repetido nem falte, e que o domingo não apareça.
+
+⚠️ O anúncio vai como **`event: ciclo`**, não como `dados`: quem escuta `dados`
+baixa o documento, e um corte não mudou documento nenhum.
+
+`GET /api/lista/ciclo` devolve o ciclo atual (exige sessão, como as outras rotas
+de dados). A tela lê daí em vez de repetir a conta — o `.env` só existe no
+servidor.
+
+⚠️ **O TIMER SÓ ANUNCIA: não fecha nem cria lista.** Isso não foi especificado,
+e fechar lista é destrutivo (os pendentes saem da tela de todo mundo ao mesmo
+tempo). As opções estão no `LISTA-PLANO-CLAUDE-CODE.md`, em aberto.
 
 ### Várias listas abertas, com nome e autor — `src/listasAbertas.js` (com testes)
 

@@ -10,6 +10,7 @@ import webPush from 'web-push';
 import { SignedXml } from 'xml-crypto';
 import { DOMParser } from '@xmldom/xmldom';
 import { mergeDocument } from './mergeDocument.js';
+import { configDoCiclo, cicloAtual, proximoCorte } from './src/listaCiclo.js';
 import { idDoRegistroPdv } from './registroPdv.js';
 import { paraGemini, respostaDoGemini, erroDoGemini, valeTentarReserva, filaDeModelos } from './iaGemini.js';
 
@@ -1245,6 +1246,63 @@ const _vigia = setInterval(() => {
   }
 }, 250);
 _vigia.unref?.();
+
+// ---- O CORTE DA LISTA, às 12h de cada dia ABERTO -------------------------
+// Decisão do dono (25/10/2026): domingo a loja não abre, e dia fechado NÃO TEM
+// CORTE. A conta inteira mora em `src/listaCiclo.js`, com testes — aqui só
+// dorme até a hora e avisa. Duas contas divergiriam no dia em que uma mudasse,
+// e o sintoma seria o servidor cortando num dia e a tela dizendo outro.
+//
+// LISTA_DIAS_FECHADOS="0"                 domingo (padrão)
+// LISTA_FERIADOS="2026-12-25,2027-01-01"
+const CICLO = configDoCiclo(process.env);
+console.log(`[listaCiclo] corte às ${CICLO.horaCorte}h (America/Belem) · fechados: ${[...CICLO.diasFechados].join(',')}`
+  + ` · feriados: ${CICLO.feriados.size}` + ` · agora: ${cicloAtual().nome}`);
+
+function avisarCorte(ciclo) {
+  // ⚠️ `event: ciclo`, não a mensagem padrão nem o `dados`: quem escuta o
+  // `dados` baixa o documento, e um corte não mudou documento nenhum.
+  const linha = `event: ciclo\ndata: ${JSON.stringify(ciclo)}\n\n`;
+  for (const res of [...sseClientes]) {
+    try { res.write(linha); } catch { sseClientes.delete(res); }
+  }
+}
+
+// ⚠️ NÃO DORME DIRETO ATÉ O CORTE. Um `setTimeout` de dois dias atravessa
+// suspensão de máquina, acerto de relógio e o teto de ~24,8 dias do
+// `setTimeout`, e erra calado. Dormindo em saltos de no máximo uma hora e
+// RECALCULANDO do relógio a cada volta, um atraso vira uma hora de erro no pior
+// caso, nunca um corte perdido.
+//
+// ⚠️ E o alvo fica no fechamento, não recalculado na hora de acordar: passado o
+// corte, `proximoCorte` já devolve o SEGUINTE — comparar com ele faria o
+// anúncio nunca acontecer.
+const SALTO_MAX = 60 * 60 * 1000;
+let _timerCorte = null;
+function agendarCorte() {
+  clearTimeout(_timerCorte);
+  let alvo;
+  try {
+    alvo = proximoCorte(new Date(), CICLO).getTime();
+  } catch (e) {
+    // Configuração impossível (todo dia fechado por feriado, por exemplo): o
+    // servidor segue de pé e o corte fica parado, com o motivo no log — travar
+    // o restaurante por causa de uma linha do .env seria pior.
+    console.error('[listaCiclo] não consegui calcular o próximo corte:', e.message);
+    return;
+  }
+  const espera = Math.min(Math.max(alvo - Date.now(), 1000), SALTO_MAX);
+  _timerCorte = setTimeout(() => {
+    if (Date.now() >= alvo) {
+      const ciclo = cicloAtual(new Date(), CICLO);
+      console.log(`[listaCiclo] corte — agora vale "${ciclo.nome}" (próximo em ${ciclo.proximoCorte})`);
+      avisarCorte(ciclo);
+    }
+    agendarCorte();
+  }, espera);
+  _timerCorte.unref?.();
+}
+agendarCorte();
 
 // ---- RECORTE DA LISTA DE COMPRAS -----------------------------------------
 // O documento inteiro tem alguns MB e a aba Lista precisa de uma fração dele.
@@ -3538,6 +3596,23 @@ REGRAS:
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
     res.writeHead(200);
     res.end(recorteDaLista(emp));
+    return;
+  }
+
+  // De que dia é a compra agora, e quando vira. A tela lê daqui em vez de
+  // repetir a conta — o `.env` que define os dias fechados só existe no
+  // servidor, então o cliente não teria como chegar no mesmo resultado.
+  if (req.method === 'GET' && urlPath === '/api/lista/ciclo') {
+    if (barrouDados(req, res)) return;
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    try {
+      res.writeHead(200);
+      res.end(JSON.stringify(cicloAtual(new Date(), CICLO)));
+    } catch (e) {
+      res.writeHead(500);
+      res.end(JSON.stringify({ erro: e.message }));
+    }
     return;
   }
 
