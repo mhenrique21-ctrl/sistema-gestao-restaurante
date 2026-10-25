@@ -1,3 +1,4 @@
+import DreGerencial, { DreAlternador } from "./DreGerencial";
 import { useState, useEffect, useRef, useMemo, Fragment } from "react";
 // A matemática do consumo teórico vive fora daqui porque erra em silêncio:
 // esquecer de dividir por `porcoes` ou converter g↔kg dá um número que continua
@@ -29,7 +30,7 @@ import { mergeArrayById } from "../mergeDocument.js";
 import QRCode from "qrcode";
 import { ConfigPanel, CONFIG_PADRAO, type ConfigAppState } from "./ConfigPanel";
 import { ConfigStyleInjector, useApplyConfig } from "./ConfigApplier";
-import {rotuloDelivery,ROTULO_RECIBOS,LEGADO_ROTULO_DELIVERY,BUCKET_RECIBO_BALCAO,BUCKET_RECIBO_ENCOMENDA,taxasDePlataforma,statusDoDia,progressoDoDia,serieDosDias,mediaDaSerie,HORA_PENDENCIA_PADRAO} from "./fechamentoVendas.js";
+import {rotuloDelivery,ROTULO_RECIBOS,LEGADO_ROTULO_DELIVERY,BUCKET_RECIBO_BALCAO,BUCKET_RECIBO_ENCOMENDA,taxasDePlataforma,statusDoDia,progressoDoDia,serieDosDias,mediaDaSerie,HORA_PENDENCIA_PADRAO,correcaoDoCanal} from "./fechamentoVendas.js";
 import {garantirFornecedor,criarItemDaLista,conferirPreco,auditarPrecos,normalizarEncoding,gruposDeFornecedor,mesclarFornecedores,conciliacaoPorCategoria,pctHistoricoPorCategoria,normalizarTexto,precoPorUnidadeBase,filaSemCategoria,janelaAnterior,soDigitos,linhasDaRevisao,pendenciasDaRevisao,correcoesDaRevisao,resumoDoEncoding} from "./qualidadeCompras.js";
 import {fatiasDaReceita,conferirCmv,diasNoIntervalo,mesDaData,porDia,comprasForaDoCmv,MOTIVO_FORA_CMV} from "./dre.js";
 
@@ -2288,6 +2289,9 @@ const mergeFromServer=(prev:any,updates:any)=>{
 // Com o abort, a promessa sempre termina (resolve ou rejeita), o finally
 // sempre roda e o polling sempre volta ao ar no ciclo seguinte.
 const SYNC_TIMEOUT_MS=15000;
+// ⚠️ O POST manda o documento INTEIRO da empresa (7+ MB em 10/2026). No 4G da
+// loja isso passa de 15 s, e o envio era abortado no meio: "⚠ Erro" e nada gravado.
+const SYNC_POST_TIMEOUT_MS=120000;
 // ⚠️ 401 NÃO PODE SER SÓ UM ERRO DE REDE. Com a sessão exigida no servidor, um
 // cookie expirado faz TODA sincronização falhar — e, sem tratar, o app seguiria
 // mostrando o estado local, aceitando lançamento e não gravando nada: a
@@ -2318,7 +2322,7 @@ const FILA_OPS_KEY="_listaOpsPendentes";
 const lerFilaOps=():any[]=>{try{const a=JSON.parse(localStorage.getItem(FILA_OPS_KEY)||"[]");return Array.isArray(a)?a:[];}catch{return[];}};
 const gravarFilaOps=(f:any[])=>{try{localStorage.setItem(FILA_OPS_KEY,JSON.stringify(f));}catch{}};
 
-const fetchSync=(url:string,opts:any={},ms=SYNC_TIMEOUT_MS)=>{
+const fetchSync=(url:string,opts:any={},ms=(opts&&opts.method==="POST")?SYNC_POST_TIMEOUT_MS:SYNC_TIMEOUT_MS)=>{
   const ctrl=new AbortController();
   const t=setTimeout(()=>ctrl.abort(),ms);
   return fetch(url,{...opts,signal:ctrl.signal}).then(r=>{
@@ -2348,7 +2352,7 @@ export default function App() {
   const changeMenuLayout=(l:"bottom"|"top"|"fab")=>{setMenuLayout(l);localStorage.setItem("app_menu_layout",l);setMenuPickerOpen(false);setFabOpen(false);};
   const [sidebarColapsada,setSidebarColapsada]=useState<boolean>(()=>localStorage.getItem("app_sidebar_colapsada")==="1");
   const toggleSidebarColapsada=()=>{const v=!sidebarColapsada;setSidebarColapsada(v);localStorage.setItem("app_sidebar_colapsada",v?"1":"0");};
-  const DEFAULT_MENU_ORDER=["dashboard","vendas","compras","lista","producao","contas","estoque","fluxo","gestao","agenda","cardapio-tv","config"];
+  const DEFAULT_MENU_ORDER=["dashboard","vendas","compras","lista","producao","contas","estoque","fluxo","casa","gestao","agenda","cardapio-tv","config"];
   const [menuOrder,setMenuOrder]=useState<string[]>(()=>{try{const s=localStorage.getItem("app_menu_order");if(s)return JSON.parse(s);}catch{}return DEFAULT_MENU_ORDER;});
   const changeMenuOrder=(order:string[])=>{setMenuOrder(order);localStorage.setItem("app_menu_order",JSON.stringify(order));};
   const [config,setConfig] = useState<ConfigAppState>(()=>{try{const s=localStorage.getItem("app_config");return s?JSON.parse(s):CONFIG_PADRAO;}catch{return CONFIG_PADRAO;}});
@@ -2857,7 +2861,7 @@ export default function App() {
   },[login]);
 
   const isOp=login?.role==="op"||login?.role==="op_lista"||login?.role==="op_producao"||login?.role==="op_enc";
-  const isAdmin=login?.role==="admin";
+  const isAdmin=login?.role==="admin";const podeCasa=["MARIO","DANY"].includes(String(login?.label||"").toUpperCase());
   // Cor em tempo real do usuário logado (ignora sessão desatualizada)
   const loginCorTexto=(()=>{if(!login?.label)return"#e8eaf0";const u=(state.CONFRARIA?.usuarios||[]).find((u:any)=>u.nome===login.label);return u?.corTexto||login?.corTexto||"#e8eaf0";})();
 
@@ -2962,6 +2966,7 @@ export default function App() {
 
   const menuStructure:{id:string,label:string,icon:string,children?:{id:string,label:string,icon:string,sub?:string}[]}[]=[
     {id:"dashboard",label:"Dashboard",icon:"📊"},
+    {id:"comandas",label:"Comandas",icon:"🍽️"},
     {id:"vendas",label:getVendasAjustes(db).legNomeAba||"Vendas",icon:"💰",children:[
       {id:"vendas-lanc",label:"Lançamentos",icon:"📋",sub:"lancamentos"},
       {id:"vendas-recibo",label:getVendasAjustes(db).legBotaoEmitir||"Emitir Recibo",icon:"🧾",sub:"recibo"},
@@ -3024,6 +3029,7 @@ export default function App() {
       {id:"est-saidas",label:"Saídas por venda",icon:"📉",sub:"saidas"},
     ]},
     {id:"fluxo",label:"Fluxo de Caixa",icon:"💵"},
+    ...(podeCasa?[{id:"casa",label:"Casa",icon:"🏠"}]:[]),
     {id:"gestao",label:"Gestão",icon:"⚙️",children:[
       {id:"gest-rh",label:"RH",icon:"👥",sub:"rh"},
       {id:"gest-rel",label:"Relatórios",icon:"📄",sub:"relatorios"},
@@ -3057,7 +3063,7 @@ export default function App() {
   const tabs=isOp?(login?.role==="op"?allTabs.filter(t=>t.id==="lista"||t.id==="producao"||t.id==="agenda"):login?.role==="op_lista"?allTabs.filter(t=>t.id==="lista"):login?.role==="op_enc"?allTabs.filter(t=>t.id==="agenda"):allTabs.filter(t=>t.id==="producao")):allTabs;
   const menuFiltered=isOp?orderedStructure.filter(m=>tabs.some(t=>t.id===m.id)):orderedStructure;
   const menuIniciais=iniciaisMenuMap(menuFiltered.map(m=>m.label));
-  const navTo=(t:string,s?:string)=>{setPendingSub(s||null);setTab(t);const m=menuStructure.find(x=>x.id===t);if(m?.children)setExpandedMenu(t);};
+  const navTo=(t:string,s?:string)=>{if(t==="comandas"){window.open("/comandas","_blank");return;}setPendingSub(s||null);setTab(t);const m=menuStructure.find(x=>x.id===t);if(m?.children)setExpandedMenu(t);};
 
   return (
     <>
@@ -3372,7 +3378,8 @@ export default function App() {
               {tab==="producao"   && <ProducaoPanel db={db} setDb={setDb} login={login} pendingSub={pendingSub} setPendingSub={setPendingSub} setDbAndSave={setDbAndSave} onNavigate={setTab} empresa={empresa} state={state} setState={setState}/>}
               {tab==="estoque"    && <EstoqueTab db={db} setDb={setDb} setDbAndSave={setDbAndSave} empresa={empresa} pendingSub={pendingSub} setPendingSub={setPendingSub} onNavigate={setTab}/>}
               {tab==="contas"     && <Contas db={db} setDb={setDb} empresa={empresa} setDbAndSave={setDbAndSave} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
-              {tab==="fluxo"      && <FluxoCaixa db={db} setDb={setDb} empresa={empresa} state={state} setState={setState}/>}
+              {tab==="casa"&&podeCasa&&<iframe title="Casa" src="/api/casa/pagina" style={{width:"100%",height:"calc(100vh - 150px)",border:0,borderRadius:12,background:"transparent"}}/>}
+            {tab==="fluxo"      && <FluxoCaixa db={db} setDb={setDb} empresa={empresa} state={state} setState={setState}/>}
               {tab==="gestao"     && <Gestao db={db} setDb={setDb} empresa={empresa} state={state} setState={setState} setDbAndSave={setDbAndSave} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
               {tab==="usuarios"   && <UsuariosPanel state={state} setState={setState}/>}
               {tab==="agenda"     && <AgendaPanel db={db} setDb={setDb} empresa={empresa} isAdmin={isAdmin} pendingSub={pendingSub} setPendingSub={setPendingSub}/>}
@@ -4123,8 +4130,8 @@ function Vendas({db,setDb,setDbAndSave,state,aj,login,empresa}:{db:any,setDb:any
   // branco é a pessoa digitando a taxa certa, e é melhor que um número
   // pronto e errado.
   const ultimaTaxa=(campo:string)=>{const v=[...(db.vendas||[])].filter((x:any)=>{const n=Number(x[campo])||0;return n>0&&n<100;}).sort((x:any,y:any)=>x.data<y.data?1:-1)[0];return v?String(v[campo]):"";};
-  const emptyForm=()=>({data:today(),maquininha:"",dinheiro:"",ifood:"",ifoodTaxa:ultimaTaxa("ifoodTaxa"),nfoodTaxa:ultimaTaxa("nfoodTaxa"),"99food":"",delivery:""});
-  const [form,setForm]=useState(emptyForm());
+  const emptyForm=()=>({data:today(),maquininha:"",dinheiro:"",ifood:"",ifoodTaxa:ultimaTaxa("ifoodTaxa"),nfoodTaxa:ultimaTaxa("nfoodTaxa"),"99food":"",delivery:"",corr:{} as Record<string,string>});
+  const [form,setForm]=useState<any>(emptyForm());
   const [editId,setEditId]=useState(null);
   const formRef=useRef<HTMLDivElement>(null);
   const [busca,setBusca]=useState("");
@@ -4195,16 +4202,41 @@ function Vendas({db,setDb,setDbAndSave,state,aj,login,empresa}:{db:any,setDb:any
   // Automático = qualquer linha do dia que NÃO foi digitada aqui.
   const vendasAutomaticas=(db.vendas||[]).filter((v:any)=>v.data===form.data&&origemVenda(v)!=="manual"&&v.id!==editId);
   const autoNoCampo=(campo:string)=>vendasAutomaticas.reduce((s:number,v:any)=>s+(v[campo]||0),0);
+  // ---- Correção à mão de canal automático (só administrador inicia) ----------
+  // ⚠️ A correção não mexe na linha do sistema (ela volta no próximo envio da
+  // ponte): o lançamento manual guarda a DIFERENÇA, ver correcaoDoCanal. Vale
+  // para qualquer perfil que salve o dia, senão um operador salvando apagaria a
+  // correção do administrador; só os botões é que são de administrador.
+  const podeCorrigir=login?.role==="admin";
+  const autoDoCanal=(k:string)=>k==="delivery"?(deliverySincronizado?(vendaSincronizada.delivery||0):0):autoNoCampo(k);
+  const autoLiqDoCanal=(k:string)=>k==="ifood"?vendasAutomaticas.reduce((s:number,v:any)=>s+(Number(v.ifoodLiq??v.ifood)||0),0)
+    :k==="99food"?vendasAutomaticas.reduce((s:number,v:any)=>s+(Number(v.nfoodLiq??v["99food"])||0),0):autoDoCanal(k);
+  const CANAIS_CORR=["maquininha","dinheiro","ifood","99food","delivery"];
+  const corrAtiva=(k:string)=>!!form.corr&&Object.prototype.hasOwnProperty.call(form.corr,k);
+  const corrValor=(k:string)=>parseMoney((form.corr&&form.corr[k])||0);
+  const corrCanal=(k:string)=>corrAtiva(k)?correcaoDoCanal({auto:autoDoCanal(k),autoLiq:autoLiqDoCanal(k),valor:corrValor(k),
+    taxaPct:k==="ifood"?ifoodTaxaPct:nfoodTaxaPct,plataforma:k==="ifood"||k==="99food"}):{deltaBruto:0,deltaLiq:0};
+  const totalCorrecoes=CANAIS_CORR.reduce((s,k)=>s+corrCanal(k).deltaLiq,0);
+  const fmtCampo=(n:number)=>n>0.005?n.toFixed(2).replace(".",","):"";
+  const iniciarCorrecao=(k:string)=>setForm((f:any)=>{
+    const extra=k==="delivery"?0:parseMoney(f[k]||0);
+    return{...f,corr:{...(f.corr||{}),[k]:(autoDoCanal(k)+extra).toFixed(2).replace(".",",")},...(k==="delivery"?{}:{[k]:""})};
+  });
+  const desfazerCorrecao=(k:string)=>setForm((f:any)=>{const c={...(f.corr||{})};delete c[k];return{...f,corr:c};});
+  // Correção gravada contra um valor do sistema que depois mudou: o total do dia
+  // só volta a bater com o valor corrigido quando o dia for salvo de novo.
+  const registroManualDoDia=editId?(db.vendas||[]).find((v:any)=>v.id===editId):null;
+  const corrDesatualizada=(k:string)=>{const c=registroManualDoDia?.correcoes?.[k];return !!c&&Math.abs((c.sistema||0)-autoDoCanal(k))>0.005;};
   // O delivery sincronizado já é exibido no campo de Vendas Extras, então sai
   // daqui pra não ser somado duas vezes na prévia.
   const totalAutomatico=vendasAutomaticas.reduce((s:number,v:any)=>s+(v.total||0),0)
     -(deliverySincronizado?(vendaSincronizada.delivery||0):0);
   const penduraAutomatica=vendasAutomaticas.reduce((s:number,v:any)=>s+((v.formas&&v.formas.pendura)||0),0);
-  const totalRegistroManual=total-deliveryValorExibir+deliveryValorSalvar;
+  const totalRegistroManual=total-deliveryValorExibir+deliveryValorSalvar+totalCorrecoes;
   // ---- Fechamento do dia: apoio visual da tela (não muda nenhuma regra de soma) ----
   const MONO={fontFamily:"'SFMono-Regular',Consolas,'Liberation Mono',monospace",fontVariantNumeric:"tabular-nums" as const};
   const FONTE_APP={fontFamily:"var(--fonteApp)"};
-  const totalDia=total+totalAutomatico;
+  const totalDia=total+totalAutomatico+totalCorrecoes;
   const ontemTotal=(db.vendas||[]).filter((v:any)=>v.data===ontemData).reduce((s:number,v:any)=>s+(v.total||0),0);
   // Delta contra ontem: serve pra pegar erro de digitação (30,55 no lugar de 3.055).
   const deltaTag=(hoje:number,ontemV:number)=>{
@@ -4267,9 +4299,11 @@ function Vendas({db,setDb,setDbAndSave,state,aj,login,empresa}:{db:any,setDb:any
     {chave:"delivery",label:legDelivery,Icone:IconDelivery,ativo:!!aj.canalVendasExtras,
      auto:deliverySincronizado?(vendaSincronizada.delivery||0):0,manual:parseMoney(form.delivery||0)},
   ] as any[]).map((c:any)=>{
-    const ehAuto=c.auto>0.005;
-    return {...c,ehAuto,grupo:ehAuto?"auto":"manual",
-      valor:ehAuto?c.auto:c.manual,temValor:ehAuto||c.manual>0.005,
+    const ehAuto=c.auto>0.005||corrAtiva(c.chave);
+    const corrigido=ehAuto&&corrAtiva(c.chave);
+    return {...c,ehAuto,corrigido,grupo:ehAuto?"auto":"manual",
+      valor:corrigido?corrValor(c.chave):ehAuto?c.auto:c.manual,temValor:ehAuto||c.manual>0.005,
+      liq:corrigido&&(c.chave==="ifood"||c.chave==="99food")?corrValor(c.chave)*(1-(c.chave==="ifood"?ifoodTaxaPct:nfoodTaxaPct)/100):c.liq,
       ontem:ontem(c.chave)};
   });
   const cardsAtivos=cardsFechamento.filter((c:any)=>c.ativo);
@@ -4290,7 +4324,9 @@ function Vendas({db,setDb,setDbAndSave,state,aj,login,empresa}:{db:any,setDb:any
   const alternarDia=(data:string)=>setDiasAbertos(s=>{const n=new Set(s);if(n.has(data))n.delete(data);else n.add(data);return n;});
   // Se já tem valor digitado em maquininha/dinheiro "fora do PDV", o bloco não
   // pode ficar escondido — senão o número some da vista mas continua somando.
-  const outrosVisivel=outrosAberto||(autoMaq&&maqManual>0)||(autoDin&&dinManual>0);
+  const extraMaq=autoMaq&&!corrAtiva("maquininha");
+  const extraDin=autoDin&&!corrAtiva("dinheiro");
+  const outrosVisivel=outrosAberto||(extraMaq&&maqManual>0)||(extraDin&&dinManual>0);
   const inpCard={width:"100%",marginBottom:0,textAlign:"right" as const,fontSize:15,fontWeight:700,padding:"6px 8px",...MONO};
   const chipEstado=(texto:string,tom:"ok"|"pendente"|"info")=><span style={{fontSize:10,padding:"1px 6px",borderRadius:6,marginLeft:6,whiteSpace:"nowrap" as const,...FONTE_APP,
     background:tom==="ok"?"var(--successBg)":tom==="pendente"?"var(--warningBg)":"var(--infoBg)",
@@ -4378,10 +4414,24 @@ function Vendas({db,setDb,setDbAndSave,state,aj,login,empresa}:{db:any,setDb:any
         </span>
         <span style={{fontSize:12,fontWeight:700,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{c.label}</span>
       </div>
-      {auto
+      {auto&&c.corrigido
+        ?<>
+          <MoneyInput value={form.corr?.[c.chave]??""} onChange={(v:string)=>setForm((f:any)=>({...f,corr:{...(f.corr||{}),[c.chave]:v}}))} className="inp" placeholder="—" style={inpCard}/>
+          {ehPlataforma&&<div style={{display:"flex",alignItems:"center",gap:5,fontSize:10.5,color:"var(--text2)"}}>
+            <input value={(form as any)[campoTaxa]} onChange={e=>setForm((f:any)=>({...f,[campoTaxa]:e.target.value}))}
+              className="inp" placeholder="taxa" inputMode="decimal"
+              style={{width:52,padding:"4px 6px",fontSize:11,textAlign:"right",marginBottom:0,...MONO}}/>
+            <span>% → <b style={{color:"var(--text)",...MONO}}>{fmtMoney(c.liq||0)}</b> líq.</span>
+          </div>}
+          <span style={{fontSize:10.5,color:"var(--warningText)"}}>corrigido à mão · o sistema mandou <span style={MONO}>{fmtMoney(c.auto)}</span></span>
+          {corrDesatualizada(c.chave)&&<span style={{fontSize:10.5,color:"var(--btnDanger)"}}>o sistema mudou desde a correção — clique em Atualizar para manter este valor</span>}
+          {podeCorrigir&&<button type="button" onClick={()=>desfazerCorrecao(c.chave)} style={{alignSelf:"flex-start",background:"none",border:"none",padding:0,cursor:"pointer",fontSize:11,color:"var(--btnPrimary)",fontWeight:700,textDecoration:"underline"}}>voltar ao automático</button>}
+        </>
+        :auto
         ?<>
           <span style={{fontSize:16,fontWeight:700,...MONO}}>{fmtMoney(c.valor)}</span>
           <span style={{fontSize:10.5,color:"var(--text2)"}}>chegou do sistema{ehPlataforma?" · documento importado":""}</span>
+          {podeCorrigir&&!c.extra&&<button type="button" onClick={()=>iniciarCorrecao(c.chave)} style={{alignSelf:"flex-start",background:"none",border:"none",padding:0,cursor:"pointer",fontSize:11,color:"var(--btnPrimary)",fontWeight:700,textDecoration:"underline"}}>corrigir à mão</button>}
         </>
         :<>
           {inputDoCard}
@@ -4413,6 +4463,7 @@ function Vendas({db,setDb,setDbAndSave,state,aj,login,empresa}:{db:any,setDb:any
     if(aj.canalVendasExtras&&!deliverySincronizado)linhas.push([legDelivery,"manual",parseMoney(form.delivery||0)>0?parseMoney(form.delivery||0):null]);
     if(aj.canalIfood)linhas.push(["iFood (líquido)","manual",ifoodBruto>0?ifoodLiq:null]);
     if(aj.canal99food)linhas.push(["99Food (líquido)","manual",nfoodBruto>0?nfoodLiq:null]);
+    for(const k of CANAIS_CORR)if(corrAtiva(k))linhas.push([k+" — correção à mão","manual",corrCanal(k).deltaLiq]);
     abrirRelatorio(gerarFechamentoCaixaHTML({empresa:empresa||"",data:form.data,linhas,pendura:penduraAutomatica,totalDia,comprasDia:comprasDoDia,itens:checklistItens,obs:obsLocal}));
   };
 
@@ -4427,10 +4478,20 @@ function Vendas({db,setDb,setDbAndSave,state,aj,login,empresa}:{db:any,setDb:any
     const p:string[]=formasDaVenda(v).map(([k,label,val])=>k==="pendura"?`pendura ${numSemRS(val)} (a receber, já no total)`:`${label} ${numSemRS(val)}`);
     if(v.ifood>0&&v.ifoodTaxa>0)p.push(`iFood bruto ${numSemRS(v.ifood)} − ${v.ifoodTaxa}%`);
     if(v["99food"]>0&&v.nfoodTaxa>0)p.push(`99Food bruto ${numSemRS(v["99food"])} − ${v.nfoodTaxa}%`);
+    for(const [k,c] of Object.entries(v.correcoes||{}) as [string,any][])p.push(`${k} corrigido à mão: ${numSemRS(c.valor)} (sistema ${numSemRS(c.sistema)}${c.por?", "+c.por:""})`);
     return p.join(" · ");
   };
 
-  const formDeRegistro=(v:any)=>({data:v.data,
+  const formDeRegistro=(v:any)=>{
+    const c=v.correcoes||{};
+    const semCorr=(k:string)=>(Number(v[k])||0)-(c[k]?(Number(c[k].valor)||0)-(Number(c[k].sistema)||0):0);
+    const corr:Record<string,string>={};
+    for(const k of Object.keys(c))corr[k]=(Number(c[k].valor)||0).toFixed(2).replace(".",",");
+    const base=formDeRegistroBase(v);
+    for(const k of ["maquininha","dinheiro","ifood","99food","delivery"])if(c[k])(base as any)[k]=fmtCampo(semCorr(k));
+    return{...base,corr};
+  };
+  const formDeRegistroBase=(v:any)=>({data:v.data,
     maquininha:v.maquininha?String(v.maquininha.toFixed(2)).replace(".",","):"",
     dinheiro:v.dinheiro?String(v.dinheiro.toFixed(2)).replace(".",","):"",
     ifood:v.ifood?String(v.ifood.toFixed(2)).replace(".",","):"",
@@ -4465,12 +4526,17 @@ function Vendas({db,setDb,setDbAndSave,state,aj,login,empresa}:{db:any,setDb:any
 
   const save=()=>{
     const now=new Date().toISOString();
-    const reg={data:form.data,total:totalRegistroManual,
-      maquininha:parseMoney(form.maquininha||0),
-      dinheiro:parseMoney(form.dinheiro||0),
-      ifood:ifoodBruto,ifoodTaxa:ifoodTaxaPct,ifoodLiq,
-      "99food":nfoodBruto,nfoodTaxa:nfoodTaxaPct,nfoodLiq,
-      delivery:deliveryValorSalvar};
+    const correcoes:any={};
+    for(const k of CANAIS_CORR)if(corrAtiva(k))correcoes[k]={sistema:autoDoCanal(k),valor:corrValor(k),
+      por:registroManualDoDia?.correcoes?.[k]?.valor===corrValor(k)?registroManualDoDia.correcoes[k].por:(login?.label||""),
+      em:registroManualDoDia?.correcoes?.[k]?.valor===corrValor(k)?registroManualDoDia.correcoes[k].em:now};
+    const reg:any={data:form.data,total:totalRegistroManual,
+      maquininha:parseMoney(form.maquininha||0)+corrCanal("maquininha").deltaBruto,
+      dinheiro:parseMoney(form.dinheiro||0)+corrCanal("dinheiro").deltaBruto,
+      ifood:ifoodBruto+corrCanal("ifood").deltaBruto,ifoodTaxa:ifoodTaxaPct,ifoodLiq:ifoodLiq+corrCanal("ifood").deltaLiq,
+      "99food":nfoodBruto+corrCanal("99food").deltaBruto,nfoodTaxa:nfoodTaxaPct,nfoodLiq:nfoodLiq+corrCanal("99food").deltaLiq,
+      delivery:deliveryValorSalvar+corrCanal("delivery").deltaBruto};
+    if(Object.keys(correcoes).length)reg.correcoes=correcoes;
     // Acha o registro do dia por DATA+ORIGEM — não confia cegamente no
     // editId. Um editId "preso" de uma edição anterior (aba ficou aberta o
     // dia inteiro sem o efeito de auto-load rodar de novo) apontava pra um
@@ -4484,7 +4550,7 @@ function Vendas({db,setDb,setDbAndSave,state,aj,login,empresa}:{db:any,setDb:any
     setDbAndSave(d=>{
       const vendas=[...(d.vendas||[])];
       const porData=vendaDoDia(vendas,form.data);
-      const idAlvo=(editId&&vendas.some(v=>v.id===editId&&v.data===form.data))?editId:porData?.id;
+      const idAlvo=(editId&&vendas.some(v=>v.id===editId&&v.data===form.data&&!ehOrigemPdv(v)))?editId:porData?.id;
       const i=idAlvo?vendas.findIndex(v=>v.id===idAlvo):-1;
       if(i>=0)vendas[i]={...reg,id:vendas[i].id,origem:vendas[i].origem,criadoEm:vendas[i].criadoEm||now,atualizadoEm:now};
       else vendas.unshift({...reg,id:uid(),criadoEm:now,atualizadoEm:now});
@@ -4495,7 +4561,14 @@ function Vendas({db,setDb,setDbAndSave,state,aj,login,empresa}:{db:any,setDb:any
     setSaved(true);
     setTimeout(()=>setSaved(false),1800);
   };
-  const edit=(v)=>{setEditId(v.id);setForm(formDeRegistro(v));setTimeout(()=>formRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),100);};
+  // ⚠️ LINHA DO PDV NÃO SE EDITA: a ponte (Eclética / delivery) substitui o
+  // registro dela a cada envio, e o que fosse digitado ali voltava ao valor do
+  // sistema minutos depois. O lápis abre o lançamento MANUAL do dia; para
+  // mudar um canal automático, "corrigir à mão" no card.
+  const edit=(v)=>{if(ehOrigemPdv(v)){const man=vendaDoDia(db.vendas||[],v.data);setEditId(man?man.id:null);setForm(man?formDeRegistro(man):{...emptyForm(),data:v.data});
+    alert("Esta linha vem do sistema (PDV/Eclética/delivery) e é substituída a cada envio.\n\nAbri o lançamento manual do dia: digite aqui o que falta e, para corrigir um valor do sistema, use \"corrigir à mão\" no card do canal.");
+    setTimeout(()=>formRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),100);return;}
+    setEditId(v.id);setForm(formDeRegistro(v));setTimeout(()=>formRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),100);};
   const del=(id)=>{
     const alvo=(db.vendas||[]).find((v:any)=>v.id===id);
     // ⚠️ A LINHA DO PDV É ESPELHO, NÃO LANÇAMENTO. Apagá-la aqui não apaga
@@ -4668,7 +4741,7 @@ function Vendas({db,setDb,setDbAndSave,state,aj,login,empresa}:{db:any,setDb:any
               <span style={{flex:1}}>dos quais pendura (a receber) — no total, fora de dinheiro e maquininha</span>
               <span style={MONO}>{fmtMoney(penduraAutomatica)}</span>
             </div>}
-            {deliverySincronizado&&<button onClick={()=>{setDeliveryManual(true);setForm(f=>({...f,delivery:String((vendaSincronizada.delivery||0).toFixed(2)).replace(".",",")}));}}
+            {deliverySincronizado&&!podeCorrigir&&<button onClick={()=>{setDeliveryManual(true);setForm(f=>({...f,delivery:String((vendaSincronizada.delivery||0).toFixed(2)).replace(".",",")}));}}
               style={{background:"none",border:"none",color:"var(--btnPrimary)",cursor:"pointer",fontSize:11.5,fontWeight:700,textDecoration:"underline",padding:"4px 0 0"}}>corrigir o {legDelivery} à mão</button>}
           </div>
         </details>}
@@ -4685,13 +4758,13 @@ function Vendas({db,setDb,setDbAndSave,state,aj,login,empresa}:{db:any,setDb:any
         </div>
       </div>}
 
-      {(autoMaq||(aj.canalDinheiro&&autoDin))&&<div style={{padding:"10px 0 0",marginTop:10,borderTop:"1px solid var(--border)",...FONTE_APP}}>
+      {(extraMaq||(aj.canalDinheiro&&extraDin))&&<div style={{padding:"10px 0 0",marginTop:10,borderTop:"1px solid var(--border)",...FONTE_APP}}>
         <button type="button" onClick={()=>setOutrosAberto(a=>!a)} style={{background:"none",border:"none",padding:0,cursor:"pointer",fontSize:12,color:"var(--btnPrimary)",fontWeight:700,fontFamily:"inherit"}}>{outrosVisivel?"− ":"+ "}{aj.legMaquininha} fora do PDV ou {String(aj.legDinheiro).toLowerCase()} extra</button>
         {outrosVisivel&&<div style={{marginTop:6}}>
           <div style={{fontSize:11,color:"var(--text2)",marginBottom:6}}>Só o que NÃO passou pelo PDV — o valor digitado aqui soma ao apurado acima.</div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8}}>
-            {autoMaq&&cardFechamentoJsx({chave:"maquininha",label:aj.legMaquininha+" fora do PDV",Icone:IconMaquininha,grupo:"manual",valor:maqManual,temValor:maqManual>0.005,ontem:0,extra:true})}
-            {aj.canalDinheiro&&autoDin&&cardFechamentoJsx({chave:"dinheiro",label:aj.legDinheiro+" extra",Icone:IconDinheiro,grupo:"manual",valor:dinManual,temValor:dinManual>0.005,ontem:0,extra:true})}
+            {extraMaq&&cardFechamentoJsx({chave:"maquininha",label:aj.legMaquininha+" fora do PDV",Icone:IconMaquininha,grupo:"manual",valor:maqManual,temValor:maqManual>0.005,ontem:0,extra:true})}
+            {aj.canalDinheiro&&extraDin&&cardFechamentoJsx({chave:"dinheiro",label:aj.legDinheiro+" extra",Icone:IconDinheiro,grupo:"manual",valor:dinManual,temValor:dinManual>0.005,ontem:0,extra:true})}
           </div>
         </div>}
       </div>}
@@ -7266,6 +7339,18 @@ const deslocarPeriodo=(modo:string,dataRef:string,passo:number)=>{
   return _ymd(d);
 };
 
+// [agente] compras via Financeiro: conta de alimentação/bebidas/limpeza paga direto no
+// Financeiro, sem nota em Compras (nem NF-e), não pode sumir da DRE. Alimentos/bebidas → CMV,
+// limpeza → despesa. Com nota vinculada continua fora (já entra pelos itens da compra).
+const TIPOS_CMV_FIN=["alimentacao","bebidas","insumos"], TIPOS_DESP_FIN=["limpeza"];
+const contaLigadaACompra=(db:any,c:any)=>c.origem==="compra"||!!c.chNFe||!!c.xmlNFe
+  ||(!!c.grupoId&&(db.compras||[]).some((x:any)=>x.grupoId===c.grupoId));
+const ehCompraViaFin=(db:any,c:any,tipos:string[])=>tipos.includes(foldNome(c.categoria||""))
+  &&resolverDestinoDre(db,c.categoria)==="fora"&&!contaLigadaACompra(db,c);
+const viaFinanceiro=(db:any,inicio:string,fim:string,tipos:string[])=>(db.contas||[])
+  .filter((c:any)=>c.vencimento>=inicio&&c.vencimento<=fim&&c.status==="pago"&&c.tipo==="saida"&&ehCompraViaFin(db,c,tipos))
+  .reduce((s:number,c:any)=>s+parseMoney(c.valor),0);
+
 // Números do período que os indicativos leem. Em modo semanal, folha é rateada
 // proporcionalmente (§5): salário é mensal, comparar uma semana de receita
 // contra um mês de folha diria que toda semana está no vermelho.
@@ -7276,9 +7361,16 @@ const resumoPeriodo=(db:any,modo:string,dataRef:string,hoje:string)=>{
   const receita=vendas.reduce((s:number,v:any)=>s+(v.total||0),0);
   const taxas=vendas.reduce((s:number,v:any)=>
     s+((v.ifood||0)-(v.ifoodLiq??v.ifood??0))+((v["99food"]||0)-(v.nfoodLiq??v["99food"]??0)),0);
-  const cmv=CATS_CMV.reduce((s,cat)=>s+gastoCategoria(db.compras,cat,range.inicio,range.fim),0);
+  const cmv=CATS_CMV.reduce((s,cat)=>s+gastoCategoria(db.compras,cat,range.inicio,range.fim),0)+viaFinanceiro(db,range.inicio,range.fim,TIPOS_CMV_FIN);
+  // [agente] despesas pela regra da DRE: conta só entra se o destino for despesa/folha
+  // (alimentação/bebidas/limpeza já entram por Compras; simples/empréstimo ficam fora),
+  // e compra fora do CMV entra como despesa — cada real conta uma vez só.
   const despesas=(db.contas||[]).filter((c:any)=>c.vencimento>=range.inicio&&c.vencimento<=range.fim
-    &&c.status==="pago"&&c.tipo==="saida"&&c.origem!=="adiantamento_rh")
+    &&c.status==="pago"&&c.tipo==="saida"&&c.origem!=="adiantamento_rh"
+    &&!["fora","pendente"].includes(resolverDestinoDre(db,c.categoria)))
+    .reduce((s:number,c:any)=>s+parseMoney(c.valor),0)
+    +viaFinanceiro(db,range.inicio,range.fim,TIPOS_DESP_FIN)
+    +(db.compras||[]).filter((c:any)=>c.data>=range.inicio&&c.data<=range.fim&&!ehCategoriaCmv(c.categoria||"Outros"))
     .reduce((s:number,c:any)=>s+parseMoney(c.valor),0);
   const folhaMensal=(db.funcionarios||[]).reduce((s:number,f:any)=>s+(parseMoney(f.salario)||0),0);
   const [y,m]=dataRef.split("-").map(Number);
@@ -18238,7 +18330,7 @@ function Contas({db,setDb,empresa,setDbAndSave,pendingSub,setPendingSub}:{db:any
 
     {subTab==="dre"&&<div>
       <BackBar label="Contas" onClick={()=>setSubTab("lista")}/>
-      <DREComp db={db} setDb={setDb} empresa={empresa}/>
+      <DreAlternador classica={<DREComp db={db} setDb={setDb} empresa={empresa}/>} nova={<DreGerencial db={db} empresa={empresa} fn={{resumoPeriodo,calcularBudget,gerarIndicativos,deslocarPeriodo,periodoRange,gastoCategoria,viaFinanceiro,resolverDestinoDre,ehCategoriaCmv,parseMoney,CATS_CMV,TIPOS_CMV_FIN}}/>}/>
     </div>}
 
     {subTab==="lista"&&<div>
@@ -19978,6 +20070,13 @@ function DREComp({db,setDb,empresa}){
     if(ehCategoriaCmv(cat))cmvCats[cat]=(cmvCats[cat]||0)+v;
     else foraCmvCats[CATS_COMPRA.includes(cat)?cat:"A reclassificar"]=(foraCmvCats[CATS_COMPRA.includes(cat)?cat:"A reclassificar"]||0)+v;
   });
+  // [agente] compras via Financeiro entram na DRE (ver ehCompraViaFin)
+  const idsViaFin=new Set<string>();
+  contasPagas.forEach((c:any)=>{
+    const v=parseMoney(c.valor);
+    if(ehCompraViaFin(db,c,TIPOS_CMV_FIN)){cmvCats["Compras via Financeiro"]=(cmvCats["Compras via Financeiro"]||0)+v;idsViaFin.add(c.id);}
+    else if(ehCompraViaFin(db,c,TIPOS_DESP_FIN)){foraCmvCats["Limpeza via Financeiro"]=(foraCmvCats["Limpeza via Financeiro"]||0)+v;idsViaFin.add(c.id);}
+  });
   const totalCMV=Object.values(cmvCats).reduce((s,v)=>s+v,0);
   const totalForaCmv=Object.values(foraCmvCats).reduce((s,v)=>s+v,0);
   // Comparação com o orçado só faz sentido dentro de um mês: o budget é por
@@ -19999,7 +20098,7 @@ function DREComp({db,setDb,empresa}){
     const cat=c.categoria||"Outros";
     const v=parseMoney(c.valor);
     const destino=resolverDestinoDre(db,cat);
-    if(destino==="fora"){foraDaDre+=v;return;}
+    if(destino==="fora"){if(!idsViaFin.has(c.id))foraDaDre+=v;return;}
     if(destino==="pendente"){pendenteDaDre+=v;return;}
     const k=destino==="folha"?LINHA_FOLHA:cat;
     despCats[k]=(despCats[k]||0)+v;
@@ -23704,12 +23803,12 @@ function ConfiguracoesPanel({db,setDb,setDbAndSave,empresa,state,setState,theme,
           dashboard:{label:"Dashboard",icon:"📊"},vendas:{label:"Vendas",icon:"💰"},
           compras:{label:"Compras",icon:"🏪"},lista:{label:"Lista",icon:"🛒"},
           producao:{label:"Produção",icon:"🏭"},contas:{label:"Financeiro",icon:"📋"},
-          estoque:{label:"Estoque",icon:"📦"},fluxo:{label:"Fluxo de Caixa",icon:"💵"},
+          estoque:{label:"Estoque",icon:"📦"},fluxo:{label:"Fluxo de Caixa",icon:"💵"},casa:{label:"Casa",icon:"🏠"},
           gestao:{label:"Gestão",icon:"⚙️"},agenda:{label:"Encomenda",icon:"📦"},
           "cardapio-tv":{label:"Cardápio TV",icon:"📺"},
           config:{label:"Configurações",icon:"🔧"},
         };
-        const DEFAULT_ORDER=["dashboard","vendas","compras","lista","producao","contas","estoque","fluxo","gestao","agenda","cardapio-tv","config"];
+        const DEFAULT_ORDER=["dashboard","vendas","compras","lista","producao","contas","estoque","fluxo","casa","gestao","agenda","cardapio-tv","config"];
         const order=menuOrder.length===DEFAULT_ORDER.length?menuOrder:DEFAULT_ORDER;
         const move=(i:number,dir:-1|1)=>{const o=[...order];const ni=i+dir;if(ni<0||ni>=o.length)return;[o[i],o[ni]]=[o[ni],o[i]];changeMenuOrder(o);};
         return(<>

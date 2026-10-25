@@ -158,3 +158,28 @@ export function mediaDaSerie(serie) {
   if (!abertos.length) return 0;
   return r2(abertos.reduce((s, d) => s + d.total, 0) / abertos.length);
 }
+
+// ── Correção à mão de um canal automático ───────────────────────────────────
+// ⚠️ O CANAL AUTOMÁTICO É UMA LINHA À PARTE (PDV Eclética, PDV Seama, delivery,
+// relatório importado) e ela SOMA com o lançamento manual em todo lugar:
+// Dashboard, DRE, Painel, relatórios. Por isso a correção NÃO apaga nem edita a
+// linha do sistema — a ponte a mandaria de novo no próximo ciclo. O lançamento
+// manual guarda a DIFERENÇA (valor certo − valor do sistema), que pode ser
+// negativa; somadas as linhas, o canal do dia dá exatamente o valor corrigido.
+//
+// ⚠️ A diferença é RECALCULADA contra o sistema de AGORA a cada gravação: se o
+// PDV reenviar o dia com outro valor, o que fica fixo é o valor que o
+// administrador digitou, não a diferença antiga.
+//
+// iFood/99Food: o valor corrigido é o BRUTO, e o líquido sai da taxa — assim a
+// "Taxa das plataformas" da DRE (bruto − líquido somados) fecha em
+// valor × taxa, igual a um lançamento comum.
+export function correcaoDoCanal({ auto, autoLiq, valor, taxaPct, plataforma }) {
+  const a = num(auto);
+  const v = num(valor);
+  const deltaBruto = r2(v - a);
+  if (!plataforma) return { deltaBruto, deltaLiq: deltaBruto };
+  const al = autoLiq === undefined || autoLiq === null ? a : num(autoLiq);
+  const liq = v * (1 - num(taxaPct) / 100);
+  return { deltaBruto, deltaLiq: r2(liq - al) };
+}

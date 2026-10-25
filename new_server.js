@@ -249,7 +249,9 @@ function saveNsu(emp, nsu) {
 function setRateLimit(emp, minutes) {
   const f = path.join(CERTS_DIR, 'nsu.json');
   const m = getNsuMap();
-  m[`rateLimitUntil_${emp}`] = Date.now() + minutes * 60 * 1000;
+  const ate = Date.now() + minutes * 60 * 1000;
+  const cnpjDe = (e) => String(process.env[`CNPJ_${e}`] || "").replace(/\D/g, "");
+  for (const e of ["CONFRARIA", "SEAMA"]) if (e === emp || (cnpjDe(e) && cnpjDe(e) === cnpjDe(emp))) m[`rateLimitUntil_${e}`] = ate; // mesmo CNPJ = mesmo bloqueio
   fs.mkdirSync(CERTS_DIR, { recursive: true });
   fs.writeFileSync(f, JSON.stringify(m));
 }
@@ -754,14 +756,14 @@ function sefazDistDFe(emp) {
           console.log(`[SEFAZ ${emp}] HTTP ${apiRes.statusCode} cStat=${cStat} xMotivo=${xMotivo} ultNSU=${nsuResp}`);
 
           if (cStat === '656') {
-            if (nsuResp > 0 && nsuResp > (parseInt(String(ultNSU)) || 0)) {
-              saveNsu(nsuKey, nsuResp);
-              console.log(`[SEFAZ ${emp}] 656 → salvando ultNSU=${nsuResp} para próxima tentativa`);
-            }
+            // ⚠️ 656 não entrega documento nenhum: avançar o NSU aqui PULAVA as notas entre o
+          // NSU salvo e o máximo da SEFAZ (perdeu NF em 22/10/2026). Fica onde estava.
+          console.log(`[SEFAZ ${emp}] 656 → NSU mantido em ${ultNSU} (SEFAZ informa máximo ${nsuResp})`);
             return reject(new Error(`SEFAZ limitou as consultas (cStat 656). ${xMotivo}. Tente novamente em 1 hora.`));
           }
           if (cStat === '137') {
             if (nsuResp > (parseInt(ultNSU) || 0)) saveNsu(nsuKey, nsuResp);
+            setRateLimit(emp, 61); // SEFAZ: após 137, só consultar de novo depois de 1 hora
             return resolve({ nfes: [], total: 0, ultNSU: nsuResp, cStat, xMotivo });
           }
           if (cStat && cStat !== '138') {
@@ -1517,6 +1519,61 @@ const server = http.createServer((req, res) => {
   const urlPath = req.url.split('?')[0];
 
   // IA proxy
+
+  // ─- Comandas abertas (ponte Ecletica: balcao, mesa, comanda) ─-
+  if (req.method === 'POST' && urlPath === '/api/comandas-abertas') {
+    let body = '';
+    req.on('data', (c) => {
+      body += c;
+      if (body.length > 8 * 1024 * 1024) { res.writeHead(413); res.end(JSON.stringify({ error: 'Payload grande demais.' })); req.destroy(); }
+    });
+    req.on('end', () => {
+      try {
+        const secret = process.env.SEAMA_SERVICE_SECRET;
+        if (!secret) { res.writeHead(503); res.end(JSON.stringify({ error: 'Integracao nao configurada' })); return; }
+        if (req.headers['x-service-secret'] !== secret) { res.writeHead(401); res.end(JSON.stringify({ error: 'Credencial de servico invalida' })); return; }
+        const b = JSON.parse(body || '{}');
+        const snapshot = {
+          fonte: b.fonte || 'ecletica',
+          empresa: b.empresa || 'CONFRARIA',
+          gerado_em: b.gerado_em || new Date().toISOString(),
+          recebido_em: new Date().toISOString(),
+          comandas: Array.isArray(b.comandas) ? b.comandas : [],
+        };
+        fs.writeFileSync(path.join(DADOS_DIR, 'comandas-abertas.json'), JSON.stringify(snapshot));
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, comandas: snapshot.comandas.length }));
+      } catch (e) {
+        res.writeHead(400); res.end(JSON.stringify({ error: 'JSON invalido: ' + e.message }));
+      }
+    });
+    return;
+  }
+
+  if (req.method === 'GET' && urlPath === '/api/comandas-abertas') {
+    try {
+      const txt = fs.readFileSync(path.join(DADOS_DIR, 'comandas-abertas.json'), 'utf8');
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(txt);
+    } catch {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ comandas: [], gerado_em: null }));
+    }
+    return;
+  }
+
+
+  if (req.method === 'GET' && urlPath === '/comandas') {
+    try {
+      const html = fs.readFileSync(path.join(__dirname, 'comandas.html'), 'utf8');
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+      res.end(html);
+    } catch (e) {
+      res.writeHead(500); res.end('comandas.html nao encontrado');
+    }
+    return;
+  }
+
   if (req.method === 'POST' && urlPath === '/api/scan') {
     let body = '';
     req.on('data', chunk => { body += chunk; if (body.length > 30 * 1024 * 1024) { res.writeHead(413); res.end(JSON.stringify({error:'Imagem muito grande. Reduza o tamanho antes de enviar.'})); req.destroy(); } });
@@ -2263,6 +2320,992 @@ REGRAS:
     return;
   }
 
+  // ── Agente Financeiro: compra vinda de cupom via WhatsApp (v4: comandos) ──
+  // Autenticado pelo GESTAO_SERVICE_SECRET. Grava no mesmo formato do lançamento
+  // manual (compras + contas + movEstoque + materiasPrimas) e empurra pro PDV.
+  // Leitura e gravação síncronas: nenhum outro POST intercala no meio.
+  if (urlPath.startsWith('/api/agente-')) {
+    const segredoAg = process.env.GESTAO_SERVICE_SECRET;
+    if (!segredoAg || req.headers['x-service-secret'] !== segredoAg) {
+      res.writeHead(401); res.end(JSON.stringify({ error: 'Credencial de serviço inválida' })); return;
+    }
+    const empAg = String(req.headers['x-empresa'] || 'CONFRARIA').toUpperCase();
+    if (!['CONFRARIA', 'SEAMA'].includes(empAg)) { res.writeHead(400); res.end(JSON.stringify({ error: 'Empresa inválida: ' + empAg })); return; }
+    const arqAg = path.join(DADOS_DIR, `${empAg.toLowerCase()}.json`);
+
+    // Mapa DRE do próprio app (MAPA_DRE_PADRAO lido do App.tsx + mapaCategoriaDre do usuário)
+    const foldAg = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+    const mapaPadraoAg = (() => {
+      try {
+        const src = path.join(path.dirname(DADOS_DIR), 'src', 'App.tsx');
+        const st = fs.statSync(src);
+        if (global.__mapaDreAg && global.__mapaDreAg.mtime === st.mtimeMs) return global.__mapaDreAg.mapa;
+        const txt = fs.readFileSync(src, 'utf-8');
+        const ini = txt.indexOf('{', txt.indexOf('=', txt.indexOf('const MAPA_DRE_PADRAO')));
+        let nivel = 0, fim = ini;
+        for (; fim < txt.length; fim++) { if (txt[fim] === '{') nivel++; else if (txt[fim] === '}' && --nivel === 0) break; }
+        const corpo = txt.slice(ini, fim + 1).replace(/\/\/[^\n]*/g, '').replace(/,\s*}/g, '}');
+        const mapa = JSON.parse(corpo);
+        global.__mapaDreAg = { mtime: st.mtimeMs, mapa };
+        return mapa;
+      } catch (e) {
+        console.error('[agente] não li MAPA_DRE_PADRAO do App.tsx:', e.message);
+        return { alimentacao: 'fora', bebidas: 'fora', limpeza: 'fora', simples: 'fora', emprestimo: 'fora', 'negociacao de divida': 'fora' };
+      }
+    })();
+    const catsOficiaisAg = (() => {
+      try {
+        const txt = fs.readFileSync(path.join(path.dirname(DADOS_DIR), 'src', 'App.tsx'), 'utf-8');
+        const ler = (nome) => JSON.parse(txt.match(new RegExp(`const ${nome}=(\\[[^\\]]*\\])`))[1]);
+        return { cmv: ler('CATS_CMV'), naoCmv: ler('CATS_NAO_CMV') };
+      } catch (e) {
+        return { cmv: ['Proteínas', 'Hortifruti', 'Laticínios', 'Mercearia/Secos', 'Bebidas para revenda', 'Descartáveis de consumo do produto'], naoCmv: ['Material de limpeza e higiene', 'Outros'] };
+      }
+    })();
+    const destinoDreAg = (d, cat) => {
+      const k = foldAg(cat); if (!k) return 'pendente';
+      const ov = d?.mapaCategoriaDre?.[k];
+      if (ov === 'folha' || ov === 'despesa' || ov === 'fora') return ov;
+      return mapaPadraoAg[k] || 'pendente';
+    };
+
+    // ── helpers compartilhados pelos comandos ──
+    const lerJsonAg = () => new Promise((ok, falha) => { const ch = []; req.on('data', (c) => ch.push(c)); req.on('end', () => { try { ok(JSON.parse(Buffer.concat(ch).toString('utf-8') || '{}')); } catch (e) { falha(e); } }); });
+    const responderAg = (st, obj) => { res.setHeader('Content-Type', 'application/json'); res.writeHead(st); res.end(JSON.stringify(obj)); };
+    const gravarAg = (d) => {
+      try {
+        const backAg = path.join(DADOS_DIR, 'backups', 'agente', empAg.toLowerCase());
+        fs.mkdirSync(backAg, { recursive: true });
+        fs.writeFileSync(path.join(backAg, `antes_${Date.now()}.json`), fs.readFileSync(arqAg));
+        const velhos = fs.readdirSync(backAg).filter((f) => f.startsWith('antes_')).sort();
+        velhos.slice(0, Math.max(0, velhos.length - 20)).forEach((f) => fs.unlinkSync(path.join(backAg, f)));
+      } catch (e) { console.error('[agente] backup falhou:', e.message); }
+      const tmp = arqAg + '.agente.tmp'; fs.writeFileSync(tmp, JSON.stringify(d)); fs.renameSync(tmp, arqAg);
+      // Avisa os aparelhos com o app aberto (mesmo aviso que o app dispara ao salvar) — a tela recarrega na hora
+      try {
+        if (typeof sseClientes !== 'undefined' && typeof marcaDoArquivo === 'function') {
+          const msg = `event: dados\ndata: ${JSON.stringify({ emp: empAg, v: marcaDoArquivo(empAg) })}\n\n`;
+          for (const cli of sseClientes) { try { cli.write(msg); } catch {} }
+        }
+      } catch (e) { console.error('[agente] aviso aos aparelhos falhou:', e.message); }
+    };
+    const money2Ag = (v) => { if (typeof v === 'number') return v; const t = String(v ?? '').replace(/[^\d,.-]/g, ''); return (t.includes(',') ? parseFloat(t.replace(/\./g, '').replace(',', '.')) : parseFloat(t)) || 0; };
+    // Dicionário de classificação do app: chave = nome normalizado (igual ao foldNome do App.tsx).
+    // Grava também a variante com acento quando difere, para casar com qualquer normalização.
+    const chavesDicAg = (nome) => {
+      const base = String(nome || '').toLowerCase().replace(/\s+/g, ' ').trim();
+      const semAcento = base.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      return [...new Set([semAcento, base].filter(Boolean))];
+    };
+    const aprenderAg = (d, nome, categoria, origem = 'agente') => {
+      if (!nome || !categoria) return 0;
+      d.dicionarioClassificacao = d.dicionarioClassificacao || {};
+      let n = 0;
+      for (const k of chavesDicAg(nome)) {
+        const atual = d.dicionarioClassificacao[k];
+        if (atual && atual.origemAprendizado === 'usuario') continue; // nunca sobrescreve o que o usuário ensinou
+        if (atual && atual.categoria === categoria) continue;
+        d.dicionarioClassificacao[k] = { categoria, origemAprendizado: origem, ultimaAtualizacao: new Date().toISOString() };
+        n++;
+      }
+      return n;
+    };
+    const idAg = () => Math.random().toString(36).slice(2, 9) + Date.now().toString(36) + Math.random().toString(36).slice(2, 4);
+
+    // Lançar despesa avulsa (sem cupom)
+    if (req.method === 'POST' && urlPath === '/api/agente-despesa') {
+      lerJsonAg().then((p) => {
+        const valor = Number(p.valor);
+        if (!(valor > 0) || !p.descricao) return responderAg(400, { error: 'descricao e valor são obrigatórios' });
+        const d = JSON.parse(fs.readFileSync(arqAg, 'utf-8'));
+        if (!Array.isArray(d.contas)) d.contas = [];
+        const conta = { id: idAg(), descricao: String(p.descricao) + (p.forma ? ` (${p.forma})` : ''), categoria: p.categoria || 'Outros',
+          valor: +valor.toFixed(2), vencimento: p.data, status: p.status === 'pendente' ? 'pendente' : 'pago', tipo: 'saida',
+          origem: 'agente_whatsapp', grupoId: 'wa-d-' + idAg(), criadoEm: new Date().toISOString() };
+        if (p.funcionarioId && (d.funcionarios || []).some((f) => f.id === p.funcionarioId)) {
+          conta.funcionarioId = p.funcionarioId;
+          conta.fornecedor = (d.funcionarios.find((f) => f.id === p.funcionarioId) || {}).nome;
+        }
+        if (p.tipoRh === 'adiantamento') {
+          if (!conta.funcionarioId) return responderAg(400, { error: 'adiantamento precisa de um funcionário do RH' });
+          const mes = String(p.data || '').slice(0, 7);
+          Object.assign(conta, { descricao: 'Adiantamento – ' + (conta.fornecedor || ''), categoria: 'Adiantamento', status: 'pendente',
+            origem: 'adiantamento_rh', tipoRh: 'adiantamento', mesRef: mes, atualizadoEm: conta.criadoEm });
+          if (!Array.isArray(d.adiantamentos)) d.adiantamentos = [];
+          d.adiantamentos.unshift({ id: idAg(), funcionarioId: conta.funcionarioId, data: p.data, valor: conta.valor,
+            descricao: p.obs || 'via WhatsApp', mes, contaId: conta.id, grupoId: conta.grupoId, criadoEm: conta.criadoEm, atualizadoEm: conta.criadoEm });
+        }
+        d.contas.push(conta); gravarAg(d);
+        console.log(`[agente-despesa] ${empAg} ${conta.descricao} R$ ${conta.valor}`);
+        responderAg(200, { ok: true, conta });
+      }).catch((e) => responderAg(500, { error: e.message }));
+      return;
+    }
+
+    // Resumo de um período (contas, compras e vendas)
+    if (req.method === 'GET' && urlPath === '/api/agente-resumo') {
+      try {
+        const q = new URL(req.url, 'http://x').searchParams;
+        const de = q.get('de'), ate = q.get('ate') || de;
+        const d = JSON.parse(fs.readFileSync(arqAg, 'utf-8'));
+        const noPeriodo = (dt) => dt && dt.slice(0, 10) >= de && dt.slice(0, 10) <= ate;
+        const somaCat = {}; let saidas = 0, entradas = 0, aPagar = 0; const vencendo = [];
+        for (const c of d.contas || []) {
+          const dt = c.vencimento || c.data || (c.criadoEm || '').slice(0, 10);
+          if (!noPeriodo(dt)) continue;
+          const v = Number(c.valor) || 0;
+          if (c.tipo === 'entrada') { entradas += v; continue; }
+          if (c.status && c.status !== 'pago') { aPagar += v; vencendo.push({ descricao: c.descricao, valor: v, vencimento: dt }); continue; }
+          saidas += v; somaCat[c.categoria || 'Sem categoria'] = (somaCat[c.categoria || 'Sem categoria'] || 0) + v;
+        }
+        let vendas = 0, qtdVendas = 0; const diasVenda = new Set();
+        const canais = { maquininha: 0, dinheiro: 0, delivery: 0, ifood: 0, ifoodLiq: 0, food99: 0, food99Liq: 0 };
+        for (const v of d.vendas || []) {
+          const dt = v.data || v.dataVenda || v.date || (v.criadoEm || '').slice(0, 10);
+          if (!noPeriodo(dt)) continue;
+          vendas += Number(v.total ?? v.valor ?? v.totalVenda ?? 0) || 0; qtdVendas++; diasVenda.add(dt);
+          canais.maquininha += Number(v.maquininha) || 0; canais.dinheiro += Number(v.dinheiro) || 0;
+          canais.delivery += Number(v.delivery) || 0; canais.ifood += Number(v.ifood) || 0; canais.ifoodLiq += Number(v.ifoodLiq) || 0;
+          canais.food99 += Number(v['99food']) || 0; canais.food99Liq += Number(v.nfoodLiq) || 0;
+        }
+        const porItem = {};
+        for (const reg of d.itensVendidos || []) {
+          if (!noPeriodo(reg.data)) continue;
+          for (const it of reg.itens || []) {
+            const k = String(it.nome || '').trim(); if (!k) continue;
+            porItem[k] = porItem[k] || { nome: k, qtd: 0, valor: 0 };
+            porItem[k].qtd += Number(it.qtd) || 0; porItem[k].valor += Number(it.valor) || 0;
+          }
+        }
+        const topItens = Object.values(porItem).sort((a, b) => b.valor - a.valor).slice(0, 10);
+        const grupos = new Set((d.compras || []).filter((c) => noPeriodo(c.data)).map((c) => c.grupoId || c.id));
+        responderAg(200, { empresa: empAg, de, ate, saidas, entradas, aPagar, vencendo: vencendo.slice(0, 10),
+          porCategoria: Object.entries(somaCat).sort((a, b) => b[1] - a[1]), vendas, qtdVendas, diasVenda: diasVenda.size, canais, topItens, compras: grupos.size });
+      } catch (e) { responderAg(500, { error: e.message }); }
+      return;
+    }
+
+    // Desfazer o último lançamento feito pelo agente (preview → executar)
+    if (req.method === 'POST' && urlPath === '/api/agente-desfazer') {
+      lerJsonAg().then(async (p) => {
+        const d = JSON.parse(fs.readFileSync(arqAg, 'utf-8'));
+        const doAgente = (d.contas || []).filter((c) => String(c.grupoId || '').startsWith('wa-')).sort((a, b) => String(b.criadoEm).localeCompare(String(a.criadoEm)));
+        const alvo = p.grupoId ? doAgente.find((c) => c.grupoId === p.grupoId) : doAgente[0];
+        if (!alvo) return responderAg(404, { error: 'Nenhum lançamento do agente encontrado' });
+        const resumo = { grupoId: alvo.grupoId, descricao: alvo.descricao, valor: alvo.valor, data: alvo.vencimento, criadoEm: alvo.criadoEm };
+        if (!p.executar) return responderAg(200, { preview: resumo });
+
+        const g = alvo.grupoId; const removidos = [];
+        const tirar = (lista) => (d[lista] || []).filter((x) => { if (x.grupoId === g) { removidos.push(x.id); return false; } return true; });
+        for (const m of (d.movEstoque || []).filter((x) => x.grupoId === g && x.tipo === 'entrada')) {
+          const mp = (d.materiasPrimas || []).find((y) => y.id === m.mpId);
+          if (mp) mp.estoqueAtual = +((Number(mp.estoqueAtual) || 0) - (Number(m.quantidade) || 0)).toFixed(3);
+        }
+        d.compras = tirar('compras'); d.contas = tirar('contas'); d.movEstoque = tirar('movEstoque'); d.adiantamentos = tirar('adiantamentos');
+        // Lápides: sem isso os aparelhos abertos devolveriam os registros na próxima gravação
+        d.deletedIds = [...new Set([...(Array.isArray(d.deletedIds) ? d.deletedIds : []), ...removidos])].slice(-MAX_TOMBSTONES);
+        gravarAg(d);
+        let pdv = null;
+        if (!g.startsWith('wa-d-')) {
+          try {
+            const alvoPdv = pdvDaEmpresa(empAg);
+            if (alvoPdv && alvoPdv.secret) {
+              const up = await fetch(`${alvoPdv.base}/api/supply/purchase/reverse`, { method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-service-secret': alvoPdv.secret }, body: JSON.stringify({ origin_id: g }) });
+              pdv = await up.json().catch(() => null);
+            }
+          } catch (e) { pdv = { error: e.message }; }
+        }
+        console.log(`[agente-desfazer] ${empAg} ${g} removido (${removidos.length} registros)`);
+        responderAg(200, { ok: true, removido: resumo, registros: removidos.length, pdv });
+      }).catch((e) => responderAg(500, { error: e.message }));
+      return;
+    }
+
+
+    // DRE do período — mesma regra do resumoPeriodo() do App.tsx
+    if (req.method === 'GET' && urlPath === '/api/agente-dre') {
+      try {
+        const q = new URL(req.url, 'http://x').searchParams;
+        const de = q.get('de'), ate = q.get('ate') || de;
+        const d = JSON.parse(fs.readFileSync(arqAg, 'utf-8'));
+        const CATS_CMV = ['Proteínas', 'Hortifruti', 'Laticínios', 'Mercearia/Secos', 'Bebidas para revenda', 'Descartáveis de consumo do produto'];
+        const money = (v) => { if (typeof v === 'number') return v; const t = String(v ?? '').replace(/[^\d,.-]/g, ''); return (t.includes(',') ? parseFloat(t.replace(/\./g, '').replace(',', '.')) : parseFloat(t)) || 0; };
+        const dentro = (dt) => dt && dt >= de && dt <= ate;
+        const dias = Math.round((new Date(ate + 'T12:00:00') - new Date(de + 'T12:00:00')) / 86400000) + 1;
+
+        const vendas = (d.vendas || []).filter((v) => dentro(v.data));
+        const receita = vendas.reduce((s, v) => s + (v.total || 0), 0);
+        const taxas = vendas.reduce((s, v) => s + ((v.ifood || 0) - (v.ifoodLiq ?? v.ifood ?? 0)) + ((v['99food'] || 0) - (v.nfoodLiq ?? v['99food'] ?? 0)), 0);
+
+        const cmvPorCat = {};
+        for (const c of d.compras || []) {
+          if (!CATS_CMV.includes(c.categoria) || !dentro(c.data)) continue;
+          cmvPorCat[c.categoria] = (cmvPorCat[c.categoria] || 0) + money(c.valor);
+        }
+        let cmv = Object.values(cmvPorCat).reduce((s, v) => s + v, 0);
+
+        // Mesma regra da tela de DRE: conta entra só se o destino for despesa/folha;
+        // "fora" (compras, simples, empréstimo) não entra; "pendente" aparece à parte.
+        const despPorCat = {}; let despesas = 0, pendenteDre = 0;
+        let cmvViaFin = 0; const gruposCompra = new Set((d.compras || []).map((x) => x.grupoId).filter(Boolean));
+        for (const c of d.contas || []) {
+          if (!(c.vencimento >= de && c.vencimento <= ate && c.status === 'pago' && c.tipo === 'saida' && c.origem !== 'adiantamento_rh')) continue;
+          const v = money(c.valor);
+          const dest = destinoDreAg(d, c.categoria);
+          if (dest === 'fora') {
+            // Compra paga só pelo Financeiro (sem nota em Compras / NF-e): não pode sumir da DRE
+            const k = foldAg(c.categoria);
+            const ligada = c.origem === 'compra' || c.chNFe || c.xmlNFe || (c.grupoId && gruposCompra.has(c.grupoId));
+            if (!ligada && (k === 'alimentacao' || k === 'bebidas' || k === 'insumos')) { cmvViaFin += v; continue; }
+            if (!ligada && k === 'limpeza') { despesas += v; despPorCat['Limpeza via Financeiro'] = (despPorCat['Limpeza via Financeiro'] || 0) + v; continue; }
+            continue;
+          }
+          if (dest === 'pendente') { pendenteDre += v; continue; }
+          const k = dest === 'folha' ? 'Folha' : (c.categoria || 'Outros');
+          despesas += v; despPorCat[k] = (despPorCat[k] || 0) + v;
+        }
+        // Compras fora do CMV (limpeza, outros) são despesa — saíram do CMV mas o dinheiro saiu
+        for (const c of d.compras || []) {
+          if (CATS_CMV.includes(c.categoria) || !dentro(c.data)) continue;
+          const v = money(c.valor); const k = c.categoria || 'Outros';
+          despesas += v; despPorCat[k] = (despPorCat[k] || 0) + v;
+        }
+        if (cmvViaFin) { cmv += cmvViaFin; cmvPorCat['Compras via Financeiro'] = cmvViaFin; }
+        const folhaMensal = (d.funcionarios || []).reduce((s, f) => s + (money(f.salario) || 0), 0);
+        const [y, m] = de.split('-').map(Number);
+        const diasMes = new Date(y, m, 0).getDate();
+        const mesInteiro = de.endsWith('-01') && ate === `${de.slice(0, 8)}${String(diasMes).padStart(2, '0')}`;
+        const folha = mesInteiro ? folhaMensal : (folhaMensal / diasMes) * dias;
+        const resultado = receita - taxas - cmv - despesas;
+        const pct = (v) => (receita > 0 ? (v / receita) * 100 : 0);
+        responderAg(200, { empresa: empAg, de, ate, dias, receita, taxas, cmv, despesas, folha, resultado,
+          margemPct: pct(resultado), taxasPct: pct(taxas), cmvPct: pct(cmv), rhPct: pct(folha), despPct: pct(despesas),
+          pendenteDre, cmvPorCat: Object.entries(cmvPorCat).sort((a, b) => b[1] - a[1]),
+          despPorCat: Object.entries(despPorCat).sort((a, b) => b[1] - a[1]), qtdVendas: vendas.length });
+      } catch (e) { responderAg(500, { error: e.message }); }
+      return;
+    }
+
+
+    // Alterar a data de um lançamento do agente (compra ou despesa)
+    if (req.method === 'POST' && urlPath === '/api/agente-alterar-data') {
+      lerJsonAg().then((p) => {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(String(p.data || ''))) return responderAg(400, { error: 'data inválida (AAAA-MM-DD)' });
+        const d = JSON.parse(fs.readFileSync(arqAg, 'utf-8'));
+        const busca = foldAg(p.fornecedor || '');
+        const doAgente = (d.contas || []).filter((c) => String(c.grupoId || '').startsWith('wa-'))
+          .filter((c) => !busca || foldAg(c.descricao).includes(busca))
+          .sort((a, b) => String(b.criadoEm).localeCompare(String(a.criadoEm)));
+        const alvo = p.grupoId ? doAgente.find((c) => c.grupoId === p.grupoId) : doAgente[0];
+        if (!alvo) return responderAg(404, { error: busca ? `Nenhum lançamento do agente com "${p.fornecedor}"` : 'Nenhum lançamento do agente encontrado' });
+        const g = alvo.grupoId, antiga = alvo.vencimento; let n = 0;
+        const agora = new Date().toISOString();
+        for (const c of d.compras || []) if (c.grupoId === g) { c.data = p.data; c.atualizadoEm = agora; n++; }
+        for (const m of d.movEstoque || []) if (m.grupoId === g) { m.data = p.data; m.atualizadoEm = agora; n++; }
+        for (const c of d.contas || []) if (c.grupoId === g) { c.vencimento = p.data; c.atualizadoEm = agora; n++; }
+        gravarAg(d);
+        console.log(`[agente-alterar-data] ${empAg} ${g} ${antiga} → ${p.data} (${n} registros)`);
+        responderAg(200, { ok: true, descricao: alvo.descricao, valor: alvo.valor, de: antiga, para: p.data, registros: n });
+      }).catch((e) => responderAg(500, { error: e.message }));
+      return;
+    }
+
+
+    // Reclassificar itens de compra (só para categorias oficiais)
+    if (req.method === 'POST' && urlPath === '/api/agente-reclassificar') {
+      lerJsonAg().then((p) => {
+        const oficiais = [...catsOficiaisAg.cmv, ...catsOficiaisAg.naoCmv];
+        const mapa = new Map((p.itens || []).filter((i) => oficiais.includes(i.categoria)).map((i) => [i.id, i.categoria]));
+        const d = JSON.parse(fs.readFileSync(arqAg, 'utf-8'));
+        let n = 0; const agora = new Date().toISOString();
+        let aprendidos = 0;
+        for (const c of d.compras || []) {
+          if (!mapa.has(c.id)) continue;
+          if (c.categoria !== mapa.get(c.id)) { c.categoria = mapa.get(c.id); c.atualizadoEm = agora; n++; }
+          aprendidos += aprenderAg(d, c.nomeProduto, mapa.get(c.id));
+        }
+        if (n || aprendidos) gravarAg(d);
+        console.log(`[agente-reclassificar] ${empAg}: ${n} itens, ${aprendidos} aprendidos no dicionário`);
+        responderAg(200, { ok: true, alterados: n, aprendidos });
+      }).catch((e) => responderAg(500, { error: e.message }));
+      return;
+    }
+
+
+    // Contas a pagar: vencidas e até a data informada
+    if (req.method === 'GET' && urlPath === '/api/agente-contas-vencer') {
+      try {
+        const q = new URL(req.url, 'http://x').searchParams;
+        const hojeQ = q.get('hoje'), ate = q.get('ate') || hojeQ;
+        const d = JSON.parse(fs.readFileSync(arqAg, 'utf-8'));
+        const abertas = (d.contas || []).filter((c) => c.tipo === 'saida' && c.status !== 'pago' && /^\d{4}-\d{2}-\d{2}$/.test(String(c.vencimento || '')));
+        const item = (c) => ({ descricao: c.descricao, valor: money2Ag(c.valor), vencimento: c.vencimento, categoria: c.categoria });
+        responderAg(200, {
+          empresa: empAg,
+          vencidas: abertas.filter((c) => c.vencimento < hojeQ).map(item).sort((a, b) => a.vencimento.localeCompare(b.vencimento)),
+          periodo: abertas.filter((c) => c.vencimento >= hojeQ && c.vencimento <= ate).map(item).sort((a, b) => a.vencimento.localeCompare(b.vencimento)),
+        });
+      } catch (e) { responderAg(500, { error: e.message }); }
+      return;
+    }
+
+    // Vendas por dia (para comparar com a média)
+    if (req.method === 'GET' && urlPath === '/api/agente-vendas-dias') {
+      try {
+        const q = new URL(req.url, 'http://x').searchParams;
+        const de = q.get('de'), ate = q.get('ate');
+        const d = JSON.parse(fs.readFileSync(arqAg, 'utf-8'));
+        const dias = {};
+        for (const v of d.vendas || []) if (v.data >= de && v.data <= ate) dias[v.data] = (dias[v.data] || 0) + (Number(v.total) || 0);
+        const semMovimento = Object.entries(d.fechamentos || {}).filter(([dt, f]) => dt >= de && dt <= ate && f && f.semMovimento).map(([dt]) => dt);
+        responderAg(200, { empresa: empAg, dias, semMovimento });
+      } catch (e) { responderAg(500, { error: e.message }); }
+      return;
+    }
+
+
+    // Ensina o dicionário com o histórico de compras já classificadas (categoria mais frequente por produto)
+    if (req.method === 'POST' && urlPath === '/api/agente-aprender-historico') {
+      try {
+        const oficiais = [...catsOficiaisAg.cmv, ...catsOficiaisAg.naoCmv];
+        const d = JSON.parse(fs.readFileSync(arqAg, 'utf-8'));
+        const cont = {};
+        for (const c of d.compras || []) {
+          if (!oficiais.includes(c.categoria) || c.categoria === 'Outros') continue;
+          const nome = String(c.nomeProduto || '').trim(); if (!nome) continue;
+          cont[nome] = cont[nome] || {}; cont[nome][c.categoria] = (cont[nome][c.categoria] || 0) + 1;
+        }
+        const antes = Object.keys(d.dicionarioClassificacao || {}).length;
+        let n = 0;
+        for (const [nome, cats] of Object.entries(cont)) {
+          const [cat] = Object.entries(cats).sort((a, b) => b[1] - a[1])[0];
+          n += aprenderAg(d, nome, cat, 'historico');
+        }
+        if (n) gravarAg(d);
+        const depois = Object.keys(d.dicionarioClassificacao || {}).length;
+        console.log(`[agente-aprender] ${empAg}: dicionário ${antes} → ${depois}`);
+        responderAg(200, { ok: true, antes, depois, novos: n });
+      } catch (e) { responderAg(500, { error: e.message }); }
+      return;
+    }
+
+
+    // Funcionários do RH (para conciliar nomes citados no WhatsApp)
+    if (req.method === 'GET' && urlPath === '/api/agente-funcionarios') {
+      try {
+        const d = JSON.parse(fs.readFileSync(arqAg, 'utf-8'));
+        responderAg(200, (d.funcionarios || []).filter((f) => f.ativo !== false && !f.demitidoEm && !f.dataDemissao)
+          .map((f) => ({ id: f.id, nome: f.nome, funcao: f.funcao })));
+      } catch (e) { responderAg(500, { error: e.message }); }
+      return;
+    }
+
+
+    // Concilia contas de pessoal antigas (comissão, vale, salário...) sem funcionário, pelo nome na descrição
+    if (req.method === 'POST' && urlPath === '/api/agente-conciliar-funcionarios') {
+      lerJsonAg().then((p) => {
+        const d = JSON.parse(fs.readFileSync(arqAg, 'utf-8'));
+        const funcs = (d.funcionarios || []).filter((f) => f && f.id && f.nome);
+        const fold = (x) => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z\s]/g, ' ').replace(/\s+/g, ' ').trim();
+        const IGN = new Set(['da', 'de', 'do', 'das', 'dos', 'e', 'comissao', 'semanal', 'mensal', 'vale', 'salario', 'adiantamento', 'diaria', 'bonus', 'pix', 'dinheiro', 'pagamento', 'pgto', 'ref', 'semana', 'quinzena', 'ferias', 'decimo', 'terceiro', 'rescisao', 'gratificacao', 'extra', 'hora', 'horas', 'transporte', 'alimentacao']);
+        const toks = (x) => fold(x).split(' ').filter((t) => t.length >= 3 && !IGN.has(t));
+        const PESSOAL = /comiss|vale|sal[aá]rio|adiant|di[aá]ria|b[oô]nus|gratifica|f[eé]rias|13|d[eé]cimo|rescis|hora extra|folha/i;
+        const propostas = [], duvidas = []; let semNome = 0;
+        for (const c of d.contas || []) {
+          if (c.tipo === 'entrada' || c.funcionarioId) continue;
+          const texto = `${c.descricao || ''} ${c.fornecedor || ''}`;
+          const destino = (() => { try { return destinoDreAg(d, c.categoria || ''); } catch { return ''; } })();
+          if (destino !== 'folha' && !PESSOAL.test(texto + ' ' + (c.categoria || ''))) continue;
+          const q = toks(texto); if (!q.length) { semNome++; continue; }
+          const pont = funcs.map((f) => {
+            const n = fold(f.nome).split(' ').filter((t) => t && !['da', 'de', 'do', 'das', 'dos', 'e'].includes(t));
+            let sc = 0;
+            for (const t of q) n.forEach((x, i) => {
+              if (x === t) sc = Math.max(sc, i === 0 ? 80 : 60);
+              else if (t.length >= 4 && (x.startsWith(t) || t.startsWith(x))) sc = Math.max(sc, i === 0 ? 55 : 45);
+            });
+            return { f, sc };
+          }).filter((x) => x.sc > 0).sort((a, b) => b.sc - a.sc);
+          if (!pont.length) { semNome++; continue; }
+          const topo = pont.filter((x) => x.sc === pont[0].sc);
+          const item = { id: c.id, descricao: c.descricao, valor: c.valor, data: c.vencimento, categoria: c.categoria };
+          if (topo.length === 1 && pont[0].sc >= 80) propostas.push({ ...item, funcionarioId: pont[0].f.id, funcionario: pont[0].f.nome });
+          else duvidas.push({ ...item, opcoes: topo.map((x) => x.f.nome) });
+        }
+        if (p.executar) {
+          const mapa = new Map(propostas.map((x) => [x.id, x]));
+          const agora = new Date().toISOString(); let n = 0;
+          for (const c of d.contas || []) { const x = mapa.get(c.id); if (x && !c.funcionarioId) { c.funcionarioId = x.funcionarioId; c.atualizadoEm = agora; n++; } }
+          if (n) gravarAg(d);
+          console.log(`[agente-conciliar] ${empAg}: ${n} contas vinculadas`);
+          return responderAg(200, { ok: true, vinculadas: n, duvidas, semNome });
+        }
+        responderAg(200, { propostas, duvidas, semNome });
+      }).catch((e) => responderAg(500, { error: e.message }));
+      return;
+    }
+
+
+    // ── Lista de Compras (mesmo formato da aba Lista do app) ──
+    const listaAtual = (d) => {
+      if (!d.listaAtualId) { d.listaAtualId = idAg(); d.listaAtualAbertaEm = new Date().toISOString(); }
+      const del = new Set(d.listaDeletedIds || []);
+      return (d.listaCompras || []).filter((i) => i.listaId === d.listaAtualId && !del.has(i.id));
+    };
+    const foldL = (x) => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+    if (req.method === 'GET' && urlPath === '/api/agente-lista') {
+      try {
+        const d = JSON.parse(fs.readFileSync(arqAg, 'utf-8')); const l = listaAtual(d);
+        responderAg(200, { abertaEm: d.listaAtualAbertaEm, pendentes: l.filter((i) => !i.comprado && !i.naoTem), comprados: l.filter((i) => i.comprado), naoTem: l.filter((i) => i.naoTem && !i.comprado) });
+      } catch (e) { responderAg(500, { error: e.message }); }
+      return;
+    }
+    if (req.method === 'POST' && urlPath === '/api/agente-lista-add') {
+      lerJsonAg().then((p) => {
+        const d = JSON.parse(fs.readFileSync(arqAg, 'utf-8')); d.listaCompras = d.listaCompras || [];
+        const l = listaAtual(d); const agora = Date.now(); const res = [];
+        let ordem = Math.max(0, ...d.listaCompras.map((i) => Number(i.ordem) || 0));
+        for (const it of p.itens || []) {
+          const nome = String(it.nome || '').trim(); if (!nome) continue;
+          const pend = l.find((i) => !i.comprado && foldL(i.nome) === foldL(nome));
+          if (pend) { // já está na lista: atualiza a quantidade
+            if (it.quantidade) { pend.quantidade = Number(it.quantidade); if (it.unidade) pend.unidade = it.unidade; }
+            if (it.urgente) pend.urgente = true; if (it.obs) pend.obs = it.obs;
+            pend.updatedAt = agora; res.push({ ...pend, jaEstava: true }); continue;
+          }
+          // aproveita categoria e corredor (rua) de quando esse item já foi pedido antes
+          const antes = [...d.listaCompras].reverse().find((i) => foldL(i.nome) === foldL(nome));
+          const novo = { id: idAg() + Math.random().toString(36).slice(2, 6), listaId: d.listaAtualId, nome: antes?.nome || nome.charAt(0).toUpperCase() + nome.slice(1),
+            quantidade: Number(it.quantidade) || 1, unidade: it.unidade || antes?.unidade || 'un', categoria: antes?.categoria || 'outros', rua: antes?.rua || '',
+            estoqueQtd: '', estoqueUn: it.unidade || antes?.unidade || 'un', obs: it.obs || '', urgente: !!it.urgente, comprado: false, naoTem: false,
+            ordem: ++ordem, adicionadoPor: p.por || 'WhatsApp', criadoEm: new Date().toISOString(), updatedAt: agora };
+          d.listaCompras.push(novo); res.push(novo);
+        }
+        if (res.length) gravarAg(d);
+        responderAg(200, { ok: true, itens: res });
+      }).catch((e) => responderAg(500, { error: e.message }));
+      return;
+    }
+    // Marca como comprado / não tem / remove, pelo nome
+    if (req.method === 'POST' && urlPath === '/api/agente-lista-marcar') {
+      lerJsonAg().then((p) => {
+        const d = JSON.parse(fs.readFileSync(arqAg, 'utf-8')); const l = listaAtual(d); const agora = Date.now();
+        const feitos = [], naoAchados = [];
+        for (const nome of p.nomes || []) {
+          const q = foldL(nome).split(' ').filter((t) => t.length >= 3);
+          const cand = l.filter((i) => (p.acao === 'desmarcar' ? i.comprado : !i.comprado))
+            .map((i) => ({ i, sc: foldL(i.nome) === foldL(nome) ? 99 : q.filter((t) => foldL(i.nome).includes(t)).length }))
+            .filter((x) => x.sc > 0).sort((a, b) => b.sc - a.sc);
+          if (!cand.length) { naoAchados.push(nome); continue; }
+          const it = cand[0].i;
+          if (p.acao === 'comprado') { it.comprado = true; it.naoTem = false; }
+          else if (p.acao === 'naoTem') { it.naoTem = true; }
+          else if (p.acao === 'desmarcar') { it.comprado = false; }
+          else if (p.acao === 'remover') { d.listaDeletedIds = [...new Set([...(d.listaDeletedIds || []), it.id])].slice(-MAX_TOMBSTONES); d.listaCompras = d.listaCompras.filter((x) => x.id !== it.id); }
+          it.updatedAt = agora; feitos.push(it.nome);
+        }
+        if (feitos.length) gravarAg(d);
+        responderAg(200, { ok: true, feitos, naoAchados });
+      }).catch((e) => responderAg(500, { error: e.message }));
+      return;
+    }
+
+
+    // ── Venda fora do sistema (WhatsApp): 1 registro por dia/empresa com origem "whatsapp" ──
+    const recalcVendaWa = (v) => {
+      const f = { pix: 0, dinheiro: 0, credito: 0, debito: 0, outros: 0 };
+      for (const l of v.lancamentosWa || []) f[f[l.forma] !== undefined ? l.forma : 'outros'] += Number(l.valor) || 0;
+      const r2 = (x) => Math.round(x * 100) / 100;
+      Object.keys(f).forEach((k) => { f[k] = r2(f[k]); });
+      v.formas = Object.fromEntries(Object.entries(f).filter(([, x]) => x));
+      v.dinheiro = f.dinheiro; v.maquininha = r2(f.credito + f.debito); v.delivery = 0;
+      v.total = r2(Object.values(f).reduce((a, b) => a + b, 0)); v.atualizadoEm = new Date().toISOString();
+    };
+    if (req.method === 'POST' && urlPath === '/api/agente-venda') {
+      lerJsonAg().then((p) => {
+        const valor = Number(p.valor); if (!(valor > 0)) return responderAg(400, { error: 'valor inválido' });
+        const data = /^\d{4}-\d{2}-\d{2}$/.test(p.data || '') ? p.data : new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Belem' }).format(new Date());
+        const d = JSON.parse(fs.readFileSync(arqAg, 'utf-8')); d.vendas = d.vendas || [];
+        const id = `wa-venda-${empAg.toLowerCase()}-${data}`;
+        let v = d.vendas.find((x) => x.id === id);
+        if (!v) { v = { id, data, total: 0, maquininha: 0, dinheiro: 0, ifood: 0, ifoodTaxa: 0, ifoodLiq: 0, '99food': 0, nfoodTaxa: 0, nfoodLiq: 0, delivery: 0, porHora: [], origem: 'whatsapp', lancamentosWa: [], criadoEm: new Date().toISOString() }; d.vendas.push(v); }
+        d.deletedIds = (d.deletedIds || []).filter((x) => x !== id);
+        v.lancamentosWa = v.lancamentosWa || [];
+        const lanc = { id: idAg(), valor: Math.round(valor * 100) / 100, forma: p.forma || 'outros', descricao: p.descricao || '', criadoEm: new Date().toISOString() };
+        v.lancamentosWa.push(lanc); recalcVendaWa(v); gravarAg(d);
+        console.log(`[agente-venda] ${empAg} ${data} +${lanc.valor} (${lanc.forma})`);
+        responderAg(200, { ok: true, lancamento: lanc, data, totalDia: v.total, qtdDia: v.lancamentosWa.length });
+      }).catch((e) => responderAg(500, { error: e.message }));
+      return;
+    }
+    if (req.method === 'POST' && urlPath === '/api/agente-venda-desfazer') {
+      try {
+        const d = JSON.parse(fs.readFileSync(arqAg, 'utf-8'));
+        let alvo = null, reg = null;
+        for (const v of (d.vendas || []).filter((x) => x.origem === 'whatsapp'))
+          for (const l of v.lancamentosWa || []) if (!alvo || l.criadoEm > alvo.criadoEm) { alvo = l; reg = v; }
+        if (!alvo) { responderAg(404, { error: 'nenhuma venda lançada pelo WhatsApp' }); return; }
+        reg.lancamentosWa = reg.lancamentosWa.filter((l) => l.id !== alvo.id);
+        if (!reg.lancamentosWa.length) { d.vendas = d.vendas.filter((x) => x.id !== reg.id); d.deletedIds = [...new Set([...(d.deletedIds || []), reg.id])].slice(-MAX_TOMBSTONES); }
+        else recalcVendaWa(reg);
+        gravarAg(d);
+        responderAg(200, { ok: true, removido: alvo, data: reg.data });
+      } catch (e) { responderAg(500, { error: e.message }); }
+      return;
+    }
+
+
+    // iFood / 99Food do dia (valor do portal): DEFINE o canal no registro "whatsapp" do dia
+    if (req.method === 'POST' && urlPath === '/api/agente-canal') {
+      lerJsonAg().then((p) => {
+        const canal = p.canal === '99food' ? '99food' : 'ifood';
+        const kBruto = canal, kTaxa = canal === 'ifood' ? 'ifoodTaxa' : 'nfoodTaxa', kLiq = canal === 'ifood' ? 'ifoodLiq' : 'nfoodLiq';
+        const bruto = Math.max(0, Number(p.bruto) || 0);
+        const data = /^\d{4}-\d{2}-\d{2}$/.test(p.data || '') ? p.data : new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Belem' }).format(new Date());
+        const d = JSON.parse(fs.readFileSync(arqAg, 'utf-8')); d.vendas = d.vendas || [];
+        // taxa: em R$, em % ou pelo líquido; sem nada → última taxa % usada nesse canal
+        const ultimaPct = [...d.vendas].filter((v) => Number(v[kTaxa]) > 0).sort((a, b) => String(b.data).localeCompare(String(a.data)))[0]?.[kTaxa] || 0;
+        let pct = 0, liq = bruto, origemTaxa = 'sem taxa';
+        if (Number(p.liquido) > 0 && bruto) { liq = Math.min(bruto, Number(p.liquido)); if (Number(p.liquido) < 0.01) liq = 0; pct = bruto ? (1 - liq / bruto) * 100 : 0; origemTaxa = 'pelo líquido'; }
+        else if (Number(p.taxaValor) > 0) { liq = bruto - Number(p.taxaValor); pct = bruto ? (Number(p.taxaValor) / bruto) * 100 : 0; origemTaxa = 'informada'; }
+        else if (Number(p.taxaPct) > 0) { pct = Number(p.taxaPct); liq = bruto * (1 - pct / 100); origemTaxa = 'informada'; }
+        else if (ultimaPct > 0) { pct = Number(ultimaPct); liq = bruto * (1 - pct / 100); origemTaxa = 'última taxa usada'; }
+        const r2 = (x) => Math.round(x * 100) / 100;
+        const id = `wa-venda-${empAg.toLowerCase()}-${data}`;
+        let v = d.vendas.find((x) => x.id === id);
+        if (!v) { v = { id, data, total: 0, maquininha: 0, dinheiro: 0, ifood: 0, ifoodTaxa: 0, ifoodLiq: 0, '99food': 0, nfoodTaxa: 0, nfoodLiq: 0, delivery: 0, porHora: [], origem: 'whatsapp', lancamentosWa: [], criadoEm: new Date().toISOString() }; d.vendas.push(v); }
+        d.deletedIds = (d.deletedIds || []).filter((x) => x !== id);
+        v[kBruto] = r2(bruto); v[kTaxa] = r2(pct); v[kLiq] = r2(liq); v.atualizadoEm = new Date().toISOString();
+        gravarAg(d);
+        console.log(`[agente-canal] ${empAg} ${data} ${canal} bruto=${v[kBruto]} taxa=${v[kTaxa]}% liq=${v[kLiq]}`);
+        responderAg(200, { ok: true, canal, data, bruto: v[kBruto], taxaPct: v[kTaxa], taxaValor: r2(bruto - liq), liquido: v[kLiq], origemTaxa });
+      }).catch((e) => responderAg(500, { error: e.message }));
+      return;
+    }
+
+    if (req.method === 'GET' && urlPath === '/api/agente-categorias') {
+      try {
+        const d = JSON.parse(fs.readFileSync(arqAg, 'utf-8'));
+        const uniq = (a) => [...new Set(a.filter(Boolean))].sort();
+        res.setHeader('Content-Type', 'application/json'); res.writeHead(200);
+        res.end(JSON.stringify({
+          compras: [...catsOficiaisAg.cmv, ...catsOficiaisAg.naoCmv],
+          comprasCmv: catsOficiaisAg.cmv,
+          contas: uniq((d.contas || []).filter((c) => c.tipo === 'saida').map((c) => c.categoria)),
+        }));
+      } catch (e) { res.writeHead(500); res.end(JSON.stringify({ error: e.message })); }
+      return;
+    }
+    if (req.method === 'POST' && urlPath === '/api/agente-compra') {
+      const chunksAg = [];
+      req.on('data', (c) => chunksAg.push(c));
+      req.on('end', async () => {
+        try {
+          const p = JSON.parse(Buffer.concat(chunksAg).toString('utf-8'));
+          if (p.dataForcada) p.data = p.dataForcada;
+          if (!p.grupoId || !Array.isArray(p.itens) || !p.itens.length || !p.data) {
+            res.writeHead(400); res.end(JSON.stringify({ error: 'grupoId, data e itens são obrigatórios' })); return;
+          }
+          const d = JSON.parse(fs.readFileSync(arqAg, 'utf-8'));
+          for (const k of ['compras', 'contas', 'movEstoque', 'materiasPrimas', 'fornecedores']) if (!Array.isArray(d[k])) d[k] = [];
+
+          if (d.compras.some((c) => c.grupoId === p.grupoId) || d.contas.some((c) => c.grupoId === p.grupoId)) {
+            res.setHeader('Content-Type', 'application/json'); res.writeHead(200);
+            res.end(JSON.stringify({ duplicado: true })); return;
+          }
+
+          const novoId = () => Math.random().toString(36).slice(2, 9) + Date.now().toString(36) + Math.random().toString(36).slice(2, 4);
+          const agora = new Date().toISOString();
+          const normAg = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/\s+/g, ' ').trim();
+          const fornecedor = String(p.fornecedor || 'Fornecedor não identificado').trim();
+          const novosMp = [];
+          const alertasPreco = [];
+          const itensPdv = [];
+
+          for (const it of p.itens) {
+            const qtd = Number(it.quantidade) || 0;
+            if (!it.nome || !(qtd > 0)) continue;
+            const valorLinha = Number(it.valor) || 0;
+            const vUn = Number(it.valorUnitario) || (valorLinha ? valorLinha / qtd : 0);
+            const valor = valorLinha || qtd * vUn;
+            const unidade = it.unidade || 'un';
+
+            let mp = d.materiasPrimas.find((m) => normAg(m.nome) === normAg(it.nome));
+            const precoAnterior = mp && String(mp.unidade || '').toLowerCase() === String(unidade).toLowerCase() ? Number(mp.ultimoValor) || 0 : 0;
+            if (!mp) {
+              mp = { id: novoId(), nome: String(it.nome).trim(), categoria: 'insumos', unidade, ultimoValor: 0, estoqueAtual: 0, fornecedores: [] };
+              d.materiasPrimas.push(mp); novosMp.push(mp.nome);
+            }
+            mp.estoqueAtual = +((Number(mp.estoqueAtual) || 0) + qtd).toFixed(3);
+            const limiteAlta = Number(p.alertaPrecoPct || 10);
+            if (precoAnterior > 0 && vUn > precoAnterior * (1 + limiteAlta / 100)) {
+              alertasPreco.push({ nome: mp.nome, de: precoAnterior, para: +vUn.toFixed(4), pct: ((vUn / precoAnterior - 1) * 100) });
+            }
+            if (vUn > 0) mp.ultimoValor = +vUn.toFixed(4);
+            if (!(mp.fornecedores || []).includes(fornecedor)) mp.fornecedores = [...(mp.fornecedores || []), fornecedor];
+
+            const oficiais = [...catsOficiaisAg.cmv, ...catsOficiaisAg.naoCmv];
+            const catItem = oficiais.includes(it.categoria) ? it.categoria : oficiais.includes(p.categoriaCompra) ? p.categoriaCompra : 'Outros';
+            if (oficiais.includes(it.categoria)) { aprenderAg(d, it.nome, catItem); aprenderAg(d, mp.nome, catItem); }
+            d.compras.push({ id: novoId(), fornecedor, nomeProduto: mp.nome, categoria: catItem, unidade,
+              quantidade: qtd, valorUnitario: +vUn.toFixed(4), valor: +valor.toFixed(2), data: p.data,
+              origem: 'agente_whatsapp', grupoId: p.grupoId, criadoEm: agora });
+            d.movEstoque.push({ id: novoId(), mpId: mp.id, mpNome: mp.nome, tipo: 'entrada', quantidade: qtd, unidade,
+              custo: +vUn.toFixed(4), data: p.data, descricao: `Compra – ${fornecedor}`, grupoId: p.grupoId, criadoEm: agora });
+            itensPdv.push({ nome: mp.nome, quantidade: qtd, unidade, valor_unitario: vUn > 0 ? +vUn.toFixed(4) : null });
+          }
+
+          if (!itensPdv.length) { res.writeHead(400); res.end(JSON.stringify({ error: 'Nenhum item válido' })); return; }
+
+          const total = Number(p.total) || d.compras.filter((c) => c.grupoId === p.grupoId).reduce((s, c) => s + c.valor, 0);
+          // A conta da compra precisa cair num destino "fora" do DRE (alimentação/bebidas/limpeza),
+          // senão a tela de DRE conta a compra duas vezes (itens no CMV + conta nas despesas).
+          const catConta = destinoDreAg(d, p.categoriaConta) === 'fora' ? p.categoriaConta : 'Alimentação';
+          d.contas.push({ id: novoId(), descricao: `Compra – ${fornecedor}${p.formaPagamento ? ' (' + p.formaPagamento + ')' : ''}`,
+            categoria: catConta, valor: +total.toFixed(2), vencimento: p.data, status: 'pago',
+            tipo: 'saida', origem: 'compra', grupoId: p.grupoId, criadoEm: agora });
+
+          const cnpjDig = String(p.cnpj || '').replace(/\D/g, '');
+          if (cnpjDig.length === 14 && !d.fornecedores.some((f) => String(f.cnpj || '').replace(/\D/g, '') === cnpjDig)) {
+            const cnpjFmt = cnpjDig.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+            d.fornecedores.push({ id: novoId(), nome: fornecedor, cnpj: cnpjFmt, endereco: p.endereco || '', criadoEm: agora });
+          }
+
+          // Backup próprio (pasta separada, guarda os 20 últimos) — não interfere na rotação do app
+          try {
+            const backAg = path.join(DADOS_DIR, 'backups', 'agente', empAg.toLowerCase());
+            fs.mkdirSync(backAg, { recursive: true });
+            fs.writeFileSync(path.join(backAg, `antes_${Date.now()}.json`), fs.readFileSync(arqAg));
+            const velhos = fs.readdirSync(backAg).filter((f) => f.startsWith('antes_')).sort();
+            velhos.slice(0, Math.max(0, velhos.length - 20)).forEach((f) => fs.unlinkSync(path.join(backAg, f)));
+          } catch (e) { console.error('[agente-compra] backup falhou:', e.message); }
+
+          const tmpAg = arqAg + '.agente.tmp';
+          fs.writeFileSync(tmpAg, JSON.stringify(d));
+          fs.renameSync(tmpAg, arqAg);
+          console.log(`[agente-compra] ${empAg} ${p.grupoId} gravado: ${itensPdv.length} itens, R$ ${total.toFixed(2)}`);
+
+          // Estoque do PDV (mesmo caminho do /api/seama-estoque)
+          let pdv = null;
+          try {
+            const alvo = pdvDaEmpresa(empAg);
+            if (alvo && alvo.secret) {
+              const up = await fetch(`${alvo.base}/api/supply/purchase`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-service-secret': alvo.secret },
+                body: JSON.stringify({ origin_id: p.grupoId, supplier: fornecedor, items: itensPdv }),
+              });
+              pdv = await up.json().catch(() => null);
+            }
+          } catch (e) { pdv = { error: e.message }; }
+
+          res.setHeader('Content-Type', 'application/json'); res.writeHead(200);
+          res.end(JSON.stringify({ ok: true, empresa: empAg, itens: itensPdv.length, total, novosMp, alertasPreco, pdv }));
+        } catch (e) {
+          console.error('[agente-compra] erro:', e);
+          res.writeHead(500); res.end(JSON.stringify({ error: e.message }));
+        }
+      });
+      return;
+    }
+  }
+
+  // ── Casa (gastos pessoais) — separado da empresa, só para o dono ──────────
+  if (urlPath === '/casa' || urlPath.startsWith('/api/casa') || urlPath.startsWith('/api/agente-casa')) {
+    const arqCasa = path.join(DADOS_DIR, 'casa.json');
+    const CATS_CASA = ['Mercado', 'Farmácia e Saúde', 'Combustível e Transporte', 'Contas da casa', 'Escola e Educação', 'Lazer e Restaurantes', 'Vestuário', 'Pets', 'Outros', 'Transferências'];
+    const TRANSF = 'Transferências';
+    const lerCasa = () => { try { return JSON.parse(fs.readFileSync(arqCasa, 'utf-8')); } catch { return { lancamentos: [], orcamento: {} }; } };
+    try { const _cc = lerCasa().categoriasCasa; if (Array.isArray(_cc)) for (const c of _cc) if (c && c.nome && !c.arquivada && !CATS_CASA.includes(c.nome)) CATS_CASA.splice(Math.max(CATS_CASA.length - 1, 0), 0, c.nome); } catch (e) {} // [casa-v2]
+    const gravarCasa = (d) => {
+      try {
+        const bk = path.join(DADOS_DIR, 'backups', 'casa'); fs.mkdirSync(bk, { recursive: true });
+        if (fs.existsSync(arqCasa)) fs.copyFileSync(arqCasa, path.join(bk, `casa_${Date.now()}.json`));
+        const velhos = fs.readdirSync(bk).sort(); velhos.slice(0, Math.max(0, velhos.length - 30)).forEach((f) => fs.unlinkSync(path.join(bk, f)));
+      } catch (e) { console.error('[casa] backup:', e.message); }
+      const tmp = arqCasa + '.tmp'; fs.writeFileSync(tmp, JSON.stringify(d)); fs.renameSync(tmp, arqCasa);
+    };
+    const json = (st, o) => { res.setHeader('Content-Type', 'application/json'); res.setHeader('Cache-Control', 'no-store'); res.writeHead(st); res.end(JSON.stringify(o)); };
+    const corpo = () => new Promise((ok, falha) => { const ch = []; req.on('data', (c) => ch.push(c)); req.on('end', () => { try { ok(JSON.parse(Buffer.concat(ch).toString('utf-8') || '{}')); } catch (e) { falha(e); } }); });
+    const idC = () => Math.random().toString(36).slice(2, 9) + Date.now().toString(36);
+    const resumoMes = (d, de, ate) => {
+      const doMes = (d.lancamentos || []).filter((l) => l.tipo !== 'entrada' && (l.data || l.vencimento) >= de && (l.data || l.vencimento) <= ate);
+      const pagosTodos = doMes.filter((l) => l.status !== 'pendente');
+      const pagos = pagosTodos; // transferências contam como despesa
+      const transf = pagosTodos.filter((l) => l.categoria === TRANSF);
+      const porCat = {}; for (const l of pagos) porCat[l.categoria] = (porCat[l.categoria] || 0) + Number(l.valor || 0);
+      const porMembro = {}; for (const l of transf) { const m = l.membro || 'Não informado'; porMembro[m] = (porMembro[m] || 0) + Number(l.valor || 0); }
+      return { total: pagos.reduce((s, l) => s + Number(l.valor || 0), 0), porCategoria: porCat, orcamento: d.orcamento || {},
+        aPagar: doMes.filter((l) => l.status === 'pendente'), qtd: pagos.length,
+        transferencias: { total: transf.reduce((s, l) => s + Number(l.valor || 0), 0), porMembro, qtd: transf.length } };
+    };
+
+    // ── Agenda da Casa: recorrentes, lembretes e baixa ──
+    const hojeCasa = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Belem' }).format(new Date());
+    const agoraCasa = () => { const p = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Belem', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(new Date()); const g = (t) => p.find((x) => x.type === t).value; return `${g('year')}-${g('month')}-${g('day')}T${g('hour') === '24' ? '00' : g('hour')}:${g('minute')}`; };
+    const somaDiasC = (dia, n) => { const d = new Date(dia + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+    const vencNoMes = (ym, dia) => { const [a, m] = ym.split('-').map(Number); const ult = new Date(Date.UTC(a, m, 0)).getUTCDate(); return `${ym}-${String(Math.min(Number(dia) || 1, ult)).padStart(2, '0')}`; };
+    const proxMes = (ym) => { const [a, m] = ym.split('-').map(Number); return m === 12 ? `${a + 1}-01` : `${a}-${String(m + 1).padStart(2, '0')}`; };
+    // Gera as contas do mês para cada recorrente (e a do mês seguinte quando já estiver perto)
+    const gerarRecorrentes = (d) => {
+      const hoje = hojeCasa(); let n = 0;
+      d.lancamentos = d.lancamentos || [];
+      for (const r of d.recorrentes || []) {
+        if (r.ativo === false) continue;
+        const criado = String(r.criadoEm || '').slice(0, 10) || hoje;
+        for (const ym of [hoje.slice(0, 7), proxMes(hoje.slice(0, 7))]) {
+          const venc = vencNoMes(ym, r.dia);
+          if (venc < criado) continue;
+          if (ym !== hoje.slice(0, 7) && venc > somaDiasC(hoje, Math.max(10, Number(r.antecedencia || 1) + 1))) continue;
+          const g = `rec-${r.id}-${ym}`;
+          if (d.lancamentos.some((l) => l.grupoId === g)) continue;
+          d.lancamentos.push({ id: idC(), data: venc, vencimento: venc, descricao: r.descricao, categoria: CATS_CASA.includes(r.categoria) ? r.categoria : 'Contas da casa',
+            valor: +Number(r.valor || 0).toFixed(2), forma: r.forma || '', status: 'pendente', avisarDiasAntes: Number(r.antecedencia || 1),
+            origem: 'recorrente', recorrenteId: r.id, grupoId: g, criadoEm: new Date().toISOString() });
+          n++;
+        }
+      }
+      return n;
+    };
+    const fold = (x) => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    // Rotas do agente (WhatsApp) — segredo de serviço
+    if (urlPath.startsWith('/api/agente-casa')) {
+      if (!process.env.GESTAO_SERVICE_SECRET || req.headers['x-service-secret'] !== process.env.GESTAO_SERVICE_SECRET) { json(401, { error: 'não autorizado' }); return; }
+      if (req.method === 'POST' && urlPath === '/api/agente-casa') {
+        corpo().then((p) => {
+          const d = lerCasa(); d.lancamentos = d.lancamentos || [];
+          if (p.grupoId && d.lancamentos.some((l) => l.grupoId === p.grupoId)) return json(200, { duplicado: true });
+          const novos = [];
+          for (const it of p.itens || []) {
+            if (!(Number(it.valor) > 0)) continue;
+            const l = { id: idC(), data: p.data, descricao: it.descricao || p.descricao || 'Gasto', estabelecimento: p.estabelecimento || '',
+              categoria: CATS_CASA.includes(it.categoria) ? it.categoria : 'Outros', valor: +Number(it.valor).toFixed(2),
+              forma: p.forma || '', status: p.status === 'pendente' ? 'pendente' : 'pago', vencimento: p.status === 'pendente' ? p.data : undefined,
+              membro: it.membro || p.membro || undefined,
+              origem: p.origem || 'whatsapp', grupoId: p.grupoId || idC(), criadoEm: new Date().toISOString() };
+            d.lancamentos.push(l); novos.push(l);
+          }
+          if (novos.length) gravarCasa(d);
+          const mes = String(p.data || '').slice(0, 7);
+          const r = resumoMes(d, mes + '-01', mes + '-31');
+          json(200, { ok: true, lancados: novos, mes: r });
+        }).catch((e) => json(500, { error: e.message }));
+        return;
+      }
+      if (req.method === 'POST' && urlPath === '/api/agente-casa-recorrente') {
+        corpo().then((p) => {
+          if (!p.descricao || !(Number(p.valor) > 0) || !(Number(p.dia) >= 1 && Number(p.dia) <= 31)) return json(400, { error: 'descrição, valor e dia (1-31) são obrigatórios' });
+          const d = lerCasa(); d.recorrentes = d.recorrentes || [];
+          const r = { id: idC(), descricao: p.descricao, categoria: p.categoria || 'Contas da casa', valor: +Number(p.valor).toFixed(2), dia: Number(p.dia),
+            forma: p.forma || '', antecedencia: Math.max(0, Number(p.antecedencia ?? 1)), ativo: true, criadoEm: new Date().toISOString() };
+          d.recorrentes.push(r); const gerados = gerarRecorrentes(d); gravarCasa(d);
+          json(200, { ok: true, recorrente: r, gerados, proxima: (d.lancamentos || []).filter((l) => l.recorrenteId === r.id && l.status === 'pendente').map((l) => l.vencimento).sort()[0] });
+        }).catch((e) => json(500, { error: e.message }));
+        return;
+      }
+      if (req.method === 'POST' && urlPath === '/api/agente-casa-lembrete') {
+        corpo().then((p) => {
+          if (!p.texto || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(String(p.quando || ''))) return json(400, { error: 'texto e quando (AAAA-MM-DDTHH:MM) são obrigatórios' });
+          const d = lerCasa(); d.lembretes = d.lembretes || [];
+          const l = { id: idC(), texto: p.texto, quando: p.quando, repetir: ['diario', 'semanal', 'mensal'].includes(p.repetir) ? p.repetir : null, enviado: false, criadoEm: new Date().toISOString() };
+          d.lembretes.push(l); gravarCasa(d); json(200, { ok: true, lembrete: l });
+        }).catch((e) => json(500, { error: e.message }));
+        return;
+      }
+      // Lembretes que já venceram (e contas recorrentes do mês): chamado a cada minuto pelo agente
+      if (req.method === 'POST' && urlPath === '/api/agente-casa-devidos') {
+        const d = lerCasa(); const agora = agoraCasa(); const devidos = [];
+        for (const l of d.lembretes || []) {
+          if (l.enviado || l.quando > agora) continue;
+          devidos.push({ texto: l.texto, quando: l.quando });
+          if (l.repetir) {
+            const dt = new Date(l.quando + ':00Z');
+            if (l.repetir === 'diario') dt.setUTCDate(dt.getUTCDate() + 1);
+            if (l.repetir === 'semanal') dt.setUTCDate(dt.getUTCDate() + 7);
+            if (l.repetir === 'mensal') dt.setUTCMonth(dt.getUTCMonth() + 1);
+            l.quando = dt.toISOString().slice(0, 16);
+          } else l.enviado = true;
+        }
+        const gerados = gerarRecorrentes(d);
+        if (devidos.length || gerados) gravarCasa(d);
+        json(200, { devidos, gerados }); return;
+      }
+      // "paguei a luz" → dá baixa na conta pendente que combina com o texto
+      if (req.method === 'POST' && urlPath === '/api/agente-casa-pagar') {
+        corpo().then((p) => {
+          const d = lerCasa(); const q = fold(p.busca).split(/\s+/).filter((t) => t.length >= 3);
+          const pend = (d.lancamentos || []).filter((l) => l.status === 'pendente')
+            .map((l) => ({ l, sc: q.filter((t) => fold(l.descricao).includes(t)).length }))
+            .filter((x) => x.sc > 0).sort((a, b) => b.sc - a.sc || String(a.l.vencimento).localeCompare(String(b.l.vencimento)));
+          if (!pend.length) return json(404, { error: 'nenhuma conta a pagar combina', pendentes: (d.lancamentos || []).filter((l) => l.status === 'pendente').map((l) => l.descricao) });
+          const alvo = pend[0].l;
+          alvo.status = 'pago'; alvo.data = p.data || hojeCasa(); if (p.forma) alvo.forma = p.forma; alvo.atualizadoEm = new Date().toISOString();
+          gravarCasa(d); json(200, { ok: true, pago: alvo });
+        }).catch((e) => json(500, { error: e.message }));
+        return;
+      }
+      if (req.method === 'GET' && urlPath === '/api/agente-casa-agenda') {
+        const d = lerCasa(); const agora = agoraCasa();
+        json(200, { recorrentes: (d.recorrentes || []).filter((r) => r.ativo !== false),
+          lembretes: (d.lembretes || []).filter((l) => !l.enviado && l.quando >= agora).sort((a, b) => a.quando.localeCompare(b.quando)) });
+        return;
+      }
+      if (req.method === 'GET' && urlPath === '/api/agente-casa-resumo') {
+        const q = new URL(req.url, 'http://x').searchParams;
+        json(200, resumoMes(lerCasa(), q.get('de'), q.get('ate'))); return;
+      }
+      if (req.method === 'POST' && urlPath === '/api/agente-casa-desfazer') {
+        corpo().then((p) => {
+          const d = lerCasa();
+          const ult = p.grupoId ? (d.lancamentos || []).find((l) => l.grupoId === p.grupoId)
+            : [...(d.lancamentos || [])].sort((a, b) => String(b.criadoEm).localeCompare(String(a.criadoEm)))[0];
+          if (!ult) return json(404, { error: 'nada para desfazer' });
+          const n = (d.lancamentos || []).filter((l) => l.grupoId === ult.grupoId).length;
+          d.lancamentos = d.lancamentos.filter((l) => l.grupoId !== ult.grupoId); gravarCasa(d);
+          json(200, { ok: true, removido: ult, registros: n });
+        }).catch((e) => json(500, { error: e.message }));
+        return;
+      }
+      json(404, { error: 'rota não encontrada' }); return;
+    }
+
+    // Página e API web — só o dono logado
+    let dono = false;
+    try {
+      const payload = lerSessao(lerCookies(req.headers.cookie)[COOKIE_SESSAO], APP_SESSION_SECRET);
+      const { sessoesValidasApos } = contaDeAcesso();
+      const nome = String(payload?.label || payload?.nome || payload?.name || payload?.usuario || payload?.user || '').trim().toUpperCase();
+      dono = !!payload && sessaoValida(payload, sessoesValidasApos) && String(process.env.CASA_DONO || 'MARIO').toUpperCase().split(',').map((x) => x.trim()).includes(nome);
+    } catch (e) { dono = false; }
+    if (!dono) {
+      if (urlPath === '/casa' || urlPath === '/api/casa/pagina') { res.writeHead(302, { Location: '/' }); res.end(); } else json(403, { error: 'Acesso restrito' });
+      return;
+    }
+    if (req.method === 'GET' && (urlPath === '/casa' || urlPath === '/api/casa/pagina')) {
+      res.setHeader('Content-Type', 'text/html; charset=utf-8'); res.setHeader('Cache-Control', 'no-store'); res.writeHead(200);
+      res.end(fs.readFileSync(path.join(path.dirname(DADOS_DIR), 'casa.html'), 'utf-8')); return;
+    }
+    if (req.method === 'GET' && urlPath === '/api/casa/dados') { const d = lerCasa(); if (gerarRecorrentes(d)) gravarCasa(d); json(200, { ...d, categorias: CATS_CASA }); return; }
+    // ── [casa-v2] Nova Casa: edição completa, entradas, parcelas, categorias, caixinhas, despesas do ano ──
+    if (req.method === 'GET' && urlPath === '/api/casa/pagina-antiga') {
+      res.setHeader('Content-Type', 'text/html; charset=utf-8'); res.setHeader('Cache-Control', 'no-store'); res.writeHead(200);
+      res.end(fs.readFileSync(path.join(path.dirname(DADOS_DIR), 'casa-antiga.html'), 'utf-8')); return;
+    }
+    if (req.method === 'POST' && urlPath.startsWith('/api/casa/v2/')) {
+      corpo().then((p) => {
+        const d = lerCasa(); d.lancamentos = d.lancamentos || [];
+        const num = (v) => { const n = typeof v === 'number' ? v : Number(String(v ?? '').replace(/\./g, '').replace(',', '.')); return Number.isFinite(n) ? Math.round(n * 100) / 100 : NaN; };
+        const dataOk = (s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s || ''));
+        const txt = (s, n = 120) => String(s ?? '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, n);
+        const addMes = (s, k) => { const [y, m, dd] = s.split('-').map(Number); const b = new Date(Date.UTC(y, m - 1 + k, 1)); const u = new Date(Date.UTC(b.getUTCFullYear(), b.getUTCMonth() + 1, 0)).getUTCDate(); return `${b.getUTCFullYear()}-${String(b.getUTCMonth() + 1).padStart(2, '0')}-${String(Math.min(dd, u)).padStart(2, '0')}`; };
+        const MESES_C = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+
+        if (urlPath === '/api/casa/v2/lancamento') {
+          const valor = num(p.valor);
+          if (!(valor > 0) || valor > 10000000) return json(400, { error: 'Valor inválido' });
+          if (!dataOk(p.data)) return json(400, { error: 'Data inválida' });
+          const status = p.status === 'pendente' ? 'pendente' : 'pago';
+          const base = { tipo: p.tipo === 'entrada' ? 'entrada' : undefined, categoria: txt(p.categoria, 60) || 'Outros', forma: txt(p.forma, 30), status,
+            membro: txt(p.membro, 40) || undefined };
+          const desc = txt(p.descricao) || base.categoria;
+          if (p.id) {
+            const l = d.lancamentos.find((x) => x.id === p.id);
+            if (!l) return json(404, { error: 'Lançamento não encontrado' });
+            Object.assign(l, base, { descricao: desc, valor, data: p.data, vencimento: status === 'pendente' ? p.data : undefined, atualizadoEm: new Date().toISOString() });
+            if (!base.tipo) delete l.tipo; if (!base.membro) delete l.membro; if (status !== 'pendente') delete l.vencimento;
+            gravarCasa(d); return json(200, { ok: true, id: l.id });
+          }
+          const n = base.tipo ? 1 : Math.min(Math.max(parseInt(p.parcelas, 10) || 1, 1), 48);
+          const grupo = n > 1 ? idC() : undefined, parc = Math.floor(valor / n * 100) / 100, novos = [];
+          for (let i = 0; i < n; i++) {
+            const dt = addMes(p.data, i), v = i === n - 1 ? Math.round((valor - parc * (n - 1)) * 100) / 100 : parc;
+            const l = { id: idC(), data: dt, ...base, descricao: n > 1 ? `${desc} (${i + 1}/${n})` : desc, valor: v, origem: 'app', criadoEm: new Date().toISOString() };
+            if (status === 'pendente') l.vencimento = dt;
+            if (n > 1) { l.parcela = `${i + 1}/${n}`; l.parcelaGrupo = grupo; l.valorTotal = valor; }
+            Object.keys(l).forEach((k) => l[k] === undefined && delete l[k]);
+            novos.push(l);
+          }
+          d.lancamentos.push(...novos); gravarCasa(d);
+          return json(200, { ok: true, id: novos[0].id, criados: novos.length });
+        }
+
+        if (urlPath === '/api/casa/v2/apagar') {
+          const l = d.lancamentos.find((x) => x.id === p.id);
+          if (!l) return json(404, { error: 'Lançamento não encontrado' });
+          const sai = (x) => x.id === l.id || (p.proximasParcelas && l.parcelaGrupo && x.parcelaGrupo === l.parcelaGrupo && String(x.data) >= String(l.data));
+          const antes = d.lancamentos.length; d.lancamentos = d.lancamentos.filter((x) => !sai(x));
+          gravarCasa(d); return json(200, { ok: true, apagados: antes - d.lancamentos.length });
+        }
+
+        if (urlPath === '/api/casa/v2/config') {
+          if (Array.isArray(p.categoriasCasa)) {
+            const vistos = new Set();
+            d.categoriasCasa = p.categoriasCasa.slice(0, 60).map((c) => ({ nome: txt(c && c.nome, 40), icone: txt(c && c.icone, 4) || '📦', tipo: c && c.tipo === 'fixo' ? 'fixo' : 'variavel',
+              arquivada: !!(c && c.arquivada), cor: /^#[0-9a-fA-F]{6}$/.test(String(c && c.cor)) ? c.cor : undefined }))
+              .filter((c) => c.nome && !vistos.has(c.nome.toLowerCase()) && vistos.add(c.nome.toLowerCase()));
+          }
+          if (p.renomear && txt(p.renomear.de, 40) && txt(p.renomear.para, 40)) {
+            const de = txt(p.renomear.de, 40), para = txt(p.renomear.para, 40);
+            d.lancamentos.forEach((l) => { if (l.categoria === de) l.categoria = para; });
+          }
+          if (p.orcamento && typeof p.orcamento === 'object') {
+            const o = {}; for (const [k, v] of Object.entries(p.orcamento).slice(0, 80)) { const n = num(v); if (txt(k, 40) && n > 0) o[txt(k, 40)] = n; }
+            d.orcamento = o;
+          }
+          if (Array.isArray(p.metas)) d.metas = p.metas.slice(0, 40).map((m) => ({ id: txt(m && m.id, 30) || idC(), nome: txt(m && m.nome, 40), alvo: num(m && m.alvo) || 0,
+            prazo: /^\d{4}-\d{2}$/.test(String(m && m.prazo)) ? m.prazo : '',
+            aportes: (Array.isArray(m && m.aportes) ? m.aportes : []).slice(-500).map((a) => ({ data: dataOk(a && a.data) ? a.data : new Date().toISOString().slice(0, 10), valor: num(a && a.valor) || 0 })).filter((a) => a.valor > 0) }))
+            .filter((m) => m.nome);
+          if (Array.isArray(p.anuais)) d.anuais = p.anuais.slice(0, 40).map((a) => ({ id: txt(a && a.id, 30) || idC(), nome: txt(a && a.nome, 40), valor: num(a && a.valor) || 0,
+            mes: Math.min(Math.max(parseInt(a && a.mes, 10) || 1, 1), 12) })).filter((a) => a.nome && a.valor > 0);
+          gravarCasa(d); return json(200, { ok: true });
+        }
+        json(404, { error: 'rota desconhecida' });
+      }).catch(() => json(400, { error: 'Dados inválidos' }));
+      return;
+    }
+
+    if (req.method === 'POST' && urlPath === '/api/casa/recorrente') {
+      corpo().then((p) => {
+        const d = lerCasa(); d.recorrentes = d.recorrentes || [];
+        if (p.apagar) { d.recorrentes = d.recorrentes.filter((r) => r.id !== p.apagar); d.lancamentos = (d.lancamentos || []).filter((l) => !(l.recorrenteId === p.apagar && l.status === 'pendente')); }
+        else d.recorrentes.push({ id: idC(), descricao: p.descricao, categoria: p.categoria || 'Contas da casa', valor: +Number(p.valor || 0).toFixed(2), dia: Number(p.dia),
+          forma: p.forma || '', antecedencia: Math.max(0, Number(p.antecedencia ?? 1)), ativo: true, criadoEm: new Date().toISOString() });
+        gerarRecorrentes(d); gravarCasa(d); json(200, { ok: true });
+      }).catch((e) => json(500, { error: e.message }));
+      return;
+    }
+    if (req.method === 'POST' && urlPath === '/api/casa/lembrete') {
+      corpo().then((p) => {
+        const d = lerCasa(); d.lembretes = d.lembretes || [];
+        if (p.apagar) d.lembretes = d.lembretes.filter((l) => l.id !== p.apagar);
+        else d.lembretes.push({ id: idC(), texto: p.texto, quando: p.quando, repetir: ['diario', 'semanal', 'mensal'].includes(p.repetir) ? p.repetir : null, enviado: false, criadoEm: new Date().toISOString() });
+        gravarCasa(d); json(200, { ok: true });
+      }).catch((e) => json(500, { error: e.message }));
+      return;
+    }
+    if (req.method === 'POST' && urlPath === '/api/casa/lancamento') {
+      corpo().then((p) => {
+        const d = lerCasa(); d.lancamentos = d.lancamentos || [];
+        if (p.id) { const l = d.lancamentos.find((x) => x.id === p.id); if (!l) return json(404, { error: 'não encontrado' }); Object.assign(l, p, { atualizadoEm: new Date().toISOString() }); }
+        else d.lancamentos.push({ ...p, id: idC(), origem: 'app', valor: +Number(p.valor || 0).toFixed(2), criadoEm: new Date().toISOString() });
+        gravarCasa(d); json(200, { ok: true });
+      }).catch((e) => json(500, { error: e.message }));
+      return;
+    }
+    if (req.method === 'POST' && urlPath === '/api/casa/apagar') {
+      corpo().then((p) => { const d = lerCasa(); d.lancamentos = (d.lancamentos || []).filter((l) => l.id !== p.id); gravarCasa(d); json(200, { ok: true }); })
+        .catch((e) => json(500, { error: e.message }));
+      return;
+    }
+    if (req.method === 'POST' && urlPath === '/api/casa/orcamento') {
+      corpo().then((p) => { const d = lerCasa(); d.orcamento = p.orcamento || {}; gravarCasa(d); json(200, { ok: true }); })
+        .catch((e) => json(500, { error: e.message }));
+      return;
+    }
+    json(404, { error: 'rota não encontrada' }); return;
+  }
   if (req.method === 'POST' && urlPath === '/api/venda-pdv') {
     let body = '';
     req.on('data', c => body += c);

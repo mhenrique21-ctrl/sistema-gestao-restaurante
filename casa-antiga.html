@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1C2321">
+<title>Casa — gastos da família</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Literata:opsz,wght@7..72,400;7..72,600&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --papel:#F1F3EE; --tinta:#1C2321; --suave:#5E6862; --linha:#D6DBD2;
+  --acai:#5B1F4A; --jambu:#3C6E47; --alerta:#B4431A; --cartao:#FFFFFF;
+  --serif:"Literata",Georgia,serif; --sans:"Work Sans",system-ui,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root{
+  --papel:#161B19; --tinta:#E9EDE8; --suave:#9AA59E; --linha:#2E3632;
+  --acai:#C98BB8; --jambu:#7FB78C; --alerta:#F08A5D; --cartao:#1E2522; color-scheme:dark;}}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--papel);color:var(--tinta);font-family:var(--sans);font-size:16px;line-height:1.5}
+body{padding:env(safe-area-inset-top) 0 calc(env(safe-area-inset-bottom) + 88px)}
+main{max-width:720px;margin:0 auto;padding:24px 20px}
+button{font:inherit;cursor:pointer}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--acai);outline-offset:2px}
+header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:28px}
+h1{font-family:var(--serif);font-weight:600;font-size:1.75rem;margin:0;letter-spacing:-.01em}
+.mes{display:flex;align-items:center;gap:6px}
+.mes button{border:1px solid var(--linha);background:transparent;color:var(--tinta);width:36px;height:36px;border-radius:50%}
+.mes span{font-weight:500;min-width:128px;text-align:center}
+.total{margin:0 0 6px;font-family:var(--serif);font-size:clamp(2.6rem,9vw,3.6rem);font-weight:400;letter-spacing:-.02em;line-height:1.05}
+.sub{color:var(--suave);margin:0 0 36px}
+.sub strong{color:var(--tinta);font-weight:600}
+section{margin-bottom:40px}
+h2{font-family:var(--serif);font-weight:600;font-size:1.2rem;margin:0 0 14px;display:flex;justify-content:space-between;align-items:baseline}
+h2 button{font-family:var(--sans);font-size:.85rem;font-weight:500;color:var(--acai);background:none;border:0;padding:4px}
+/* A régua: gasto contra o orçamento, com a marca do limite */
+.regua{display:grid;gap:18px}
+.cat-top{display:flex;justify-content:space-between;gap:12px;margin-bottom:6px;font-size:.95rem}
+.cat-top span:last-child{font-variant-numeric:tabular-nums;color:var(--suave)}
+.trilho{position:relative;height:10px;background:var(--linha);border-radius:5px;overflow:visible}
+.enchido{height:100%;border-radius:5px;background:var(--jambu);transition:width .5s ease}
+.enchido.perto{background:#B8892B}.enchido.estourou{background:var(--alerta)}
+.limite{position:absolute;top:-4px;width:2px;height:18px;background:var(--tinta);opacity:.55}
+.vazio{color:var(--suave);padding:20px 0;border-top:1px solid var(--linha)}
+.lista{border-top:1px solid var(--linha)}
+.item{display:grid;grid-template-columns:1fr auto auto;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid var(--linha)}
+.item .desc{min-width:0}.item .desc b{display:block;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item .desc small{color:var(--suave)}
+.item .valor{font-variant-numeric:tabular-nums;font-weight:500}
+.item .acoes{display:flex;gap:4px}
+.item .acoes button{background:none;border:1px solid var(--linha);color:var(--suave);border-radius:8px;padding:4px 8px;font-size:.8rem}
+.dia{font-size:.85rem;color:var(--suave);padding:16px 0 4px}
+.pagar .valor{color:var(--alerta)}
+.fab{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom) + 20px);background:var(--acai);color:#fff;border:0;border-radius:28px;padding:14px 28px;font-weight:600;box-shadow:0 8px 24px rgba(91,31,74,.35)}
+dialog{border:0;border-radius:16px;padding:0;width:min(440px,92vw);background:var(--cartao);color:var(--tinta)}
+dialog::backdrop{background:rgba(20,24,22,.55)}
+form{padding:24px;display:grid;gap:14px}
+form h3{font-family:var(--serif);font-weight:600;font-size:1.3rem;margin:0 0 4px}
+label{display:grid;gap:6px;font-size:.9rem;color:var(--suave)}
+input,select{font:inherit;color:var(--tinta);background:var(--papel);border:1px solid var(--linha);border-radius:10px;padding:10px 12px}
+.linha2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.botoes{display:flex;gap:10px;justify-content:flex-end;margin-top:6px}
+.botoes button{border-radius:10px;padding:10px 18px;border:1px solid var(--linha);background:transparent;color:var(--tinta)}
+.botoes button.principal{background:var(--acai);border-color:var(--acai);color:#fff;font-weight:600}
+.erro{color:var(--alerta)}
+@media (prefers-reduced-motion:reduce){.enchido{transition:none}}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Casa</h1>
+    <div class="mes"><button id="ant" aria-label="Mês anterior">‹</button><span id="nomeMes"></span><button id="prox" aria-label="Próximo mês">›</button></div>
+  </header>
+  <p class="total" id="total">—</p>
+  <p class="sub" id="sub"></p>
+
+  <section>
+    <h2>Por categoria <button id="btnOrc">Definir orçamento</button></h2>
+    <div class="regua" id="regua"></div>
+  </section>
+
+  <section id="secTransf" hidden>
+    <h2>Transferências por pessoa <span id="totTransf" style="font-family:var(--sans);font-size:1rem;font-weight:600"></span></h2>
+    <div class="lista" id="transf"></div>
+  </section>
+
+  <section id="secPagar" hidden>
+    <h2>A pagar</h2>
+    <div class="lista pagar" id="pagar"></div>
+  </section>
+
+  <section>
+    <h2>Contas fixas <button id="btnRec">+ Nova</button></h2>
+    <div class="lista" id="rec"></div>
+  </section>
+
+  <section>
+    <h2>Lembretes <button id="btnLem">+ Novo</button></h2>
+    <div class="lista" id="lem"></div>
+  </section>
+
+  <section>
+    <h2>Lançamentos</h2>
+    <div class="lista" id="lista"></div>
+  </section>
+</main>
+
+<button class="fab" id="btnNovo">Lançar gasto</button>
+
+<dialog id="dlgLanc"><form id="fLanc" method="dialog">
+  <h3 id="tLanc">Lançar gasto</h3>
+  <label>Descrição<input name="descricao" required placeholder="Ex.: Farmácia"></label>
+  <div class="linha2">
+    <label>Valor (R$)<input name="valor" inputmode="decimal" required placeholder="0,00"></label>
+    <label>Data<input name="data" type="date" required></label>
+  </div>
+  <label>Categoria<select name="categoria" id="selCat"></select></label>
+  <label id="campoMembro" hidden>Para quem (membro da família)<input name="membro" placeholder="Ex.: Dany, Lucas"></label>
+  <div class="linha2">
+    <label>Pagamento<select name="forma"><option value="">—</option><option>pix</option><option>crédito</option><option>débito</option><option>dinheiro</option><option>boleto</option></select></label>
+    <label>Situação<select name="status"><option value="pago">Pago</option><option value="pendente">A pagar</option></select></label>
+  </div>
+  <p class="erro" id="erroLanc" hidden></p>
+  <div class="botoes"><button value="cancel" formnovalidate>Cancelar</button><button class="principal" id="salvarLanc" value="ok">Salvar</button></div>
+</form></dialog>
+
+<dialog id="dlgRec"><form id="fRec" method="dialog">
+  <h3>Nova conta fixa</h3>
+  <label>Descrição<input name="descricao" required placeholder="Ex.: Escola, Internet, Aluguel"></label>
+  <div class="linha2">
+    <label>Valor (R$)<input name="valor" inputmode="decimal" required placeholder="0,00"></label>
+    <label>Vence todo dia<input name="dia" type="number" min="1" max="31" required placeholder="10"></label>
+  </div>
+  <label>Categoria<select name="categoria" id="selCatRec"></select></label>
+  <label>Avisar no WhatsApp<select name="antecedencia"><option value="0">No dia do vencimento</option><option value="1" selected>1 dia antes</option><option value="3">3 dias antes</option><option value="5">5 dias antes</option><option value="7">7 dias antes</option></select></label>
+  <div class="botoes"><button value="cancel" formnovalidate>Cancelar</button><button class="principal" value="ok">Salvar</button></div>
+</form></dialog>
+
+<dialog id="dlgLem"><form id="fLem" method="dialog">
+  <h3>Novo lembrete</h3>
+  <label>Lembrar de<input name="texto" required placeholder="Ex.: Pagar o IPVA"></label>
+  <div class="linha2">
+    <label>Data<input name="data" type="date" required></label>
+    <label>Hora<input name="hora" type="time" required value="09:00"></label>
+  </div>
+  <label>Repetir<select name="repetir"><option value="">Não repetir</option><option value="diario">Todo dia</option><option value="semanal">Toda semana</option><option value="mensal">Todo mês</option></select></label>
+  <div class="botoes"><button value="cancel" formnovalidate>Cancelar</button><button class="principal" value="ok">Salvar</button></div>
+</form></dialog>
+
+<dialog id="dlgOrc"><form id="fOrc" method="dialog">
+  <h3>Orçamento mensal</h3>
+  <div id="camposOrc" style="display:grid;gap:10px"></div>
+  <div class="botoes"><button value="cancel" formnovalidate>Cancelar</button><button class="principal" value="ok">Salvar orçamento</button></div>
+</form></dialog>
+
+<script>
+const brl = (v) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const hoje = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Belem' }).format(new Date());
+let dados = { lancamentos: [], orcamento: {}, categorias: [] };
+let mes = hoje().slice(0, 7);
+let editando = null;
+
+async function api(caminho, corpo) {
+  const r = await fetch(caminho, corpo ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) } : {});
+  if (r.status === 403) { location.href = '/'; throw new Error('sem acesso'); }
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'Falha ao salvar');
+  return r.json();
+}
+async function carregar() { dados = await api('/api/casa/dados'); desenhar(); }
+
+const nomeMes = (m) => new Date(m + '-15T12:00:00').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+const mudarMes = (n) => { const d = new Date(mes + '-15T12:00:00'); d.setMonth(d.getMonth() + n); mes = d.toISOString().slice(0, 7); desenhar(); };
+
+function desenhar() {
+  document.getElementById('nomeMes').textContent = nomeMes(mes);
+  const doMes = dados.lancamentos.filter((l) => String(l.data || l.vencimento || '').startsWith(mes));
+  const pagosTodos = doMes.filter((l) => l.status !== 'pendente');
+  const pagos = pagosTodos; // transferências contam como despesa
+  const transf = pagosTodos.filter((l) => l.categoria === 'Transferências');
+  const total = pagos.reduce((s, l) => s + Number(l.valor || 0), 0);
+  const orcTotal = Object.values(dados.orcamento || {}).reduce((s, v) => s + Number(v || 0), 0);
+  const mesAnt = (() => { const d = new Date(mes + '-15T12:00:00'); d.setMonth(d.getMonth() - 1); return d.toISOString().slice(0, 7); })();
+  const totalAnt = dados.lancamentos.filter((l) => l.status !== 'pendente' && String(l.data || '').startsWith(mesAnt)).reduce((s, l) => s + Number(l.valor || 0), 0);
+  document.getElementById('total').textContent = brl(total);
+  const partes = [];
+  if (orcTotal) partes.push(`<strong>${Math.round((total / orcTotal) * 100)}%</strong> do orçamento de ${brl(orcTotal)}`);
+  if (totalAnt) { const d = ((total / totalAnt) - 1) * 100; partes.push(`${d >= 0 ? '+' : ''}${d.toFixed(0)}% em relação ao mês passado`); }
+  document.getElementById('sub').innerHTML = partes.join('. ') || `${pagos.length} lançamentos neste mês`;
+
+  // régua por categoria
+  const porCat = {}; pagos.forEach((l) => { porCat[l.categoria] = (porCat[l.categoria] || 0) + Number(l.valor || 0); });
+  const cats = dados.categorias.filter((c) => porCat[c] || dados.orcamento[c]);
+  const regua = document.getElementById('regua');
+  if (!cats.length) regua.innerHTML = '<p class="vazio">Nenhum gasto neste mês. Use “Lançar gasto” ou mande a foto do cupom no WhatsApp com a legenda “casa”.</p>';
+  else regua.innerHTML = cats.sort((a, b) => (porCat[b] || 0) - (porCat[a] || 0)).map((c) => {
+    const g = porCat[c] || 0, o = Number(dados.orcamento[c] || 0);
+    const escala = Math.max(g, o) || 1, pct = (g / escala) * 100, lim = o ? (o / escala) * 100 : null;
+    const classe = o && g > o ? 'estourou' : o && g > o * 0.8 ? 'perto' : '';
+    return `<div><div class="cat-top"><span>${c}</span><span>${brl(g)}${o ? ` de ${brl(o)}` : ''}</span></div>
+      <div class="trilho"><div class="enchido ${classe}" style="width:${pct}%"></div>${lim !== null ? `<div class="limite" style="left:calc(${lim}% - 1px)" title="Orçamento"></div>` : ''}</div></div>`;
+  }).join('');
+
+  // transferências para a família (fora do total de gastos)
+  const porMembro = {}; transf.forEach((l) => { const m = l.membro || 'Não informado'; porMembro[m] = (porMembro[m] || 0) + Number(l.valor || 0); });
+  document.getElementById('secTransf').hidden = !transf.length;
+  document.getElementById('totTransf').textContent = brl(transf.reduce((s, l) => s + Number(l.valor || 0), 0));
+  document.getElementById('transf').innerHTML = Object.entries(porMembro).sort((a, b) => b[1] - a[1])
+    .map(([m, v]) => `<div class="item"><div class="desc"><b>${esc(m)}</b><small>${transf.filter((l) => (l.membro || 'Não informado') === m).length} transferência(s)</small></div><span class="valor">${brl(v)}</span><span></span></div>`).join('');
+
+  // a pagar (todas as pendentes, não só do mês)
+  const pend = dados.lancamentos.filter((l) => l.status === 'pendente').sort((a, b) => String(a.vencimento || a.data).localeCompare(String(b.vencimento || b.data)));
+  document.getElementById('secPagar').hidden = !pend.length;
+  document.getElementById('pagar').innerHTML = pend.map((l) => linha(l, true)).join('');
+
+  // contas fixas e lembretes
+  const rec = (dados.recorrentes || []).filter((r) => r.ativo !== false).sort((a, b) => a.dia - b.dia);
+  document.getElementById('rec').innerHTML = rec.length ? rec.map((r) => `<div class="item"><div class="desc"><b>${esc(r.descricao)}</b><small>todo dia ${r.dia} • ${esc(r.categoria)} • aviso ${Number(r.antecedencia) ? r.antecedencia + ' dia(s) antes' : 'no dia'}</small></div><span class="valor">${brl(r.valor)}</span><span class="acoes"><button data-apagar-rec="${r.id}">Apagar</button></span></div>`).join('')
+    : '<p class="vazio">Nenhuma conta fixa. Ex.: escola, internet, aluguel — a conta do mês é criada sozinha e você é avisado no WhatsApp.</p>';
+  const agora = new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Belem', dateStyle: 'short', timeStyle: 'short' }).format(new Date()).replace(' ', 'T');
+  const lem = (dados.lembretes || []).filter((l) => !l.enviado && l.quando >= agora).sort((a, b) => a.quando.localeCompare(b.quando));
+  const REP = { diario: 'todo dia', semanal: 'toda semana', mensal: 'todo mês' };
+  document.getElementById('lem').innerHTML = lem.length ? lem.map((l) => `<div class="item"><div class="desc"><b>${esc(l.texto)}</b><small>${new Date(l.quando.slice(0, 10) + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' })} às ${l.quando.slice(11)}${l.repetir ? ' • repete ' + REP[l.repetir] : ''}</small></div><span></span><span class="acoes"><button data-apagar-lem="${l.id}">Apagar</button></span></div>`).join('')
+    : '<p class="vazio">Nenhum lembrete agendado. Pelo WhatsApp: “me lembra dia 25 às 14h de pagar o IPVA”.</p>';
+
+  // lançamentos agrupados por dia
+  const porDia = {}; pagosTodos.sort((a, b) => String(b.data).localeCompare(String(a.data))).forEach((l) => { (porDia[l.data] = porDia[l.data] || []).push(l); });
+  const lista = document.getElementById('lista');
+  lista.innerHTML = Object.keys(porDia).length ? Object.entries(porDia).map(([d, ls]) =>
+    `<div class="dia">${new Date(d + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit' })}</div>` + ls.map((l) => linha(l)).join('')).join('')
+    : '<p class="vazio">Sem lançamentos pagos neste mês.</p>';
+}
+
+function linha(l, pendente) {
+  const quando = pendente ? `vence ${new Date((l.vencimento || l.data) + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}` : (l.estabelecimento || l.forma || '');
+  const cat = l.categoria === 'Transferências' ? `↗ Transferência${l.membro ? ' para ' + l.membro : ''}` : l.categoria;
+  return `<div class="item"><div class="desc"><b>${esc(l.descricao)}</b><small>${esc(cat)}${quando ? ' • ' + esc(quando) : ''}</small></div>
+    <span class="valor">${brl(l.valor)}</span>
+    <span class="acoes">${pendente ? `<button data-pagar="${l.id}">Pago</button>` : ''}<button data-editar="${l.id}" aria-label="Editar">Editar</button><button data-apagar="${l.id}" aria-label="Apagar">Apagar</button></span></div>`;
+}
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+document.body.addEventListener('click', async (e) => {
+  const t = e.target;
+  if (t.dataset.apagar) { if (confirm('Apagar este lançamento?')) { await api('/api/casa/apagar', { id: t.dataset.apagar }); carregar(); } }
+  if (t.dataset.pagar) { const l = dados.lancamentos.find((x) => x.id === t.dataset.pagar); await api('/api/casa/lancamento', { ...l, status: 'pago', data: hoje() }); carregar(); }
+  if (t.dataset.editar) abrirLanc(dados.lancamentos.find((x) => x.id === t.dataset.editar));
+  if (t.dataset.apagarRec) { if (confirm('Apagar esta conta fixa? As próximas contas dela deixam de ser criadas.')) { await api('/api/casa/recorrente', { apagar: t.dataset.apagarRec }); carregar(); } }
+  if (t.dataset.apagarLem) { if (confirm('Apagar este lembrete?')) { await api('/api/casa/lembrete', { apagar: t.dataset.apagarLem }); carregar(); } }
+});
+
+const dlgLanc = document.getElementById('dlgLanc'), fLanc = document.getElementById('fLanc');
+function abrirLanc(l) {
+  editando = l || null;
+  document.getElementById('tLanc').textContent = l ? 'Editar gasto' : 'Lançar gasto';
+  document.getElementById('selCat').innerHTML = dados.categorias.map((c) => `<option>${c}</option>`).join('');
+  fLanc.descricao.value = l?.descricao || ''; fLanc.valor.value = l ? String(l.valor).replace('.', ',') : '';
+  fLanc.data.value = l?.data || l?.vencimento || hoje(); fLanc.categoria.value = l?.categoria || 'Mercado';
+  fLanc.forma.value = l?.forma || ''; fLanc.status.value = l?.status || 'pago';
+  fLanc.membro.value = l?.membro || ''; mostrarMembro();
+  document.getElementById('erroLanc').hidden = true; dlgLanc.showModal();
+}
+const mostrarMembro = () => { document.getElementById('campoMembro').hidden = fLanc.categoria.value !== 'Transferências'; };
+fLanc.categoria.addEventListener('change', mostrarMembro);
+fLanc.addEventListener('submit', async (e) => {
+  if (e.submitter?.value !== 'ok') return;
+  e.preventDefault();
+  const valor = Number(String(fLanc.valor.value).replace(/\./g, '').replace(',', '.'));
+  if (!(valor > 0)) { const er = document.getElementById('erroLanc'); er.textContent = 'Informe um valor maior que zero.'; er.hidden = false; return; }
+  const status = fLanc.status.value;
+  await api('/api/casa/lancamento', { ...(editando || {}), descricao: fLanc.descricao.value.trim(), valor, data: fLanc.data.value,
+    vencimento: status === 'pendente' ? fLanc.data.value : undefined, categoria: fLanc.categoria.value, forma: fLanc.forma.value, status,
+    membro: fLanc.categoria.value === 'Transferências' ? fLanc.membro.value.trim() : undefined });
+  dlgLanc.close(); carregar();
+});
+
+const dlgOrc = document.getElementById('dlgOrc'), fOrc = document.getElementById('fOrc');
+document.getElementById('btnOrc').onclick = () => {
+  document.getElementById('camposOrc').innerHTML = dados.categorias.filter((c) => c !== 'Outros').map((c) =>
+    `<label>${c}<input data-cat="${c}" inputmode="decimal" placeholder="sem limite" value="${dados.orcamento[c] ? String(dados.orcamento[c]).replace('.', ',') : ''}"></label>`).join('');
+  dlgOrc.showModal();
+};
+fOrc.addEventListener('submit', async (e) => {
+  if (e.submitter?.value !== 'ok') return;
+  e.preventDefault();
+  const orcamento = {};
+  fOrc.querySelectorAll('input[data-cat]').forEach((i) => { const v = Number(i.value.replace(/\./g, '').replace(',', '.')); if (v > 0) orcamento[i.dataset.cat] = v; });
+  await api('/api/casa/orcamento', { orcamento }); dlgOrc.close(); carregar();
+});
+
+const dlgRec = document.getElementById('dlgRec'), fRec = document.getElementById('fRec');
+document.getElementById('btnRec').onclick = () => { fRec.reset(); document.getElementById('selCatRec').innerHTML = dados.categorias.map((c) => `<option${c === 'Contas da casa' ? ' selected' : ''}>${c}</option>`).join(''); dlgRec.showModal(); };
+fRec.addEventListener('submit', async (e) => {
+  if (e.submitter?.value !== 'ok') return; e.preventDefault();
+  const valor = Number(String(fRec.valor.value).replace(/\./g, '').replace(',', '.'));
+  if (!(valor > 0)) return;
+  await api('/api/casa/recorrente', { descricao: fRec.descricao.value.trim(), valor, dia: Number(fRec.dia.value), categoria: fRec.categoria.value, antecedencia: Number(fRec.antecedencia.value) });
+  dlgRec.close(); carregar();
+});
+const dlgLem = document.getElementById('dlgLem'), fLem = document.getElementById('fLem');
+document.getElementById('btnLem').onclick = () => { fLem.reset(); fLem.data.value = hoje(); fLem.hora.value = '09:00'; dlgLem.showModal(); };
+fLem.addEventListener('submit', async (e) => {
+  if (e.submitter?.value !== 'ok') return; e.preventDefault();
+  await api('/api/casa/lembrete', { texto: fLem.texto.value.trim(), quando: `${fLem.data.value}T${fLem.hora.value}`, repetir: fLem.repetir.value || null });
+  dlgLem.close(); carregar();
+});
+
+document.getElementById('btnNovo').onclick = () => abrirLanc();
+document.getElementById('ant').onclick = () => mudarMes(-1);
+document.getElementById('prox').onclick = () => mudarMes(1);
+carregar().catch(() => {});
+</script>
+</body>
+</html>

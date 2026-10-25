@@ -148,6 +148,7 @@ app.use('/api/comandas', require('./routes/comandas'));
 app.use('/api/cash-movements', require('./routes/cashMovements'));
 app.use('/api/cash-sessions', require('./routes/cashSessions'));
 app.use('/api/supply', require('./routes/supply'));
+app.use('/api/vendas-historico', require('./routes/vendasHistorico'));
 app.use('/api/insumos', require('./routes/insumos'));
 app.use('/api/fichas-tecnicas', require('./routes/fichasTecnicas'));
 app.use('/api/fiado', require('./routes/fiado'));

@@ -1,0 +1,44 @@
+<!doctype html><html lang="pt-BR"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Comandas Abertas</title>
+<style>
+:root{--bg:#f7f5f2;--card:#fff;--txt:#2b2622;--sub:#8a827a;--line:#e8e3dd;--roxo:#7c5cbc;--verde:#2f9e44;--amar:#da8808}
+@media(prefers-color-scheme:dark){:root{--bg:#1a1714;--card:#262120;--txt:#f0ebe6;--sub:#9a918a;--line:#3a3330}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--txt);font-family:system-ui,sans-serif}
+header{position:sticky;top:0;background:var(--card);border-bottom:1px solid var(--line);padding:14px 16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+h1{font-size:17px;margin:0}#resumo{font-size:13px;color:var(--sub)}
+#grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;padding:16px}
+.card{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--roxo);border-radius:10px;padding:12px}
+.chd{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.tag{font-weight:700}.tot{font-weight:700;font-size:15px}
+.cli{font-size:12px;color:var(--sub);margin-bottom:6px}
+.itens{border-top:1px solid var(--line);padding-top:6px}
+.it{display:flex;justify-content:space-between;gap:8px;font-size:13px;padding:3px 0}
+.it span:last-child{color:var(--sub);white-space:nowrap}
+.op{font-size:11px;color:var(--sub);margin-top:6px}
+.vazio{color:var(--sub);font-size:14px;padding:24px}
+</style></head><body>
+<header><h1>Comandas Abertas</h1><div id="resumo">Carregando...</div></header>
+<div id="grid"></div>
+<script>
+const COR={comanda:'var(--roxo)',mesa:'var(--verde)',balcao:'var(--amar)'};
+const NOME={comanda:'COMANDA',mesa:'MESA',balcao:'BALCÃO'};
+function brl(n){return 'R$ '+(Number(n)||0).toFixed(2);}
+async function carregar(){
+  try{
+    const r=await fetch('/api/comandas-abertas',{cache:'no-store'});
+    const d=await r.json();
+    const cs=Array.isArray(d.comandas)?d.comandas:[];
+    const grid=document.getElementById('grid');
+    const tot=cs.reduce((a,c)=>a+(c.total||0),0);
+    document.getElementById('resumo').textContent=cs.length+' aberta(s) · '+brl(tot);
+    if(!cs.length){grid.innerHTML="<div class=\"vazio\">Nenhuma comanda aberta agora.</div>";return;}
+    grid.innerHTML=cs.map(function(c){
+      var cor=COR[c.origem]||"var(--roxo)";
+      var itens=(c.itens||[]).map(function(i){return "<div class=\"it\"><span>"+(i.qtd||1)+"x "+i.nome+"</span><span>"+brl(i.total)+"</span></div>";}).join("");
+      return "<div class=\"card\" style=\"border-left-color:"+cor+"\"><div class=\"chd\"><span class=\"tag\" style=\"color:"+cor+"\">"+(NOME[c.origem]||c.origem)+" "+(c.numero||"")+"</span><span class=\"tot\">"+brl(c.total)+"</span></div>"+(c.cliente?"<div class=\"cli\">"+c.cliente+"</div>":"")+"<div class=\"itens\">"+itens+"</div><div class=\"op\">"+(c.operador||"")+"</div></div>";
+    }).join("");
+  }catch(e){document.getElementById("resumo").textContent="Erro ao carregar.";}
+}
+carregar();setInterval(carregar,5000);
+</script></body></html>
