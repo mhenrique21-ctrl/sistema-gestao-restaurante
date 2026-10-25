@@ -12,6 +12,7 @@ import { DOMParser } from '@xmldom/xmldom';
 import { mergeDocument } from './mergeDocument.js';
 import { idDoRegistroPdv } from './registroPdv.js';
 import { paraGemini, respostaDoGemini, erroDoGemini, valeTentarReserva, filaDeModelos } from './iaGemini.js';
+import { feriadosDoEnv } from './src/compraDoDia.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -124,6 +125,16 @@ function broadcastCardapioTv(emp) {
     try { res.write('data: refresh\n\n'); } catch { sseClients[emp].delete(res); }
   }
 }
+
+// ===== FERIADOS DA LISTA DE COMPRAS =====
+// `LISTA_FERIADOS=2026-11-02,2026-11-15,2026-12-25` no .env. Feriado é tratado
+// como domingo pela regra do corte das 12h (src/compraDoDia.js): não há compra
+// nesse dia, e a lista da véspera (a partir das 12h) já é a do dia seguinte.
+// Lido UMA vez, na subida — mudar o .env pede `pm2 restart`, como as chaves.
+// O que não for data real é ignorado e avisado aqui, nunca derruba o servidor.
+const { feriados: FERIADOS, rejeitados: FERIADOS_REJEITADOS } = feriadosDoEnv(process.env.LISTA_FERIADOS);
+if (FERIADOS_REJEITADOS.length) console.warn(`⚠️ LISTA_FERIADOS: ignorado o que não é data AAAA-MM-DD: ${FERIADOS_REJEITADOS.join(', ')}`);
+if (FERIADOS.size) console.log(`📅 Feriados da lista de compras: ${[...FERIADOS].sort().join(', ')}`);
 
 // ===== WEB PUSH =====
 const VAPID_PUBLIC  = process.env.VAPID_PUBLIC_KEY  || '';
@@ -1623,6 +1634,16 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
       res.writeHead(200);
       res.end(JSON.stringify({ versao: null }));
     }
+    return;
+  }
+
+  // Feriados para a regra das 12h da Lista de Compras. Público como `/versao`:
+  // é uma lista de datas, nada de pessoa nem de dinheiro.
+  if (req.method === 'GET' && urlPath === '/api/feriados') {
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Cache-Control', 'no-store');
+    res.writeHead(200);
+    res.end(JSON.stringify({ feriados: [...FERIADOS].sort() }));
     return;
   }
 

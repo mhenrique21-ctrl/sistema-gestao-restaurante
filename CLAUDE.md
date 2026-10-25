@@ -46,6 +46,7 @@ src/vinculoProducao.js  liga o nome da produção ao produto do Eclética (com t
 src/autoSave.js       salvar, reagendar ou ignorar — a decisão que perdia dado (com testes)
 src/listaId.js        a identidade da lista que sucede uma arquivada (com testes)
 src/listasAbertas.js  várias listas abertas: nome, autor e as 48 h (com testes)
+src/compraDoDia.js    a compra do dia: corte às 12h, sem domingo nem feriado (com testes)
 abreTela.js           abre o app num navegador e reprova TELA BRANCA (pula sem playwright)
 src/planilha.js       .xlsx e .csv sem dependência nenhuma (com testes)
 src/relatorioPlataforma.js  o relatório do iFood/99Food vira Vendas (com testes)
@@ -2537,6 +2538,41 @@ seguinte — e o item some de novo.
 
 `src/listaId.test.js` **reproduz o caso**: dois aparelhos fechando a mesma lista,
 com `uid()` o item fica órfão; com `proximaListaId` ele aparece.
+
+### A compra do dia: corte às 12h, domingo e feriado não existem — `src/compraDoDia.js` (com testes)
+
+Regra do dono (25/10/2026). A lista aberta é a **compra de um dia**, e o corte
+é ao **meio-dia**: o que entra antes das 12h é da compra de hoje; a partir das
+12h, da compra de amanhã. A lista que começa segunda 12h vai até terça 12h e se
+chama "Compra de terça · 27/10". **Domingo a loja não abre e não existe corte no
+domingo**: a lista que começa sábado 12h vai até **segunda** 12h e se chama
+"compra de segunda" — item de sábado à tarde e de domingo inteiro é da compra
+de segunda. **Feriado é tratado como domingo.**
+
+- `diaDaCompra(quando, feriados)` é a regra inteira, em hora LOCAL (nunca
+  `toISOString()`: às 21h o UTC já é amanhã). `inicioDaCompra(dia)` diz quando
+  a lista abriu (sábado 12h para a compra de segunda).
+- O id da lista do dia é **derivado do dia** (`compra-2026-10-26`) — a lição
+  do `src/listaId.js`: na virada todo aparelho decide sozinho, e com `uid()`
+  cada um abriria a sua "compra de segunda". Quando o mesmo dia já foi
+  arquivado (sábado 10h, tudo comprado, e a nova ainda é a compra de sábado),
+  o id ganha sufixo (`-2`, `-3`): com o mesmo id o cadastro cairia no
+  tombstone da fusão e o segundo arquivamento gravaria `arq-compra-…` **por
+  cima** do primeiro.
+- `aplicarCompraDoDia(d, agora, feriados)` roda no `d` da GRAVAÇÃO em toda
+  inserção (normal, pelo catálogo, e "Retomar"), e num efeito que dispara no
+  minuto do corte e reconfere por minuto — a tela vira antes do primeiro item.
+  A lista anterior **não é apagada nem arquivada** pela virada: fica no
+  trocador com os pendentes dela e fecha pelos caminhos de sempre.
+- **Lista criada à mão não segue a regra** (tem cadastro em `listasCompra` e
+  id que não é `compra-…`): quem a abriu quer os itens nela. A lista de antes
+  desta mudança (id avulso, sem cadastro) conta como "do dia" — era a única.
+- Feriados: `LISTA_FERIADOS=2026-11-02,2026-11-15` no `.env` da VPS, lido na
+  subida (`pm2 restart` depois de mudar) e servido em `GET /api/feriados`.
+  Data inválida é ignorada e avisada no log, nunca derruba o servidor. A tela
+  **espera** os feriados chegarem para virar (às 12h01 da véspera de um
+  feriado, virar sem eles abriria a "compra do feriado" por um instante); a
+  inserção não espera.
 
 ### Várias listas abertas, com nome e autor — `src/listasAbertas.js` (com testes)
 

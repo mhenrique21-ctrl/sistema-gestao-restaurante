@@ -176,7 +176,12 @@ test('a lista NOVA do fechamento tem id determinístico', () => {
   // Com várias listas abertas, arquivar a ativa primeiro tenta HERDAR outra
   // lista já aberta; só quando não sobra nenhuma é que nasce uma — e aí o id
   // dela tem que ser derivado, nunca inventado por aparelho.
-  assert.ok(fn.includes('listaAtualId:herdeira||proximaListaId(alvo),'),
+  // Desde 25/10/2026 a que nasce é a COMPRA DO DIA (src/compraDoDia.js), cujo
+  // id é derivado do dia — determinístico do mesmo jeito. `proximaListaId`
+  // ficou só de reserva, para quando a regra do dia não tiver o que abrir.
+  assert.ok(fn.includes('const nova=aplicarCompraDoDia({...base,listaAtualId:""},new Date(),feriadosSet);'),
+    'a lista nova do fechamento deixou de ser a compra do dia');
+  assert.ok(fn.includes('return nova.virou?nova.db:{...base,listaAtualId:proximaListaId(alvo),'),
     'o id da lista nova voltou a ser por aparelho');
   assert.ok(fn.includes('const herdeira=proximaAtiva(derivada,alvo);'),
     'arquivar a lista aberta parou de herdar outra lista já aberta');

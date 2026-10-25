@@ -18,6 +18,7 @@ import {sugerirVinculo,itemDeEstoqueDaProducao,apelidosDoItem,normalizarNome as 
 import {decidirAutoSave,empresasComMudanca} from "./autoSave.js";
 import {proximaListaId,ID_LISTA_INICIAL} from "./listaId.js";
 import {nomeAutomatico,nomeDaLista,listasAbertas,listaPorId,listasOciosas,horasAteApagar,proximaAtiva,OCIOSA_HORAS} from "./listasAbertas.js";
+import {aplicarCompraDoDia,precisaVirar,msAteProximoCorte,HORA_CORTE} from "./compraDoDia.js";
 import {lerPlanilha} from "./planilha.js";
 import {lerRelatorio,conferirRelatorio,resumoPorDia,lancamentosDoRelatorio,conflitosDaPonte,automaticosDePlataforma,limparAutomaticos,ROTULO as ROTULO_PLAT} from "./relatorioPlataforma.js";
 import {compararPeriodos,formasDoPeriodo,porDiaDaSemana,porMes,periodoAnterior,compararProdutos,coberturaItens,topComResto,CANAIS as CANAIS_REL,FORMAS as FORMAS_REL} from "./relatorioPeriodo.js";
@@ -1902,6 +1903,10 @@ const migrateDb=(m:any)=>{
   return m;
 };
 
+// Feriados do `.env` do servidor (LISTA_FERIADOS), baixados UMA vez por
+// sessão — a aba Lista monta e desmonta a cada troca de aba e não pode bater
+// na rota toda vez. `null` = ainda não chegou (ver ListaComprasPanel).
+let _feriadosCache:Set<string>|null=null;
 const _listaDeletados=new Set<string>(
   (()=>{try{return JSON.parse(localStorage.getItem("_delIds")||"[]");}catch{return[];}})()
 );
@@ -10986,6 +10991,22 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
   const cats=catOrdem.length>0?[...catOrdem.filter(c=>allCats.includes(c)),...allCats.filter(c=>!catOrdem.includes(c))]:allCats;
 
   const listaAtualId=db.listaAtualId;
+  // ---- A compra do dia: corte ao meio-dia, sem domingo nem feriado (25/10) -
+  // Regra em src/compraDoDia.js. Os feriados vêm do `.env` do servidor
+  // (`LISTA_FERIADOS`), pela rota `/api/feriados`; até chegarem, `null`, e a
+  // virada ESPERA — virar sem eles às 12h01 da véspera de feriado abriria a
+  // "compra do feriado" por um instante, e o item inserido nesse instante
+  // ficaria preso nela. A inserção não espera (usa o que tiver): item nunca
+  // pode deixar de entrar por causa de uma rota.
+  const [feriados,setFeriados]=useState<Set<string>|null>(_feriadosCache);
+  useEffect(()=>{
+    if(_feriadosCache){setFeriados(_feriadosCache);return;}
+    let vivo=true;
+    fetch("/api/feriados",{cache:"no-store"}).then(r=>r.ok?r.json():{feriados:[]}).catch(()=>({feriados:[]}))
+      .then(d=>{const s=new Set<string>(Array.isArray(d?.feriados)?d.feriados:[]);_feriadosCache=s;if(vivo)setFeriados(s);});
+    return()=>{vivo=false;};
+  },[]);
+  const feriadosSet:Set<string>=feriados||new Set<string>();
   // ---- Várias listas abertas (04/10/2026) ----------------------------------
   // ⚠️ O cadastro é DERIVADO do db, nunca exigido: toda a operação de hoje tem
   // itens com `listaId` e nenhuma entrada em `listasCompra`. Ver listasAbertas.js.
@@ -11176,7 +11197,12 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       // pediu o quê e cobrar/conferir individualmente. Repetir o mesmo produto
       // continua somando na linha da própria pessoa, pra não encher a lista.
       const quem=(login?.label||"").trim().toLowerCase();
-      const pendenteExistente=pendentes.find((i:any)=>
+      // ⚠️ Se passou do corte (12h) e a lista aberta ainda é a de hoje, o item
+      // NÃO soma num pendente dela: ele é da compra de amanhã, que a gravação
+      // abaixo abre. Somar aqui mandaria o pedido da tarde para a compra que
+      // já aconteceu de manhã.
+      const viraAgora=precisaVirar(db,new Date(),feriadosSet);
+      const pendenteExistente=viraAgora?undefined:pendentes.find((i:any)=>
         i.nome.trim().toLowerCase()===nl &&
         (i.adicionadoPor||"").trim().toLowerCase()===quem);
       let fnLista:(d:any)=>any;
@@ -11186,7 +11212,10 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       }else{
         const maxOrdem=lista.length>0?Math.max(...lista.map((i:any)=>i.ordem||0))+1:0;
         const newItem={id:uid(),listaId:listaAtualId,nome,quantidade:qtdNova,unidade:form.unidade,categoria:cat,rua:ruaVal,estoqueQtd:form.estoqueQtd,estoqueUn:form.estoqueUn||"un",obs:form.obs,urgente:form.urgente,comprado:false,ordem:maxOrdem,adicionadoPor:login?.label||"",criadoEm:new Date().toISOString(),updatedAt:Date.now()};
-        fnLista=(d:any)=>({...d,listaCompras:[...(d.listaCompras||[]).filter((i:any)=>i.id!==newItem.id),newItem]});
+        // O `listaId` sai do `d` da GRAVAÇÃO, pela regra do dia: depois das 12h
+        // o item nasce na compra de amanhã (e a abre, se for o primeiro).
+        fnLista=(d:any)=>{const r=aplicarCompraDoDia(d,new Date(),feriadosSet);
+          return{...r.db,listaCompras:[...(r.db.listaCompras||[]).filter((i:any)=>i.id!==newItem.id),{...newItem,listaId:r.listaId}]};};
       }
       // O catálogo, numa função só — antes eram três ramos, cada um chamando a
       // própria gravação. A comparação do nome vai TRIMADA nos dois lados (era o
@@ -11400,10 +11429,14 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       if(!ehAtual)return base;
       // Arquivando a ABERTA: assume a lista aberta de movimento mais recente;
       // não sobrando nenhuma, nasce uma. A aba Lista nunca fica sem lista.
+      // ⚠️ A que nasce é a COMPRA DO DIA (src/compraDoDia.js), não um id
+      // avulso: sábado 10h, tudo comprado, a nova ainda é a compra de sábado
+      // (com sufixo, para não cair no tombstone da arquivada); sábado 13h, a
+      // de segunda. `proximaListaId` ficou só para quem não tem regra do dia.
       const herdeira=proximaAtiva(derivada,alvo);
-      return{...base,
-        listaAtualId:herdeira||proximaListaId(alvo),
-        listaAtualAbertaEm:new Date().toISOString()};
+      if(herdeira)return{...base,listaAtualId:herdeira,listaAtualAbertaEm:new Date().toISOString()};
+      const nova=aplicarCompraDoDia({...base,listaAtualId:""},new Date(),feriadosSet);
+      return nova.virou?nova.db:{...base,listaAtualId:proximaListaId(alvo),listaAtualAbertaEm:new Date().toISOString()};
     });
   };
 
@@ -11444,6 +11477,38 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     return()=>{clearInterval(tick);clearTimeout(fechar);};
   },[listaFinalizada,listaAtualId]);
   const cancelarAutoFechar=()=>{autoCanceladaRef.current=listaAtualId;setAutoFecharEm(null);};
+
+  // ---- A virada do meio-dia (25/10/2026) ------------------------------------
+  // Às 12h a lista aberta deixa de ser a compra de hoje e passa a ser a de
+  // amanhã (pulando domingo e feriado) — para TODO MUNDO, porque `listaAtualId`
+  // é um só. A inserção já faz isso sozinha no `d` da gravação; este efeito
+  // existe para a TELA mostrar a lista certa antes do primeiro item, e para a
+  // primeira abertura depois do deploy trocar a lista antiga (id avulso) pela
+  // compra do dia.
+  //
+  // ⚠️ Dispara NO MINUTO do corte (`msAteProximoCorte`), não só num intervalo:
+  // com tique de 10 min, a tela ficaria até 10 min mostrando "compra de
+  // sábado" depois do meio-dia. E reconfere a cada minuto por segurança
+  // (aparelho que dormiu com a aba aberta perde o timer).
+  //
+  // ⚠️ Só grava quando PRECISA (`precisaVirar`), e com os feriados já
+  // carregados — ver o comentário em `feriados`. Um por ciclo, como a
+  // varredura das 48 h: `setDbAndSave` liga o save direto por até 5 s.
+  const viradaRef=useRef<string>("");
+  useEffect(()=>{
+    if(!feriados)return;
+    const virar=()=>{
+      if(!precisaVirar(db,new Date(),feriados))return;
+      const marca=`${db.listaAtualId}|${new Date().toDateString()}|${new Date().getHours()>=HORA_CORTE?"pm":"am"}`;
+      if(viradaRef.current===marca)return;   // já gravei esta virada; espero o db
+      viradaRef.current=marca;
+      (setDbAndSave||setDb)((d:any)=>aplicarCompraDoDia(d,new Date(),feriados).db);
+    };
+    virar();
+    const noCorte=setTimeout(virar,msAteProximoCorte(new Date())+1000);
+    const t=setInterval(virar,60*1000);
+    return()=>{clearTimeout(noCorte);clearInterval(t);};
+  },[db.listaAtualId,db.listasCompra,db.pedidosLista,feriados]);
 
   // ---- Lista parada há 48 h é APAGADA sozinha (decisão do dono, 04/10/2026) -
   // ⚠️ APAGA MESMO: os itens somem do banco e não há desfazer. Propus arquivar,
@@ -11668,7 +11733,9 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
     if(formVals.inserirLista){
       const qtd=parseFloat(formVals.qtd.replace(",","."))||1;
       const maxOrdem=lista.length>0?Math.max(...lista.map((i:any)=>i.ordem||0))+1:0;
-      (setDbAndSave||setDb)((d:any)=>({...d,listaCompras:[...(d.listaCompras||[]),{id:uid(),listaId:listaAtualId,nome,quantidade:qtd,unidade:prod.unidade||"un",categoria:cat,rua,estoqueQtd:"",estoqueUn:"un",obs:"",urgente:false,comprado:false,ordem:maxOrdem,adicionadoPor:login?.label||"",criadoEm:now,updatedAt:Date.now()}]}));
+      // Mesma regra do dia da inserção normal: o `listaId` sai do `d` da gravação.
+      (setDbAndSave||setDb)((d:any)=>{const r=aplicarCompraDoDia(d,new Date(),feriadosSet);
+        return{...r.db,listaCompras:[...(r.db.listaCompras||[]),{id:uid(),listaId:r.listaId,nome,quantidade:qtd,unidade:prod.unidade||"un",categoria:cat,rua,estoqueQtd:"",estoqueUn:"un",obs:"",urgente:false,comprado:false,ordem:maxOrdem,adicionadoPor:login?.label||"",criadoEm:now,updatedAt:Date.now()}]};});
     }
   };
 
@@ -11973,9 +12040,12 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       const pendIds=(d.listaCompras||[]).filter((i:any)=>!i.comprado).map((i:any)=>i.id);
       pendIds.forEach((id:string)=>_listaDeletados.add(id));
       const jaComprados=(d.listaCompras||[]).filter((i:any)=>i.comprado);
+      // Os itens retomados entram na compra do dia (regra das 12h), não na
+      // lista que estava aberta no render — depois do corte seria a de ontem.
+      const r=aplicarCompraDoDia(d,new Date(),feriadosSet);
       return{
-        ...d,
-        listaCompras:[...novosItens,...jaComprados],
+        ...r.db,
+        listaCompras:[...novosItens.map((i:any)=>({...i,listaId:r.listaId})),...jaComprados],
         listaDeletedIds:[...new Set([...(d.listaDeletedIds||[]),...pendIds])].slice(-5000),
       };
     });
@@ -12889,6 +12959,9 @@ function ListaComprasPanel({db,setDb,isAdmin,onLogout,setState,login,setDbAndSav
       </button>
       <div className="card" style={{background:"var(--infoBg)",border:"1px solid var(--infoText)33"}}>
         <div style={{fontSize:11.5,color:"var(--infoText)",lineHeight:1.55}}>
+          A lista do dia vira ao <b>meio-dia</b>: o que entra depois das {HORA_CORTE}h já é da <b>compra de amanhã</b>.
+          Domingo e feriado não têm compra — sábado depois das {HORA_CORTE}h e domingo inteiro vão para a <b>compra de segunda</b>.
+          Uma lista criada à mão não segue essa regra: o item fica nela enquanto ela estiver aberta.
           Abrir uma lista troca a lista de <b>todos os aparelhos</b> — é por isso que o nome dela fica
           no alto da tela. Lista parada há mais de <b>{OCIOSA_HORAS} horas</b> é <b>apagada</b> sozinha,
           com os itens, e isso <b>não tem como desfazer</b> — a contagem aparece aqui nas últimas horas.
