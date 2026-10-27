@@ -161,6 +161,45 @@ export function aplicarProposta(d, proposta, agora = new Date().toISOString()) {
   return { alteradas, aprendidos, porCat, ignoradas: (proposta?.itens || []).length - mapa.size };
 }
 
+// Onde "insumos" realmente aparece no banco. Quando `listar` dá zero, a
+// categoria está em outro lugar: no Financeiro (`contas[].categoria`), no
+// catálogo (`materiasPrimas[].categoria`) ou no mapa da DRE.
+export function diagnosticar(d, hoje = new Date().toISOString().slice(0, 10)) {
+  const ini90 = new Date(Date.parse(hoje + 'T00:00:00Z') - 90 * 86400000).toISOString().slice(0, 10);
+  const porCat = (lista, campoData) => {
+    const m = {};
+    for (const x of lista || []) {
+      const k = String(x?.categoria || '(vazia)');
+      m[k] = m[k] || { n: 0, total: 0, n90: 0, total90: 0 };
+      const v = money(x.valor); m[k].n++; m[k].total = r2(m[k].total + v);
+      if ((x?.[campoData] || '') >= ini90) { m[k].n90++; m[k].total90 = r2(m[k].total90 + v); }
+    }
+    return Object.entries(m).map(([cat, v]) => ({ cat, ...v })).sort((a, b) => b.total90 - a.total90 || b.total - a.total);
+  };
+  const grupos = new Set((d?.compras || []).map((c) => c.grupoId).filter(Boolean));
+  const ligada = (c) => c.origem === 'compra' || !!c.chNFe || !!c.xmlNFe || (!!c.grupoId && grupos.has(c.grupoId));
+  const contasSaida = (d?.contas || []).filter((c) => c.tipo === 'saida');
+  const insumosFin = contasSaida.filter((c) => foldNome(c.categoria) === 'insumos');
+  const mp = {};
+  for (const m of d?.materiasPrimas || []) { const k = String(m?.categoria || '(vazia)'); mp[k] = (mp[k] || 0) + 1; }
+  return {
+    ini90,
+    compras: porCat(d?.compras, 'data'),
+    contas: porCat(contasSaida, 'vencimento'),
+    insumosFin: {
+      n: insumosFin.length, total: r2(insumosFin.reduce((s, c) => s + money(c.valor), 0)),
+      pagas: insumosFin.filter((c) => c.status === 'pago').length,
+      ligadasACompra: insumosFin.filter(ligada).length,
+      porOrigem: insumosFin.reduce((m, c) => { const k = c.origem || '(sem origem)'; m[k] = (m[k] || 0) + 1; return m; }, {}),
+      exemplos: insumosFin.sort((a, b) => (b.vencimento || '').localeCompare(a.vencimento || '')).slice(0, 12)
+        .map((c) => ({ vencimento: c.vencimento, descricao: c.descricao, valor: money(c.valor), status: c.status, origem: c.origem || '', ligada: ligada(c) })),
+    },
+    mapaDre: d?.mapaCategoriaDre || {},
+    categoriasFin: (d?.categorias || []).map((x) => (typeof x === 'string' ? x : x?.nome)).filter(Boolean),
+    materiasPrimas: Object.entries(mp).sort((a, b) => b[1] - a[1]),
+  };
+}
+
 // ── linha de comando ────────────────────────────────────────────────────────
 const brl = (n) => 'R$ ' + r2(n).toFixed(2).replace('.', ',');
 const lerLoja = (dir, loja) => JSON.parse(fs.readFileSync(path.join(dir, `${loja}.json`), 'utf-8'));
@@ -184,6 +223,27 @@ function cmdListar(dir) {
     const saida = path.join(dir, `insumos-proposta-${loja}.json`);
     fs.writeFileSync(saida, JSON.stringify({ loja, geradoEm: new Date().toISOString(), itens: r.itens }, null, 2));
     console.log(`→ proposta gravada em ${saida} (edite "categoria" ou marque "pular": true antes de gravar)`);
+  }
+}
+
+function cmdDiagnostico(dir) {
+  for (const loja of LOJAS) {
+    const arq = path.join(dir, `${loja}.json`);
+    if (!fs.existsSync(arq)) continue;
+    const r = diagnosticar(lerLoja(dir, loja));
+    const tabela = (titulo, linhas) => {
+      console.log(`\n-- ${titulo} (n / total · últimos 90 dias desde ${r.ini90}: n / total) --`);
+      for (const l of linhas) console.log(`${l.cat.padEnd(38)} ${String(l.n).padStart(5)} ${brl(l.total).padStart(14)} · ${String(l.n90).padStart(4)} ${brl(l.total90).padStart(13)}`);
+    };
+    console.log(`\n==================== ${loja.toUpperCase()} ====================`);
+    tabela('COMPRAS por categoria', r.compras);
+    tabela('CONTAS (saída) por categoria', r.contas);
+    const f = r.insumosFin;
+    console.log(`\n-- CONTAS "Insumos": ${f.n} conta(s) · ${brl(f.total)} · ${f.pagas} paga(s) · ${f.ligadasACompra} ligada(s) a compra · origem: ${JSON.stringify(f.porOrigem)} --`);
+    for (const e of f.exemplos) console.log(`  ${e.vencimento}  ${brl(e.valor).padStart(12)}  ${e.status.padEnd(8)} ${e.ligada ? 'ligada ' : 'solta  '} ${e.origem.padEnd(10)} ${e.descricao}`);
+    console.log(`\n-- mapaCategoriaDre --`); console.log(JSON.stringify(r.mapaDre));
+    console.log(`-- categorias do Financeiro --`); console.log(r.categoriasFin.join(' | '));
+    console.log(`-- materiasPrimas por categoria --`); console.log(r.materiasPrimas.map(([c, n]) => `${c}: ${n}`).join(' | '));
   }
 }
 
@@ -219,6 +279,7 @@ if (ehMain) {
   const arqProposta = iProp >= 0 ? resto[iProp + 1] : null;
   const dir = resto.filter((a, i) => !a.startsWith('--') && i !== iProp + 1)[0] || path.join(process.cwd(), 'dados');
   if (modo === 'listar') cmdListar(dir);
+  else if (modo === 'diagnostico') cmdDiagnostico(dir);
   else if (modo === 'gravar') cmdGravar(dir, arqProposta);
-  else { console.log('Uso:\n  node scripts/insumos-cmv.mjs listar [dirDados]\n  node scripts/insumos-cmv.mjs gravar [dirDados] --proposta <insumos-proposta-loja.json>'); process.exit(modo ? 2 : 0); }
+  else { console.log('Uso:\n  node scripts/insumos-cmv.mjs listar [dirDados]\n  node scripts/insumos-cmv.mjs diagnostico [dirDados]\n  node scripts/insumos-cmv.mjs gravar [dirDados] --proposta <insumos-proposta-loja.json>'); process.exit(modo ? 2 : 0); }
 }
