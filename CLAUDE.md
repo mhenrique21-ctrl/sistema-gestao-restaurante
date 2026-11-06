@@ -1455,8 +1455,8 @@ chegou, e ele falha para os dois lados:
 | **ficou para trás** | a pergunta seguinte repete um NSU já entregue → 656, de novo e de novo | 05/11/2026 |
 
 ⚠️ **O CASO DE 05/11/2026: "as notas de 04 e 05/11 não entraram".** Ponteiro em 760, cache com notas
-até o NSU 809, SEFAZ informando 819, e toda varredura virando 656 — cada uma bloqueando 70 min. O
-app estava no ar, a SEFAZ respondia HTTP 200 e o certificado valia até 01/2027: **nada falhava, só
+até o NSU 809, SEFAZ informando 819 no 656, e toda varredura virando 656 — cada uma bloqueando 70 min.
+O app estava no ar, a SEFAZ respondia HTTP 200 e o certificado valia até 01/2027: **nada falhava, só
 não andava**. O erro do log ("Consumo Indevido") apontava para a SEFAZ, e a causa era uma linha
 nossa.
 
@@ -1467,6 +1467,24 @@ ultNSU do lote. O ponteiro só andava no 137 (fim da fila) e, até o 22/10, no 6
 chamada** e perguntava o mesmo NSU 8 vezes seguidas. Reproduzido com o `new_server.js` real contra uma
 SEFAZ falsa: perguntas `[760, 760]`, ponteiro preso, cache com notas até o 810 — a mesma assinatura
 da produção.
+
+⚠️ **O QUE A SEFAZ REAL MOSTROU EM 06/11/2026** (log do pm2, código antigo, ponteiro 760):
+
+```
+HTTP 200 cStat=138 Documento(s) localizado(s) ultNSU=810        1ª pergunta, a partir de 760
+HTTP 200 cStat=656 Consumo Indevido ... ultNSU=810              2ª pergunta, de novo a partir de 760
+656 → NSU mantido em 760 (SEFAZ informa máximo 810)
+```
+
+Duas coisas, e a segunda corrige uma leitura nossa. **(1)** O que a SEFAZ recusa é a pergunta REPETIDA:
+a 1ª, mesmo atrasada (760), foi atendida; a 2ª, com o mesmo ultNSU, levou 656. É exatamente o que a
+varredura nova nunca faz. **(2)** ⚠️ **O `ultNSU` do 656 NÃO é o máximo da fila** — o log do código
+antigo chamava de "SEFAZ informa máximo", e a palavra enganou. É o `ultNSU` do ÚLTIMO LOTE que a
+SEFAZ entregou a este CNPJ: era 819 na noite de 05/11 e passou a 810 depois de um lote pedido a partir
+de 760 — um máximo nunca diminuiria. Por isso o 656 diz "use o ultNSU nas solicitações subsequentes".
+Consequência: **"a SEFAZ tem até o 819" nunca foi um fato**, e a afirmação de que as notas de 04 e
+05/11 estavam "esperando entre 810 e 819" era inferência sobre uma palavra mal lida. Só a primeira
+varredura nova responde: 138 depois do ponteiro = há notas; 137 = não há nada depois dele.
 
 As regras agora, que `nfeVarredura.test.js` trava (inclusive lendo o `new_server.js`):
 
@@ -1488,14 +1506,17 @@ As regras agora, que `nfeVarredura.test.js` trava (inclusive lendo o `new_server
 ⚠️ **O conserto NÃO adivinha um ponteiro errado.** `POST /api/nsu-status` e o NSU manual da rota de
 sincronizar gravam qualquer número, sem trava — foi quase certamente por aí que o 760 nasceu. Com o
 ponteiro abaixo do que a SEFAZ já entregou, a varredura faz UMA pergunta, recebe 656, não grava nada e
-bloqueia 70 min. **Não avança sozinha para o "máximo" que o 656 informa**: foi esse o salto de 22/10.
+bloqueia 70 min. **Não avança sozinha para o número que o 656 informa**: ele é o último lote entregue
+(ver acima), e saltar para ele só é seguro se tudo até ali já estiver no cache — o código antigo não
+garantia isso, e foi esse o salto de 22/10.
 
 **Se travar de novo (ponteiro atrás da SEFAZ):**
 
 1. `M` = maior NSU que o cache prova ter recebido — o maior entre `nsu` e `nsuCompleto` das notas.
-2. `N` = o `ultNSU` do último `cStat=138` no log do pm2 (`grep -a "HTTP 200 cStat=138"`).
+2. `N` = o `ultNSU` do último `cStat=138` no log do pm2 (`grep -a "HTTP 200 cStat=138"`). É o mesmo
+   número que o 656 devolve: o último lote que a SEFAZ entregou.
 3. Grave `N` se estiver colado em `M` (até +3: o que fica no meio são eventos, que ocupam NSU e não
-   viram nota); senão grave `M`. **Nunca** o "máximo" do 656.
+   viram nota); senão grave `M`. **Nunca** o número do 656 sem conferir com `M`.
 4. Faça isso **antes** de o bloqueio (`rateLimitUntil_*`) expirar, e com o app já na versão certa — o
    primeiro ciclo depois da liberação é o que anda o ponteiro.
 
