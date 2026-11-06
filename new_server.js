@@ -11,6 +11,7 @@ import { SignedXml } from 'xml-crypto';
 import { DOMParser } from '@xmldom/xmldom';
 import { mergeDocument } from './mergeDocument.js';
 import { idDoRegistroPdv } from './registroPdv.js';
+import { varrer, unicoEmVoo } from './nfeVarredura.js';
 import { aplicarOpsLista, MAX_TOMBSTONES } from './src/listaOps.js';
 import { virarListaNoCorte, proximoCorte, configDoCiclo, nomeDaCompra, diaDaCompra } from './src/listaCiclo.js';
 import { paraGemini, respostaDoGemini, erroDoGemini, valeTentarReserva, filaDeModelos } from './iaGemini.js';
@@ -197,8 +198,7 @@ function loadCache() {
   try { return JSON.parse(fs.readFileSync(CACHE_FILE, 'utf-8')); } catch { return {}; }
 }
 function saveCache(data) {
-  fs.mkdirSync(CERTS_DIR, { recursive: true });
-  fs.writeFileSync(CACHE_FILE, JSON.stringify(data));
+  gravarJsonAtomico(CACHE_FILE, data);
 }
 
 const MIME = {
@@ -233,27 +233,46 @@ function serveFile(filePath, res) {
 
 // ---- NF-e / SEFAZ helpers ----
 
+// Grava por arquivo temporário + rename: o rename é atômico no mesmo disco, então quem lê
+// nunca vê o arquivo pela metade. `writeFileSync` direto TRUNCA primeiro — uma queda no meio
+// (e `pm2 restart` é o último passo de todo deploy) deixa JSON cortado, e getNsuMap/loadCache
+// respondem `{}`: o ponteiro volta a 0 e o cache esvazia, calados. Com o ponteiro agora
+// gravado a cada lote, são mais gravações; as duas coisas que não podem se perder (as notas
+// que a SEFAZ já entregou e o NSU) passam por aqui.
+function gravarJsonAtomico(arquivo, dados) {
+  fs.mkdirSync(path.dirname(arquivo), { recursive: true });
+  const tmp = `${arquivo}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(dados));
+  fs.renameSync(tmp, arquivo);
+}
+
 function getNsuMap() {
   const f = path.join(CERTS_DIR, 'nsu.json');
   try { return JSON.parse(fs.readFileSync(f, 'utf-8')); } catch { return {}; }
 }
 
+// A chave do ponteiro é o CNPJ (Confraria e Seama dividem o mesmo), e `nsuAtual` é o único
+// jeito de lê-lo: o que a tela mostra e o que a varredura pergunta saem do mesmo lugar.
+function chaveNsu(emp) {
+  return (process.env[`CNPJ_${emp}`] || '').replace(/\D/g, '') || emp;
+}
+function nsuAtual(emp) {
+  const m = getNsuMap();
+  return Number(m[chaveNsu(emp)] ?? m[emp] ?? 0) || 0;
+}
+
 function saveNsu(emp, nsu) {
-  const f = path.join(CERTS_DIR, 'nsu.json');
   const m = getNsuMap();
   m[emp] = nsu;
-  fs.mkdirSync(CERTS_DIR, { recursive: true });
-  fs.writeFileSync(f, JSON.stringify(m));
+  gravarJsonAtomico(path.join(CERTS_DIR, 'nsu.json'), m);
 }
 
 function setRateLimit(emp, minutes) {
-  const f = path.join(CERTS_DIR, 'nsu.json');
   const m = getNsuMap();
   const ate = Date.now() + minutes * 60 * 1000;
   const cnpjDe = (e) => String(process.env[`CNPJ_${e}`] || "").replace(/\D/g, "");
   for (const e of ["CONFRARIA", "SEAMA"]) if (e === emp || (cnpjDe(e) && cnpjDe(e) === cnpjDe(emp))) m[`rateLimitUntil_${e}`] = ate; // mesmo CNPJ = mesmo bloqueio
-  fs.mkdirSync(CERTS_DIR, { recursive: true });
-  fs.writeFileSync(f, JSON.stringify(m));
+  gravarJsonAtomico(path.join(CERTS_DIR, 'nsu.json'), m);
 }
 
 function isRateLimited(emp) {
@@ -700,7 +719,7 @@ function buildSoapEnvelope(cnpj, uf, ultNSU) {
 </soap12:Envelope>`;
 }
 
-function sefazDistDFe(emp) {
+function sefazDistDFe(emp, ultNSUPedido) {
   return new Promise((resolve, reject) => {
     const pfxPath  = path.join(CERTS_DIR, `${emp.toLowerCase()}.pfx`);
     const keyPath  = path.join(CERTS_DIR, `${emp.toLowerCase()}_key.pem`);
@@ -716,9 +735,13 @@ function sefazDistDFe(emp) {
 
     if (!cnpj) return reject(new Error(`CNPJ_${emp} não configurado no .env`));
 
+    // ⚠️ O ponteiro entra POR PARÂMETRO: quem varre (`varrer`, em nfeVarredura.js) é quem sabe
+    // qual é o próximo NSU. Relê-lo do arquivo a cada chamada era o defeito — o ramo 138 nunca
+    // o gravava, e a chamada seguinte repetia o mesmo ultNSU (656). O arquivo só vale como
+    // reserva, para quem chamar sem informar.
     const nsuMap = getNsuMap();
     const nsuKey = cnpj || emp;
-    const ultNSU = nsuMap[nsuKey] ?? nsuMap[emp] ?? 0;
+    const ultNSU = ultNSUPedido ?? (nsuMap[nsuKey] ?? nsuMap[emp] ?? 0);
 
     const soapBody = buildSoapEnvelope(cnpj, uf, ultNSU);
     const bodyBuf  = Buffer.from(soapBody, 'utf-8');
@@ -753,7 +776,7 @@ function sefazDistDFe(emp) {
           const xMotivo = getTag(xml, 'xMotivo');
           const nsuResp = parseInt(getTag(xml, 'ultNSU')) || 0;
 
-          console.log(`[SEFAZ ${emp}] HTTP ${apiRes.statusCode} cStat=${cStat} xMotivo=${xMotivo} ultNSU=${nsuResp}`);
+          console.log(`[SEFAZ ${emp}] HTTP ${apiRes.statusCode} cStat=${cStat} xMotivo=${xMotivo} pediu=${ultNSU} ultNSU=${nsuResp}`);
 
           if (cStat === '656') {
             // ⚠️ 656 não entrega documento nenhum: avançar o NSU aqui PULAVA as notas entre o
@@ -762,7 +785,7 @@ function sefazDistDFe(emp) {
             return reject(new Error(`SEFAZ limitou as consultas (cStat 656). ${xMotivo}. Tente novamente em 1 hora.`));
           }
           if (cStat === '137') {
-            if (nsuResp > (parseInt(ultNSU) || 0)) saveNsu(nsuKey, nsuResp);
+            // Nada depois do ponteiro: não há o que guardar. Quem anda o ponteiro é `varrer`.
             setRateLimit(emp, 61); // SEFAZ: após 137, só consultar de novo depois de 1 hora
             return resolve({ nfes: [], total: 0, ultNSU: nsuResp, cStat, xMotivo });
           }
@@ -774,17 +797,20 @@ function sefazDistDFe(emp) {
           let match;
           const nfes = [];
           let maxNSU = nsuResp;
+          let docs = 0, perdidos = 0;
 
           while ((match = docZipRe.exec(xml)) !== null) {
             const nsu     = parseInt(match[1]);
             const b64data = match[2].trim();
             if (nsu > maxNSU) maxNSU = nsu;
+            docs++;
             try {
               const compressed = Buffer.from(b64data, 'base64');
               const decompressed = zlib.gunzipSync(compressed).toString('utf-8');
               if (decompressed.includes('<infNFe') || decompressed.includes('<NFe')) {
                 const parsed = parseNFeXml(decompressed);
                 if (parsed.itens.length > 0) nfes.push({ ...parsed, nsu, tipoDoc: 'completo' });
+                else perdidos++;
               } else if (decompressed.includes('<resNFe')) {
                 const cleanRes = decompressed.replace(/\sxmlns(:[a-zA-Z0-9]+)?="[^"]*"/g, '').replace(/<(\/?)([a-zA-Z0-9]+):/g, '<$1');
                 const chNFe  = getTag(cleanRes, 'chNFe') || '';
@@ -803,17 +829,31 @@ function sefazDistDFe(emp) {
                     totalCompra: vNF,
                     data, nNF, chNFe, modelo, nsu, tipoDoc: 'resumo',
                   });
-                }
+                } else perdidos++;
               }
-            } catch { /* skip malformed docZip */ }
+            } catch (e) {
+              perdidos++;
+              if (perdidos <= 3) console.log(`[SEFAZ ${emp}] docZip NSU ${nsu} ilegível: ${e.message}`);
+            }
           }
 
-          if (maxNSU > nsuResp) saveNsu(nsuKey, maxNSU);
+          // O NSU anda mesmo para o documento que não virou nota (é assim que um evento é
+          // tratado, de propósito) — por isso o que NÃO virou nota precisa aparecer no log. Era
+          // a resposta que faltava a "o NSU avançou sem gravar nota?": antes não dava para saber.
+          if (perdidos) {
+            console.log(`[SEFAZ ${emp}] ⚠️ ${perdidos} de ${docs} documento(s) deste lote NÃO viraram nota `
+              + `(XML ilegível, sem itens ou sem valor). O NSU anda mesmo assim — se faltar nota, busque pela chave.`);
+          }
 
           const nfesOrdenadas = nfes
             .sort((a, b) => (b.data || '').localeCompare(a.data || ''));
 
-          resolve({ nfes: nfesOrdenadas, total: nfes.length, ultNSU: maxNSU });
+          // ⚠️ AQUI NÃO SE GRAVA O PONTEIRO. A linha que ficava aqui —
+          // `if (maxNSU > nsuResp) saveNsu(nsuKey, maxNSU)` — era um NO-OP: maxNSU nasce igual a
+          // nsuResp e nenhum docZip traz NSU maior que o ultNSU do próprio lote. E, mesmo que
+          // gravasse, gravaria ANTES de o lote estar no cache. Quem anda o ponteiro é `varrer`,
+          // depois de guardar (nfeVarredura.js).
+          resolve({ nfes: nfesOrdenadas, total: nfes.length, ultNSU: maxNSU, cStat, docs, perdidos });
         } catch (e) {
           reject(new Error('Erro ao parsear resposta SEFAZ: ' + e.message));
         }
@@ -952,35 +992,52 @@ async function manifestarPendentes(emp, notas) {
 // consome cota indevidamente é insistir quando não há nada novo.
 const MAX_VARREDURAS_POR_CICLO = 8;
 
-async function sefazVarrerTudo(emp) {
-  const todas = [];
-  let ultimo = null;
-  let erroParcial = null;
-  for (let i = 0; i < MAX_VARREDURAS_POR_CICLO; i++) {
-    let r;
-    try {
-      r = await sefazDistDFe(emp);
-    } catch (e) {
-      // O throw abortava a varredura inteira e `todas` era descartado junto —
-      // mas o ultNSU ja tinha sido gravado dentro de sefazDistDFe. Resultado:
-      // documentos consumidos, NSU avancado, nada guardado. E a SEFAZ nao
-      // reenvia NSU ja consumido, entao as notas se perdiam de vez.
-      //
-      // Aconteceu de verdade em 27/08/2026: uma varredura andou de NSU 0 ate
-      // 483 e salvou ZERO notas, porque um lote no meio respondeu cStat 656.
-      //
-      // Agora o erro interrompe o laco mas nao descarta o que ja veio: sobe
-      // como erroParcial pra quem chamou tratar DEPOIS de salvar o cache.
-      erroParcial = e;
-      break;
-    }
-    ultimo = r;
-    const qtd = (r.nfes || []).length;
-    todas.push(...(r.nfes || []));
-    if (!qtd) break;                 // cStat 137 ou lote vazio: acabou a fila
-    await delay(1500);
+// Grava o lote no cache das notas da SEFAZ. É o "guardar" de `varrer`: roda ANTES de o
+// ponteiro andar, tanto na varredura automática quanto no botão Sincronizar (que devolve as
+// notas só ao navegador — fechar a aba antes de qualquer gravação perderia o lote que o
+// ponteiro já teria deixado para trás).
+function guardarLoteSefaz(emp, nfes) {
+  const key = chaveNsu(emp);
+  const cache = loadCache();
+  const entrada = cache[key] || {};
+  cache[key] = {
+    ...entrada,
+    nfes: fundirNotas(entrada.nfes || [], nfes).slice(0, 200),
+    timestamp: new Date().toISOString(),
+    empresa: emp,
+  };
+  saveCache(cache);
+}
+
+const _varreduras = new Map();   // chave do CNPJ -> a varredura em curso
+
+async function varrerSefaz(emp) {
+  console.log(`[SEFAZ ${emp}] varredura a partir do NSU ${nsuAtual(emp)}`);
+  const r = await varrer({
+    lerPonteiro: () => nsuAtual(emp),
+    consultar: (ultNSU) => sefazDistDFe(emp, ultNSU),
+    guardar: ({ nfes }) => guardarLoteSefaz(emp, nfes),
+    gravarPonteiro: (n) => saveNsu(chaveNsu(emp), n),
+    max: MAX_VARREDURAS_POR_CICLO,
+    esperar: () => delay(1500),
+  });
+  console.log(`[SEFAZ ${emp}] varredura: NSU ${r.de} → ${r.ultNSU} em ${r.lotes} lote(s), ${r.total} nota(s) recebida(s)`
+    + (r.erroParcial ? ` · interrompida: ${r.erroParcial.message}` : ''));
+  return r;
+}
+
+// ⚠️ A varredura é "pedir um lote, GUARDAR, andar o ponteiro, pedir o próximo" — a regra e o
+// porquê estão em nfeVarredura.js, com os testes. O que ficou aqui é só a fiação.
+//
+// Uma de cada vez por CNPJ: Confraria e Seama dividem o mesmo ponteiro, e dois pedidos juntos
+// (o ciclo automático e um clique em Sincronizar) perguntam o MESMO NSU — o segundo é consumo
+// indevido garantido. Quem chega durante uma varredura recebe a mesma, sem consultar de novo.
+function sefazVarrerTudo(emp) {
+  const key = chaveNsu(emp);
+  if (_varreduras.has(key)) {
+    console.log(`[SEFAZ ${emp}] já há uma varredura em andamento para este CNPJ — aguardando a mesma, sem consultar de novo.`);
   }
-  return { nfes: todas, total: todas.length, ultNSU: ultimo?.ultNSU || 0, erroParcial };
+  return unicoEmVoo(_varreduras, key, () => varrerSefaz(emp));
 }
 
 async function sefazSync(emp) {
@@ -1903,7 +1960,9 @@ Cada grupo deve ter pelo menos 2 ids. Um id só pode aparecer em um grupo.`;
     const entry = cache[key] || { nfes:[], timestamp:null, ultNSU:0 };
     res.setHeader('Content-Type','application/json');
     res.writeHead(200);
-    res.end(JSON.stringify({ nfes: entry.nfes||[], timestamp: entry.timestamp, ultNSU: entry.ultNSU||0 }));
+    // ⚠️ O ponteiro VIVO, não o `entry.ultNSU` guardado: varreduras que falhavam no primeiro pedido
+    // gravavam "ultNSU: 0", e a tela mostrava "NSU 0" para um ponteiro que estava em 760.
+    res.end(JSON.stringify({ nfes: entry.nfes||[], timestamp: entry.timestamp, ultNSU: nsuAtual(emp) }));
     return;
   }
 
@@ -5686,13 +5745,17 @@ async function autoSyncSEFAZ() {
     console.log(`[AutoSync] Iniciando sync SEFAZ para ${emp} (CNPJ key: ${key})...`);
     try {
       // FASE A — varrer tudo que a SEFAZ tem pra entregar neste ciclo.
+      // ⚠️ A varredura já guarda cada lote no cache (e só então anda o ponteiro), então o
+      // `existing` de DEPOIS dela já tem o que chegou. O retrato de "completas" para contar as
+      // promovidas precisa ser o de ANTES — senão o log dirá "0 promovidas" para sempre.
+      const antesCompletas = (loadCache()[key]?.nfes || []).filter(n => n.estado === 'completo').length;
       const result = await sefazSync(emp);
       const cache = loadCache();
       const existing = cache[key]?.nfes || [];
 
       // FASE C (do ciclo anterior) — o `nfeProc` completo chega num NSU novo e
-      // aqui promove o resumo correspondente, casando pela chave.
-      const antesCompletas = existing.filter(n => n.estado === 'completo').length;
+      // aqui promove o resumo correspondente, casando pela chave. `fundirNotas` é
+      // idempotente: o que a varredura já guardou não duplica.
       const notas = fundirNotas(existing, result.nfes || []);
       const promovidas = notas.filter(n => n.estado === 'completo').length - antesCompletas;
 

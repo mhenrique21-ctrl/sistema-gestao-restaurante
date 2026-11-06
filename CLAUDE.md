@@ -36,6 +36,7 @@ mergeDocument.js      fusão de documento no servidor (com testes)
 mergeListaCompras.js  fusão específica da Lista de Compras (com testes)
 iaGemini.js           tradução Anthropic ↔ Gemini para o Cupom IA (com testes)
 registroPdv.js        com que id a ponte de PDV grava o dia (com testes)
+nfeVarredura.js       a varredura da SEFAZ: guarda o lote e SÓ DEPOIS anda o ponteiro NSU (com testes)
 src/consumoTeorico.js consumo teórico de insumos a partir das vendas (com testes)
 src/tipoInsumo.js     o que o item é e o que a venda faz com ele (com testes)
 src/movimentoEstoque.js  entrada/saída/ajuste/produção manual (com testes)
@@ -1441,6 +1442,73 @@ build não pega isso.
 ⚠️ Abrir a aba NF-e **não** consulta a SEFAZ para listar — lê o cache local. Só
 o auto-fetch acima consulta.
 
+
+#### NF-e da SEFAZ: o ponteiro (NSU) — `nfeVarredura.js` (com testes)
+
+A SEFAZ entrega até 50 documentos por pergunta e **não reenvia o que já entregou**. O ponteiro
+(`certs/nsu.json`, chaveado pelo CNPJ — Confraria e Seama dividem o mesmo) é a memória do que já
+chegou, e ele falha para os dois lados:
+
+| falha | efeito | quando |
+|---|---|---|
+| **andou demais** | documento entregue e nunca guardado — perdido de vez | 27/08/2026 (656 no meio da varredura); 22/10/2026 (o 656 gravava o "máximo" da SEFAZ e pulava notas) |
+| **ficou para trás** | a pergunta seguinte repete um NSU já entregue → 656, de novo e de novo | 05/11/2026 |
+
+⚠️ **O CASO DE 05/11/2026: "as notas de 04 e 05/11 não entraram".** Ponteiro em 760, cache com notas
+até o NSU 809, SEFAZ informando 819, e toda varredura virando 656 — cada uma bloqueando 70 min. O
+app estava no ar, a SEFAZ respondia HTTP 200 e o certificado valia até 01/2027: **nada falhava, só
+não andava**. O erro do log ("Consumo Indevido") apontava para a SEFAZ, e a causa era uma linha
+nossa.
+
+⚠️ **O ramo 138 de `sefazDistDFe` terminava com `if (maxNSU > nsuResp) saveNsu(...)` — um NO-OP.**
+`maxNSU` nasce igual a `nsuResp` (o ultNSU da própria resposta) e nenhum docZip traz NSU maior que o
+ultNSU do lote. O ponteiro só andava no 137 (fim da fila) e, até o 22/10, no 656. Tirado o salto do
+656 — que estava certo em tirar —, sobrou uma varredura que **relia o ponteiro do arquivo a cada
+chamada** e perguntava o mesmo NSU 8 vezes seguidas. Reproduzido com o `new_server.js` real contra uma
+SEFAZ falsa: perguntas `[760, 760]`, ponteiro preso, cache com notas até o 810 — a mesma assinatura
+da produção.
+
+As regras agora, que `nfeVarredura.test.js` trava (inclusive lendo o `new_server.js`):
+
+- ⚠️ **O CACHE VAI ANTES DO PONTEIRO** (`varrer` manda na ordem, não a fiação). "Guardou e não andou" só
+  repete um lote — a fusão é por chave, idempotente; "andou e não guardou" é a nota perdida. Cada lote
+  é gravado por `guardarLoteSefaz` **dentro da varredura**, não no chamador: o botão Sincronizar
+  devolve as notas só ao navegador, e fechar a aba antes de qualquer gravação perderia o que o
+  ponteiro já teria deixado para trás.
+- ⚠️ **O ponteiro é lido UMA vez por varredura** e passado a `sefazDistDFe(emp, ultNSU)`.
+- **Só anda para a frente**, e **nunca se pergunta o mesmo NSU duas vezes** na mesma varredura.
+- Falhou um lote (656, timeout)? O que veio antes **já está guardado** e o ponteiro parou no último
+  lote bom; o erro sobe como `erroParcial`.
+- ⚠️ **Uma varredura por CNPJ de cada vez** (`unicoEmVoo`): o ciclo automático e um clique em
+  Sincronizar perguntam o MESMO NSU, e o segundo é consumo indevido garantido.
+- **`nsu.json` e `sefaz_cache.json` são gravados por arquivo temporário + rename**
+  (`gravarJsonAtomico`): `writeFileSync` direto trunca primeiro, e uma queda no meio deixa JSON cortado
+  — `getNsuMap`/`loadCache` respondem `{}`, o ponteiro volta a 0 e o cache esvazia, calados.
+
+⚠️ **O conserto NÃO adivinha um ponteiro errado.** `POST /api/nsu-status` e o NSU manual da rota de
+sincronizar gravam qualquer número, sem trava — foi quase certamente por aí que o 760 nasceu. Com o
+ponteiro abaixo do que a SEFAZ já entregou, a varredura faz UMA pergunta, recebe 656, não grava nada e
+bloqueia 70 min. **Não avança sozinha para o "máximo" que o 656 informa**: foi esse o salto de 22/10.
+
+**Se travar de novo (ponteiro atrás da SEFAZ):**
+
+1. `M` = maior NSU que o cache prova ter recebido — o maior entre `nsu` e `nsuCompleto` das notas.
+2. `N` = o `ultNSU` do último `cStat=138` no log do pm2 (`grep -a "HTTP 200 cStat=138"`).
+3. Grave `N` se estiver colado em `M` (até +3: o que fica no meio são eventos, que ocupam NSU e não
+   viram nota); senão grave `M`. **Nunca** o "máximo" do 656.
+4. Faça isso **antes** de o bloqueio (`rateLimitUntil_*`) expirar, e com o app já na versão certa — o
+   primeiro ciclo depois da liberação é o que anda o ponteiro.
+
+⚠️ **`ultNSU: 0` na tela era mentira.** Varredura que falhava no primeiro pedido gravava `ultNSU: 0` no
+cache, e a aba NF-e mostrava "NSU 0" para um ponteiro que estava em 760. `GET /api/nfe-cache` devolve
+agora o ponteiro VIVO (`nsuAtual`). O log ganhou `pediu=<NSU>` em cada resposta, e
+`⚠️ N de M documento(s) NÃO viraram nota` quando o lote traz XML ilegível, sem itens ou sem valor — o
+NSU anda mesmo assim, e antes não havia como saber.
+
+O que **não** foi feito: um registro visível, na tela de NF-e, das faixas de NSU puladas à mão (tela
+nova, ainda sem mockup); e a rota manual de Sincronizar continua devolvendo 200 com lista vazia quando
+o primeiro pedido leva 656 (a tela diz "Nenhuma NF-e encontrada (NSU …)" em vez de mostrar o 656).
+O cache guarda no máximo 200 notas (`slice(0, 200)`), como sempre guardou.
 
 ### Financeiro
 Contas · + Novo · DRE · Categorias. A DRE tem toggle **Semanal / Mensal / Período livre**;
