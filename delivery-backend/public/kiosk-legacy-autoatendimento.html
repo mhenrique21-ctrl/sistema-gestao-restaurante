@@ -1319,7 +1319,7 @@ async function submitOrder() {
   try {
     const res = await fetch(`${API}/api/comandas/${comanda.id}/orders`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
       body: JSON.stringify({ items: cart.map(({ product_id, quantity, notes, addons }) => ({ product_id, quantity, notes, addons })), mesa: mesaNumber }),
     });
     const data = await res.json();

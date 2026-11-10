@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import Icon from '../components/Icon';
 import { MESA_ID, useComandaStore } from '../store/useComandaStore';
 import { useAppStore } from '../store/useAppStore';
-import { resolveComanda, submitOrder, requestClose, ApiError } from '../lib/api';
+import { resolveComanda, enviarPedido, requestClose, ApiError } from '../lib/api';
 
 const TEXTO_POR_PROPOSITO = {
   pedido: 'Aponte a câmera para o QR do seu cartão para confirmar o pedido',
@@ -20,6 +20,7 @@ export default function EscanearQR() {
   const voltarAoCardapio = useAppStore((s) => s.voltarAoCardapio);
   const itens = useComandaStore((s) => s.itens);
   const clearItens = useComandaStore((s) => s.clearItens);
+  const idempotencyKey = useComandaStore((s) => s.idempotencyKey);
 
   const [erro, setErro] = useState('');
   const scannerRef = useRef(null);
@@ -39,13 +40,19 @@ export default function EscanearQR() {
 
       if (scanPurpose === 'pedido') {
         try {
-          await submitOrder(comanda.id, itens, MESA_ID);
+          const resultado = await enviarPedido(comanda.id, itens, MESA_ID, idempotencyKey);
           clearItens();
-          goTo('PEDIDO_ENVIADO');
+          goTo('PEDIDO_ENVIADO', { total: resultado.order_total });
         } catch (e) {
           // Itens continuam na comanda local (não limpamos o carrinho) --
-          // comportamento crítico #6: nunca sugerir perda de dado.
-          goTo('ERRO_ENVIO');
+          // comportamento crítico #6: nunca sugerir perda de dado. Guarda a
+          // comanda já resolvida (comandaResolvida) pra tela de erro poder
+          // reenviar DIRETO, sem pedir pra escanear o cartão de novo.
+          if (e instanceof ApiError) {
+            goTo('ERRO_ENVIO', { tipo: 'validacao', mensagem: e.message, comandaResolvida: comanda });
+          } else {
+            goTo('ERRO_ENVIO', { tipo: 'rede', comandaResolvida: comanda });
+          }
         }
       } else if (scanPurpose === 'meus-pedidos') {
         goTo('MEUS_PEDIDOS', { comandaResolvida: comanda });

@@ -290,6 +290,26 @@ CREATE INDEX IF NOT EXISTS idx_whatsapp_campaigns_created ON whatsapp_campaigns(
 -- A tabela em si não é criada aqui de propósito: já existe em produção fora
 -- deste arquivo — IF EXISTS deixa este ALTER seguro rodar em qualquer ambiente.
 ALTER TABLE IF EXISTS gestao_sync ADD COLUMN IF NOT EXISTS delivery NUMERIC(10,2) NOT NULL DEFAULT 0;
+
+-- ── Idempotência do envio de pedido por comanda (totem/comanda/mobile) ──
+-- Reserva a Idempotency-Key ANTES de lançar os itens: uma segunda requisição
+-- com a mesma chave recebe a resposta já salva em vez de duplicar
+-- comanda_items/baixa de estoque/impressão. O UNIQUE em idempotency_key é
+-- quem garante a exclusão mútua de verdade (ver comandas.js, rota POST
+-- /:id/orders) — o pool deste projeto não dá transação real entre chamadas
+-- (cada query() é uma chamada HTTP separada pra RPC do Supabase), então não
+-- dá pra confiar em BEGIN/COMMIT pra isso; um INSERT único, se é atômico.
+CREATE TABLE IF NOT EXISTS comanda_orders (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  comanda_id UUID NOT NULL REFERENCES comandas(id) ON DELETE CASCADE,
+  idempotency_key UUID NOT NULL UNIQUE,
+  status VARCHAR(20) NOT NULL DEFAULT 'processing' CHECK (status IN ('processing','done')),
+  status_code INT,
+  response JSONB,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_comanda_orders_comanda ON comanda_orders(comanda_id);
 `;
 
 async function migrate() {

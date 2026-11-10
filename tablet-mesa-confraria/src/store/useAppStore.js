@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { useComandaStore } from './useComandaStore';
 
 // State machine da spec (seção 2). VITRINE por inatividade e o toast de
 // garçom NÃO fazem parte disso — são overlays sobre a tela atual, não
@@ -28,13 +29,27 @@ export const useAppStore = create((set, get) => ({
   abrirAdicionais: (product, group = null) => set({ activeProduct: product, activeGroup: group, screen: 'ADICIONAIS' }),
 
   voltarAoCardapio: () =>
-    set({ screen: 'CARDAPIO', activeGroup: null, activeProduct: null, scanPurpose: null, comandaResolvida: null, searchQuery: '' }),
+    set({
+      screen: 'CARDAPIO', activeGroup: null, activeProduct: null, scanPurpose: null,
+      comandaResolvida: null, searchQuery: '',
+      // Limpa o que ERRO_ENVIO/PEDIDO_ENVIADO guardaram via goTo(screen, patch)
+      // -- sem isso, um valor de uma visita anterior "vazava" pra próxima vez
+      // que essas telas aparecessem.
+      tipo: null, mensagem: null, total: null,
+    }),
 
   iniciarBusca: () => set({ screen: 'BUSCA', searchQuery: '' }),
 
   setSearchQuery: (q) => set({ searchQuery: q }),
 
-  iniciarScan: (purpose) => set({ scanPurpose: purpose, screen: 'ESCANEAR_QR' }),
+  // Gera a Idempotency-Key AQUI (uma vez por tentativa de pedido), antes de
+  // escanear -- cobre tanto o scan novo quanto o "Tentar de novo" da tela de
+  // erro, que também passa por aqui (ensureIdempotencyKey só gera se ainda
+  // não tiver uma; ver useComandaStore).
+  iniciarScan: (purpose) => {
+    if (purpose === 'pedido') useComandaStore.getState().ensureIdempotencyKey();
+    set({ scanPurpose: purpose, screen: 'ESCANEAR_QR' });
+  },
 
   dispensarVitrine: () => set({ showVitrine: false }),
 

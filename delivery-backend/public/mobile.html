@@ -635,7 +635,7 @@ async function enviarPedido() {
   try {
     const res = await fetch(`${API}/api/comandas/${comanda.id}/orders`, {
       method: 'POST',
-      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      headers: authHeaders({ 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() }),
       body: JSON.stringify({
         items: cartLines.map(l => ({
           product_id: l.produto.id,

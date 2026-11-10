@@ -24,16 +24,27 @@ export const useComandaStore = create(
       // reduz cada addon só a { addon_option_id, quantity }.
       itens: [],
 
-      addItem: (item) => set((state) => ({ itens: [...state.itens, item] })),
+      // Idempotency-Key do envio em andamento. Só é gerada quando precisa
+      // (ensureIdempotencyKey) e só é trocada depois de um sucesso ou de
+      // qualquer mudança no carrinho -- enquanto for a mesma tentativa
+      // (timeout, retry, "tentar de novo" na tela de erro), a chave continua
+      // a mesma, pra o backend nunca lançar o mesmo pedido duas vezes.
+      idempotencyKey: null,
 
-      removeItem: (idx) => set((state) => ({ itens: state.itens.filter((_, i) => i !== idx) })),
+      ensureIdempotencyKey: () =>
+        set((state) => (state.idempotencyKey ? state : { idempotencyKey: crypto.randomUUID() })),
+
+      addItem: (item) => set((state) => ({ itens: [...state.itens, item], idempotencyKey: null })),
+
+      removeItem: (idx) => set((state) => ({ itens: state.itens.filter((_, i) => i !== idx), idempotencyKey: null })),
 
       updateQty: (idx, qty) =>
         set((state) => ({
           itens: state.itens.map((it, i) => (i === idx ? { ...it, qty, subtotal: (it.unitPrice + addonsTotal(it.addons)) * qty } : it)),
+          idempotencyKey: null,
         })),
 
-      clearItens: () => set({ itens: [] }),
+      clearItens: () => set({ itens: [], idempotencyKey: null }),
     }),
     { name: storageKeyForMesa(MESA_ID) }
   )

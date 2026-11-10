@@ -48,23 +48,49 @@ export async function resolveComanda(code) {
   return req(`/api/comandas/resolve/${encodeURIComponent(code)}`);
 }
 
-export async function submitOrder(comandaId, items, mesa) {
-  return req(`/api/comandas/${comandaId}/orders`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      // Item local guarda name/unitPrice/addons.name/addons.price pra
-      // recálculo na tela (revisão, mudar quantidade) -- o backend só
-      // espera product_id/quantity/notes/addons(addon_option_id+quantity).
-      items: items.map((it) => ({
-        product_id: it.product_id,
-        quantity: it.qty,
-        notes: it.notes || null,
-        addons: (it.addons || []).map((a) => ({ addon_option_id: a.addon_option_id, quantity: a.quantity })),
-      })),
-      mesa,
-    }),
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+const RETRY_DELAYS_MS = [500, 1000, 2000];
+
+// Envia o pedido com timeout (8s) e retry (0.5s/1s/2s) usando SEMPRE a MESMA
+// Idempotency-Key -- o backend usa essa chave pra nunca lançar o MESMO
+// pedido duas vezes (ver tabela comanda_orders no delivery-backend). Só
+// repete em falha de REDE/timeout: um ApiError já é uma resposta HTTP real
+// do servidor (comanda fechada, produto indisponível etc.) -- repetir não
+// vai mudar o resultado, quem decide o que fazer com isso é a tela chamadora.
+export async function enviarPedido(comandaId, items, mesa, idempotencyKey) {
+  const body = JSON.stringify({
+    // Item local guarda name/unitPrice/addons.name/addons.price pra
+    // recálculo na tela (revisão, mudar quantidade) -- o backend só
+    // espera product_id/quantity/notes/addons(addon_option_id+quantity).
+    items: items.map((it) => ({
+      product_id: it.product_id,
+      quantity: it.qty,
+      notes: it.notes || null,
+      addons: (it.addons || []).map((a) => ({ addon_option_id: a.addon_option_id, quantity: a.quantity })),
+    })),
+    mesa,
   });
+
+  for (let attempt = 0; ; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    try {
+      return await req(`/api/comandas/${comandaId}/orders`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey },
+        body,
+        signal: controller.signal,
+      });
+    } catch (e) {
+      if (e instanceof ApiError || attempt >= RETRY_DELAYS_MS.length) throw e;
+      await sleep(RETRY_DELAYS_MS[attempt]);
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
 }
 
 export async function requestClose(comandaId) {

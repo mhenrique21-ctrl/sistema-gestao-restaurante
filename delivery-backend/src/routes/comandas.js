@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const rateLimit = require('express-rate-limit');
+const { z } = require('zod');
 const router = require('express').Router();
 const pool = require('../db/pool');
 const { authMiddleware, requireRole } = require('../middleware/auth');
@@ -31,14 +32,14 @@ const SQL_IS_BALCAO = `left(c.code, 7) = 'balcao_'`;
 // Resolve e valida os adicionais escolhidos para um item de comanda, recalculando
 // o preço no servidor. Espelha resolveAddons() de routes/orders.js — duplicada aqui
 // de propósito para não mexer no arquivo de produção do delivery.
-async function resolveAddons(productId, addons) {
+async function resolveAddons(productId, addons, client = pool) {
   if (!addons || !Array.isArray(addons) || addons.length === 0) return [];
 
   const optionIds = addons.map((a) => a.addon_option_id).filter(Boolean);
   if (!optionIds.length) return [];
 
   const placeholders = optionIds.map((_, i) => `$${i + 1}`).join(',');
-  const result = await pool.query(
+  const result = await client.query(
     // O vínculo com o produto é filtrado AQUI, não depois: um grupo canônico
     // ligado a 63 produtos devolveria 63 linhas por opção, e guardar "a última"
     // num mapa por id pegaria o produto errado.
@@ -72,14 +73,32 @@ async function resolveAddons(productId, addons) {
   return resolved;
 }
 
-async function insertItemAddons(comandaItemId, addons) {
+async function insertItemAddons(comandaItemId, addons, client = pool) {
   for (const a of addons || []) {
-    await pool.query(
+    await client.query(
       `INSERT INTO comanda_item_addons (comanda_item_id, addon_option_id, name, price, quantity)
        VALUES ($1,$2,$3,$4,$5) RETURNING id`,
       [comandaItemId, a.addon_option_id, a.name, a.price, a.quantity]
     );
   }
+}
+
+// Espera curta por uma linha de comanda_orders terminar de processar — cobre a
+// corrida genuína de duas requisições com a MESMA chave chegando quase juntas.
+// Não há lock de transação real aqui pra bloquear isso de verdade (ver migrate.js);
+// isso é best-effort, não garantia — por isso o caller trata "ainda processando"
+// como uma resposta válida (202), não como erro.
+async function waitForComandaOrder(idempotencyKey, { attempts = 4, delayMs = 250 } = {}) {
+  for (let i = 0; i < attempts; i++) {
+    const result = await pool.query(
+      `SELECT status, status_code, response FROM comanda_orders WHERE idempotency_key = $1`,
+      [idempotencyKey]
+    );
+    const row = result.rows[0];
+    if (row?.status === 'done') return row;
+    if (i < attempts - 1) await new Promise((r) => setTimeout(r, delayMs));
+  }
+  return null;
 }
 
 async function loadComandaItems(comandaId) {
@@ -298,6 +317,36 @@ const resolveLimiter = rateLimit({
   message: { error: 'Muitas tentativas. Aguarde um pouco e tente de novo.' },
 });
 
+// Exige um header Idempotency-Key (UUID) em POST /:id/orders — protege contra
+// duplo-toque no totem, retry de rede ou duplo clique no atendente lançando o
+// MESMO pedido duas vezes (duplicando cobrança, baixa de estoque e impressão
+// na cozinha). Ver tabela comanda_orders (migrate.js) e o uso abaixo.
+function requireIdempotencyKey(req, res, next) {
+  const key = req.headers['idempotency-key'];
+  if (!key || !UUID_RE.test(String(key))) {
+    return res.status(400).json({ error: 'Header Idempotency-Key (UUID) é obrigatório' });
+  }
+  req.idempotencyKey = key;
+  next();
+}
+
+// Preço nunca vem do body — só product_id/quantity/notes/addons. Zod descarta
+// qualquer campo extra (ex: um "price" que o cliente tente mandar) no parse,
+// então isso só formaliza uma garantia que a rota já respeitava na prática.
+const OrderBodySchema = z.object({
+  items: z.array(z.object({
+    product_id: z.string().uuid(),
+    quantity: z.coerce.number().int().positive(),
+    notes: z.string().nullish(),
+    addons: z.array(z.object({
+      addon_option_id: z.string().uuid(),
+      quantity: z.coerce.number().int().positive().optional(),
+    })).optional().default([]),
+  })).min(1, 'Itens vazios'),
+  notes: z.string().nullish(),
+  mesa: z.union([z.string(), z.number()]).nullish(),
+});
+
 // GET /api/comandas/resolve/:code — tablet escaneia o QR e identifica a comanda
 router.get('/resolve/:code', resolveLimiter, async (req, res) => {
   try {
@@ -371,15 +420,36 @@ router.patch('/:id/mesa', authMiddleware, requireRole('admin', 'atendente'), asy
 });
 
 // POST /api/comandas/:id/orders — registra pedido na comanda (soma ao total corrente)
-router.post('/:id/orders', async (req, res) => {
-  const { items, notes, mesa } = req.body;
-  if (!items?.length) return res.status(400).json({ error: 'Itens vazios' });
+//
+// Idempotência: o header Idempotency-Key reserva uma linha em comanda_orders
+// ANTES de tocar em qualquer item (INSERT único, atômico por si só). Uma 2ª
+// chamada com a MESMA chave encontra o UNIQUE já ocupado (23505 do Postgres) e
+// devolve a resposta já salva, sem reprocessar nada (sem duplicar comanda_items,
+// baixa de estoque nem impressão). Não há transação real entre as chamadas
+// desta rota (ver pool.js — cada query() é uma chamada HTTP separada pra RPC do
+// Supabase, BEGIN/COMMIT não dão atomicidade de verdade), então qualquer erro
+// depois do claim é desfeito à mão (DELETE) em vez de um ROLLBACK que não
+// existiria de fato.
+router.post('/:id/orders', requireIdempotencyKey, async (req, res) => {
+  const requestId = req.get('X-Request-Id') || crypto.randomUUID();
+  res.set('X-Request-Id', requestId);
+  const idempotencyKey = req.idempotencyKey;
+  const log = (...args) => console.error('[comandas/orders]', requestId, idempotencyKey, ...args);
+
+  const parsed = OrderBodySchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'Corpo inválido', details: parsed.error.issues.map((i) => i.message) });
+  }
+  const { items, notes, mesa } = parsed.data;
+
+  let comandaOrderId = null; // claim da idempotency key — desfeito se algo falhar
+  const insertedItemIds = []; // comanda_items já inseridos nesta tentativa
 
   try {
     let comandaResult = await pool.query(`SELECT * FROM comandas WHERE id = $1`, [req.params.id]);
     let comanda = comandaResult.rows[0];
     if (!comanda) return res.status(404).json({ error: 'Comanda não encontrada' });
-    if (comanda.status !== 'aberta') return res.status(400).json({ error: 'Comanda não está aberta' });
+    if (comanda.status !== 'aberta') return res.status(409).json({ error: 'Comanda não está aberta' });
 
     // O tablet (kiosk.html) fica fixo numa mesa e já manda o número dela — usa isso pra
     // vincular a comanda automaticamente, sem depender de um atendente fazer isso manualmente.
@@ -394,6 +464,24 @@ router.post('/:id/orders', async (req, res) => {
       return res.status(400).json({ error: 'Selecione uma mesa antes de lançar pedidos nesta comanda' });
     }
 
+    try {
+      const claim = await pool.query(
+        `INSERT INTO comanda_orders (comanda_id, idempotency_key) VALUES ($1,$2) RETURNING id`,
+        [comanda.id, idempotencyKey]
+      );
+      comandaOrderId = claim.rows[0].id;
+    } catch (claimErr) {
+      if (claimErr.code !== '23505') throw claimErr;
+      const existing = await waitForComandaOrder(idempotencyKey);
+      if (existing) {
+        const body = typeof existing.response === 'string' ? JSON.parse(existing.response) : existing.response;
+        res.set('Idempotency-Replayed', 'true');
+        return res.status(Number(existing.status_code) || 201).json(body);
+      }
+      log('corrida: chave ainda em processamento depois da espera');
+      return res.status(202).json({ error: 'Pedido ainda sendo processado, aguarde um instante', code: 'PROCESSING' });
+    }
+
     let addedTotal = 0;
     const resolvedItems = [];
     for (const item of items) {
@@ -402,7 +490,7 @@ router.post('/:id/orders', async (req, res) => {
         [item.product_id]
       );
       if (!prod.rows[0]) throw { status: 400, message: 'Produto não encontrado' };
-      if (!prod.rows[0].available) throw { status: 400, message: `"${prod.rows[0].name}" indisponível` };
+      if (!prod.rows[0].available) throw { status: 422, message: `"${prod.rows[0].name}" indisponível` };
       const unitPrice = prod.rows[0].promo_price !== null ? parseFloat(prod.rows[0].promo_price) : parseFloat(prod.rows[0].price);
 
       const resolvedAddons = await resolveAddons(item.product_id, item.addons);
@@ -422,27 +510,38 @@ router.post('/:id/orders', async (req, res) => {
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
         [comanda.id, item.product_id, item.quantity, item.unit_price, item.subtotal, item.notes || null, req.user?.id || null, mesa || null]
       );
+      insertedItemIds.push(itemResult.rows[0].id);
       await insertItemAddons(itemResult.rows[0].id, item.addons);
     }
-
-    // Baixa no momento do pedido: o produto sai da geladeira agora, não quando
-    // a conta fechar. Vale igual pra comanda, mesa e balcão — todos passam por
-    // aqui. Adicionais não dão baixa: são preparados na hora.
-    await baixarEstoque(resolvedItems, {
-      motivo: 'Venda – comanda ' + (comanda.code || ''),
-      comandaId: comanda.id,
-      userId: req.user?.id,
-    });
 
     const updateResult = await pool.query(
       `UPDATE comandas SET subtotal = subtotal + $1, total = total + $1 WHERE id = $2 RETURNING *`,
       [addedTotal, comanda.id]
     );
     const updatedComanda = updateResult.rows[0];
+    const responseBody = { ...updatedComanda, items: resolvedItems, order_total: addedTotal };
+
+    // "Comita" a reserva: a partir daqui, uma 2ª requisição com a mesma chave
+    // recebe esta resposta pronta em vez de reprocessar.
+    await pool.query(
+      `UPDATE comanda_orders SET status = 'done', status_code = $1, response = $2::jsonb, updated_at = NOW() WHERE id = $3`,
+      [201, JSON.stringify(responseBody), comandaOrderId]
+    );
 
     if (updatedComanda.mesa_id) {
       await pool.query(`UPDATE mesas SET status = 'ocupada' WHERE id = $1 AND status = 'livre' RETURNING id`, [updatedComanda.mesa_id]);
     }
+
+    // Baixa no momento do pedido: o produto sai da geladeira agora, não quando
+    // a conta fechar. Vale igual pra comanda, mesa e balcão — todos passam por
+    // aqui. Adicionais não dão baixa: são preparados na hora. Só depois de
+    // "comitar" a reserva acima — não desconta estoque de um pedido que ainda
+    // poderia ter sido desfeito por um erro mais acima.
+    await baixarEstoque(resolvedItems, {
+      motivo: 'Venda – comanda ' + (comanda.code || ''),
+      comandaId: comanda.id,
+      userId: req.user?.id,
+    });
 
     // Envia para cozinha/balcão em tempo real e imprime, reaproveitando o mesmo
     // pipeline usado em routes/orders.js (getStationsForOrder + printOrderTicket).
@@ -461,12 +560,21 @@ router.post('/:id/orders', async (req, res) => {
           items: stationItems,
         }).catch((e) => console.error(`[print/comanda/${stationKey}]`, e.message));
       }
-    } catch (e) { console.error('[print/comanda]', e.message); }
+    } catch (e) { log('print:', e.message); }
 
-    res.status(201).json({ ...updatedComanda, items: resolvedItems });
+    res.status(201).json(responseBody);
   } catch (err) {
+    // Sem transação real (ver comentário no topo da rota): desfaz à mão o que
+    // já tinha sido inserido nesta tentativa, pra uma nova tentativa com a
+    // MESMA chave poder reprocessar do zero em vez de ficar travada no 23505.
+    for (const itemId of insertedItemIds) {
+      await pool.query(`DELETE FROM comanda_items WHERE id = $1`, [itemId]).catch((e) => log('limpeza comanda_items falhou:', e.message));
+    }
+    if (comandaOrderId) {
+      await pool.query(`DELETE FROM comanda_orders WHERE id = $1`, [comandaOrderId]).catch((e) => log('limpeza comanda_orders falhou:', e.message));
+    }
     if (err.status) return res.status(err.status).json({ error: err.message });
-    console.error('[comandas/orders]', err.message);
+    log(err.message);
     res.status(500).json({ error: 'Erro ao registrar pedido na comanda' });
   }
 });
