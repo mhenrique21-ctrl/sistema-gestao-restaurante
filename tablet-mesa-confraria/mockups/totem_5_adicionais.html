@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Confraria Café — Adicionais</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,420;9..144,520;9..144,600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#1c140e; --surface:#251b13; --surface-2:#2c2117; --line:#3a2c1e;
+    --cream:#f3e9da; --cream-soft:#c9b89f; --gold:#cf9a4f;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:#0d0a08; display:flex; align-items:center; justify-content:center;
+    min-height:100vh; font-family:'Inter',sans-serif; padding:24px;
+  }
+  .frame{
+    width:1180px; height:760px; background:var(--bg);
+    border-radius:18px; overflow:hidden; display:flex; position:relative;
+    box-shadow:0 40px 100px rgba(0,0,0,.6), inset 0 0 0 1px rgba(207,154,79,.08);
+  }
+
+  /* ---------- COLUNA DA FOTO/DESCRIÇÃO ---------- */
+  .left{
+    width:420px; flex-shrink:0;
+    display:flex; flex-direction:column;
+  }
+  .hero{
+    height:300px; background-size:cover; background-position:center;
+    background-image:url('https://images.unsplash.com/photo-1509042239860-f550ce710b93?w=700');
+    position:relative;
+  }
+  .hero::after{
+    content:''; position:absolute; inset:0;
+    background:linear-gradient(180deg, rgba(28,20,14,0) 60%, var(--bg) 100%);
+  }
+  .back{
+    position:absolute; top:24px; left:24px; z-index:2;
+    width:36px; height:36px; border-radius:50%;
+    background:rgba(13,10,8,.5); backdrop-filter:blur(3px);
+    display:flex; align-items:center; justify-content:center;
+    color:var(--cream); cursor:pointer;
+  }
+  .back svg{ width:17px; height:17px; }
+  .left-body{ padding:22px 30px 0; }
+  .item-title{ font-family:'Fraunces',serif; font-weight:560; font-size:26px; color:var(--cream); }
+  .item-desc{ font-size:13px; color:var(--cream-soft); margin-top:10px; line-height:1.55; max-width:32ch; }
+  .base-price{ font-family:'JetBrains Mono',monospace; font-weight:600; font-variant-numeric:tabular-nums; font-size:16px; color:var(--gold); margin-top:16px; }
+
+  /* ---------- COLUNA DE ADICIONAIS ---------- */
+  .right{
+    flex:1; display:flex; flex-direction:column; min-width:0;
+    border-left:1px solid var(--line);
+  }
+  .options{ flex:1; overflow-y:auto; padding:26px 34px 24px; }
+
+  .section-label{
+    font-family:'Inter',sans-serif; font-size:11px; font-weight:600; color:var(--cream-soft);
+    letter-spacing:.04em; margin-bottom:12px; display:flex; align-items:center; gap:8px;
+  }
+  .req-dot{ width:5px; height:5px; border-radius:50%; background:var(--gold); }
+
+  /* Obrigatório — seletor de duas opções */
+  .choice-row{ display:flex; gap:10px; margin-bottom:30px; }
+  .choice{
+    flex:1; border:1px solid var(--line); border-radius:12px;
+    padding:14px 16px; cursor:pointer;
+    display:flex; flex-direction:column; gap:4px;
+  }
+  .choice.selected{ border-color:var(--gold); background:rgba(207,154,79,.08); }
+  .choice-name{ font-family:'Fraunces',serif; font-weight:520; font-size:15.5px; color:var(--cream); }
+  .choice-detail{ font-size:11.5px; color:var(--cream-soft); }
+
+  /* Lista de adicionais — coluna única */
+  .addon-row{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:15px 0; border-bottom:1px solid var(--line);
+  }
+  .addon-info{ display:flex; flex-direction:column; gap:3px; }
+  .addon-name{ font-family:'Fraunces',serif; font-weight:480; font-size:15.5px; color:var(--cream); }
+  .addon-price{ font-size:12px; color:var(--cream-soft); }
+
+  .add-btn{
+    width:32px; height:32px; border-radius:50%;
+    border:1px solid var(--gold); color:var(--gold);
+    background:transparent; font-size:16px;
+    display:flex; align-items:center; justify-content:center; cursor:pointer;
+  }
+  .stepper{
+    display:flex; align-items:center; gap:12px;
+    background:var(--surface-2); border-radius:20px; padding:5px 6px;
+  }
+  .stepper button{
+    width:26px; height:26px; border-radius:50%; border:none;
+    background:transparent; color:var(--gold); font-size:15px; cursor:pointer;
+  }
+  .stepper .qty{ font-family:'Fraunces',serif; font-weight:560; font-size:14px; color:var(--cream); min-width:14px; text-align:center; }
+
+  /* ---------- RODAPÉ FIXO ---------- */
+  .footer{
+    border-top:1px solid var(--line); background:var(--surface);
+    padding:18px 34px; display:flex; align-items:center; justify-content:space-between;
+  }
+  .footer-total{ color:var(--cream); }
+  .footer-total-label{ font-size:11px; color:var(--cream-soft); }
+  .footer-total-value{ font-family:'Fraunces',serif; font-weight:600; font-size:20px; margin-top:2px; }
+  .btn-add{
+    background:var(--gold); border:none; color:#241a10;
+    font-family:'Inter',sans-serif; font-weight:600; font-size:14px;
+    padding:14px 26px; border-radius:12px; cursor:pointer;
+  }
+  ::-webkit-scrollbar{ width:0; }
+</style>
+</head>
+<body>
+<div class="frame">
+
+  <div class="left">
+    <div class="hero">
+      <div class="back">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+      </div>
+    </div>
+    <div class="left-body">
+      <div class="item-title">Cappuccino Cremoso</div>
+      <div class="item-desc">Espresso duplo, leite vaporizado e canela — a receita que mais sai da nossa máquina</div>
+      <div class="base-price">R$ 14,90</div>
+    </div>
+  </div>
+
+  <div class="right">
+    <div class="options">
+
+      <div class="section-label">ADICIONAIS</div>
+
+      <div class="addon-row">
+        <div class="addon-info">
+          <div class="addon-name">Leite de aveia</div>
+          <div class="addon-price">+ R$ 4,00</div>
+        </div>
+        <div class="stepper">
+          <button>−</button>
+          <div class="qty">1</div>
+          <button>+</button>
+        </div>
+      </div>
+
+      <div class="addon-row">
+        <div class="addon-info">
+          <div class="addon-name">Xarope de baunilha</div>
+          <div class="addon-price">+ R$ 3,00</div>
+        </div>
+        <button class="add-btn">+</button>
+      </div>
+
+      <div class="addon-row">
+        <div class="addon-info">
+          <div class="addon-name">Chantilly</div>
+          <div class="addon-price">+ R$ 2,50</div>
+        </div>
+        <button class="add-btn">+</button>
+      </div>
+
+      <div class="addon-row">
+        <div class="addon-info">
+          <div class="addon-name">Canela extra</div>
+          <div class="addon-price">sem custo</div>
+        </div>
+        <button class="add-btn">+</button>
+      </div>
+
+      <div class="addon-row" style="border-bottom:none;">
+        <div class="addon-info">
+          <div class="addon-name">Dose extra de café</div>
+          <div class="addon-price">+ R$ 3,50</div>
+        </div>
+        <button class="add-btn">+</button>
+      </div>
+
+    </div>
+
+    <div class="footer">
+      <div class="footer-total">
+        <div class="footer-total-label">1 item · total</div>
+        <div class="footer-total-value">R$ 18,90</div>
+      </div>
+      <button class="btn-add">Adicionar à comanda</button>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

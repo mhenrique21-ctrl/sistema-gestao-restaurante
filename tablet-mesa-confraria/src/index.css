@@ -1,0 +1,32 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html, body, #root {
+  height: 100%;
+  overscroll-behavior: none;
+}
+
+body {
+  background: #0d0a08;
+  overflow: hidden;
+}
+
+/* Totem de mesa não precisa de barra de rolagem visível — mesmo padrão dos
+   mockups aprovados (::-webkit-scrollbar{ width:0 }). */
+::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+/* Entrada em cascata dos cards do cardápio (seção 4.3). Definida aqui em vez
+   de tailwind.config porque é aplicada via `style` inline (delay calculado
+   por índice) -- o Tailwind só emite @keyframes de config pra classes
+   `animate-*` que aparecem de fato no código, e essa não aparecia. */
+@keyframes cardIn {
+  to { opacity: 1; transform: translateY(0); }
+}

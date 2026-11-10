@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Confraria Café — Garçom Chamado</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,420;9..144,520;9..144,560&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#1c140e; --surface:#251b13; --surface-2:#2c2117; --line:#3a2c1e;
+    --cream:#f3e9da; --cream-soft:#c9b89f; --gold:#cf9a4f;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:#0d0a08; display:flex; align-items:center; justify-content:center;
+    min-height:100vh; font-family:'Inter',sans-serif; padding:24px;
+  }
+  .frame{
+    width:1180px; height:760px; background:var(--bg);
+    border-radius:18px; overflow:hidden; display:flex; position:relative;
+    box-shadow:0 40px 100px rgba(0,0,0,.6), inset 0 0 0 1px rgba(207,154,79,.08);
+  }
+  .rail{
+    width:216px; flex-shrink:0; padding:30px 0 20px;
+    background:var(--surface); border-right:1px solid var(--line);
+  }
+  .rail-mesa{
+    font-family:'Fraunces',serif; font-weight:520; font-size:14.5px;
+    color:var(--cream); padding:0 26px 20px; border-bottom:1px solid var(--line);
+  }
+  .rail-mesa .sub{ display:block; font-family:'Inter',sans-serif; font-size:10.5px; color:var(--gold); margin-top:4px; letter-spacing:.03em; }
+  .cat-item{ font-family:'Fraunces',serif; font-weight:440; font-size:15.5px; color:var(--cream-soft); padding:13px 26px; opacity:.55; }
+  .cat-item.active{ color:var(--cream); background:var(--surface-2); opacity:1; }
+
+  .content{ flex:1; padding:28px 34px; }
+  .content-title{ font-family:'Fraunces',serif; font-weight:560; font-size:27px; color:var(--cream); opacity:.35; }
+
+  .toast{
+    position:absolute; top:26px; left:50%; transform:translateX(-50%);
+    background:var(--gold); color:#241a10;
+    padding:13px 22px; border-radius:12px;
+    display:flex; align-items:center; gap:10px;
+    box-shadow:0 14px 30px rgba(0,0,0,.4);
+    animation:slideDown .35s cubic-bezier(.22,.9,.32,1);
+  }
+  @keyframes slideDown{ from{ opacity:0; transform:translate(-50%,-14px); } to{ opacity:1; transform:translate(-50%,0); } }
+  .toast-icon{ font-size:16px; }
+  .toast-text{ font-family:'Inter',sans-serif; font-weight:600; font-size:13.5px; }
+  .toast-sub{ font-size:11.5px; opacity:.75; font-weight:500; }
+</style>
+</head>
+<body>
+<div class="frame">
+  <div class="rail">
+    <div class="rail-mesa">Mesa 07<span class="sub">CONFRARIA CAFÉ</span></div>
+    <div class="cat-item active">Cafés</div>
+    <div class="cat-item">Padaria</div>
+    <div class="cat-item">Croissants &amp; Tapiocas</div>
+    <div class="cat-item">Bebidas</div>
+    <div class="cat-item">Sobremesas</div>
+  </div>
+  <div class="content">
+    <div class="content-title">Cafés</div>
+  </div>
+
+  <div class="toast">
+    <span class="toast-icon">🔔</span>
+    <div>
+      <div class="toast-text">Garçom chamado!</div>
+      <div class="toast-sub">Ele chega até sua mesa em instantes</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

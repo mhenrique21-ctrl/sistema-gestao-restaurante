@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Confraria Café — Sabores</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,420;9..144,520;9..144,600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#1c140e; --surface:#251b13; --surface-2:#2c2117; --line:#3a2c1e;
+    --cream:#f3e9da; --cream-soft:#c9b89f; --gold:#cf9a4f;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:#0d0a08; display:flex; align-items:center; justify-content:center;
+    min-height:100vh; font-family:'Inter',sans-serif; padding:24px;
+  }
+  .frame{
+    width:1180px; height:760px; background:var(--bg);
+    border-radius:18px; overflow:hidden; position:relative;
+    box-shadow:0 40px 100px rgba(0,0,0,.6), inset 0 0 0 1px rgba(207,154,79,.08);
+    display:flex; flex-direction:column;
+  }
+  .head{
+    display:flex; align-items:center; gap:16px;
+    padding:26px 34px 18px; border-bottom:1px solid var(--line);
+  }
+  .back{
+    width:36px; height:36px; border-radius:50%; background:var(--surface);
+    border:1px solid var(--line); display:flex; align-items:center; justify-content:center;
+    color:var(--cream); cursor:pointer; flex-shrink:0;
+  }
+  .back svg{ width:16px; height:16px; }
+  .head-title{ font-family:'Fraunces',serif; font-weight:560; font-size:24px; color:var(--cream); }
+  .head-sub{ font-size:12px; color:var(--cream-soft); margin-top:3px; }
+
+  .list{ flex:1; overflow-y:auto; padding:8px 34px 24px; }
+  .flavor-row{
+    display:flex; align-items:center; gap:16px;
+    padding:16px 6px; border-bottom:1px solid var(--line);
+    cursor:pointer;
+  }
+  .flavor-thumb{
+    width:70px; height:70px; border-radius:10px; flex-shrink:0;
+    background-size:cover; background-position:center;
+  }
+  .flavor-info{ flex:1; min-width:0; }
+  .flavor-name{ font-family:'Fraunces',serif; font-weight:520; font-size:16px; color:var(--cream); }
+  .flavor-desc{ font-size:12px; color:var(--cream-soft); opacity:.75; margin-top:3px; }
+  .flavor-foot{ display:flex; align-items:center; gap:14px; }
+  .flavor-price{ font-family:'JetBrains Mono',monospace; font-weight:600; font-variant-numeric:tabular-nums; font-size:15px; color:var(--gold); white-space:nowrap; }
+  .chevron{ width:16px; height:16px; color:var(--cream-soft); opacity:.6; flex-shrink:0; }
+
+  ::-webkit-scrollbar{ width:0; }
+</style>
+</head>
+<body>
+<div class="frame">
+  <div class="head">
+    <div class="back">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+    </div>
+    <div>
+      <div class="head-title">Croissants & Tapiocas</div>
+      <div class="head-sub">Escolha o sabor para personalizar</div>
+    </div>
+  </div>
+
+  <div class="list">
+    <div class="flavor-row">
+      <div class="flavor-thumb" style="background-image:url('data:image/jpeg;base64,[TRUNC]')"></div>
+      <div class="flavor-info">
+        <div class="flavor-name">Croissant Presunto e Queijo</div>
+        <div class="flavor-desc">Massa amanteigada, presunto e queijo derretido</div>
+      </div>
+      <div class="flavor-foot">
+        <div class="flavor-price">R$ 16,90</div>
+        <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+      </div>
+    </div>
+
+    <div class="flavor-row">
+      <div class="flavor-thumb" style="background-image:url('data:image/jpeg;base64,[TRUNC]')"></div>
+      <div class="flavor-info">
+        <div class="flavor-name">Croissant Chocolate</div>
+        <div class="flavor-desc">Recheado com chocolate belga 70%</div>
+      </div>
+      <div class="flavor-foot">
+        <div class="flavor-price">R$ 15,50</div>
+        <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+      </div>
+    </div>
+
+    <div class="flavor-row">
+      <div class="flavor-thumb" style="background-image:url('data:image/jpeg;base64,[TRUNC]')"></div>
+      <div class="flavor-info">
+        <div class="flavor-name">Croissant Amêndoas</div>
+        <div class="flavor-desc">Creme de amêndoas e lascas torradas</div>
+      </div>
+      <div class="flavor-foot">
+        <div class="flavor-price">R$ 17,50</div>
+        <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+      </div>
+    </div>
+
+    <div class="flavor-row">
+      <div class="flavor-thumb" style="background-image:url('data:image/jpeg;base64,[TRUNC]')"></div>
+      <div class="flavor-info">
+        <div class="flavor-name">Tapioca Coco e Leite Condensado</div>
+        <div class="flavor-desc">Tapioca crocante, coco fresco e leite condensado</div>
+      </div>
+      <div class="flavor-foot">
+        <div class="flavor-price">R$ 13,90</div>
+        <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+      </div>
+    </div>
+
+    <div class="flavor-row" style="border-bottom:none;">
+      <div class="flavor-thumb" style="background-image:url('data:image/jpeg;base64,[TRUNC]')"></div>
+      <div class="flavor-info">
+        <div class="flavor-name">Crepioca Frango com Catupiry</div>
+        <div class="flavor-desc">Massa de tapioca com ovo, recheio cremoso</div>
+      </div>
+      <div class="flavor-foot">
+        <div class="flavor-price">R$ 15,90</div>
+        <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

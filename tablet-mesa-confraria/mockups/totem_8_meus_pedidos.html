@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Confraria Café — Meus Pedidos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,420;9..144,520;9..144,600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#1c140e; --surface:#251b13; --line:#3a2c1e;
+    --cream:#f3e9da; --cream-soft:#c9b89f; --gold:#cf9a4f;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:#0d0a08; display:flex; align-items:center; justify-content:center;
+    min-height:100vh; font-family:'Inter',sans-serif; padding:24px;
+  }
+  .frame{
+    width:1180px; height:760px; background:var(--bg);
+    border-radius:18px; overflow:hidden; position:relative;
+    box-shadow:0 40px 100px rgba(0,0,0,.6), inset 0 0 0 1px rgba(207,154,79,.08);
+    display:flex; flex-direction:column;
+  }
+  .head{
+    display:flex; align-items:center; gap:16px;
+    padding:26px 34px 18px; border-bottom:1px solid var(--line);
+  }
+  .back{
+    width:36px; height:36px; border-radius:50%; background:var(--surface);
+    border:1px solid var(--line); display:flex; align-items:center; justify-content:center;
+    color:var(--cream); cursor:pointer; flex-shrink:0;
+  }
+  .back svg{ width:16px; height:16px; }
+  .head-title{ font-family:'Fraunces',serif; font-weight:560; font-size:24px; color:var(--cream); }
+  .head-sub{ font-size:12px; color:var(--cream-soft); margin-top:3px; }
+
+  .body{ flex:1; display:flex; }
+  .list{ flex:1; overflow-y:auto; padding:8px 34px 24px; }
+  .order-group{ margin-bottom:22px; }
+  .order-time{ font-size:11px; color:var(--gold); letter-spacing:.03em; margin-bottom:10px; }
+  .item-row{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:10px 0; border-bottom:1px solid var(--line);
+  }
+  .item-name{ font-family:'Fraunces',serif; font-weight:480; font-size:15px; color:var(--cream); }
+  .item-qty{ font-size:12px; color:var(--cream-soft); margin-left:8px; }
+  .item-price{ font-family:'JetBrains Mono',monospace; font-weight:600; font-variant-numeric:tabular-nums; font-size:14px; color:var(--gold); }
+
+  .summary{
+    width:300px; flex-shrink:0; background:var(--surface); border-left:1px solid var(--line);
+    padding:30px 26px; display:flex; flex-direction:column;
+  }
+  .summary-label{ font-size:11.5px; color:var(--cream-soft); letter-spacing:.03em; }
+  .summary-total{ font-family:'Fraunces',serif; font-weight:600; font-size:32px; color:var(--cream); margin-top:8px; }
+  .summary-note{ font-size:12px; color:var(--cream-soft); margin-top:14px; line-height:1.5; }
+  .btn-conta{
+    margin-top:auto;
+    background:var(--gold); border:none; color:#241a10;
+    font-family:'Inter',sans-serif; font-weight:600; font-size:14px;
+    padding:14px; border-radius:12px; cursor:pointer;
+  }
+  ::-webkit-scrollbar{ width:0; }
+</style>
+</head>
+<body>
+<div class="frame">
+  <div class="head">
+    <div class="back">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+    </div>
+    <div>
+      <div class="head-title">Meus pedidos</div>
+      <div class="head-sub">Tudo que já foi enviado pra cozinha nesta visita</div>
+    </div>
+  </div>
+
+  <div class="body">
+    <div class="list">
+      <div class="order-group">
+        <div class="order-time">ENVIADO ÀS 19:42</div>
+        <div class="item-row">
+          <div><span class="item-name">Cappuccino Cremoso</span><span class="item-qty">× 1</span></div>
+          <div class="item-price">R$ 14,90</div>
+        </div>
+        <div class="item-row">
+          <div><span class="item-name">Croissant Chocolate</span><span class="item-qty">× 1</span></div>
+          <div class="item-price">R$ 15,50</div>
+        </div>
+      </div>
+
+      <div class="order-group">
+        <div class="order-time">ENVIADO ÀS 20:15</div>
+        <div class="item-row" style="border-bottom:none;">
+          <div><span class="item-name">Affogato</span><span class="item-qty">× 1</span></div>
+          <div class="item-price">R$ 17,90</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="summary">
+      <div class="summary-label">TOTAL CONSUMIDO</div>
+      <div class="summary-total">R$ 48,30</div>
+      <div class="summary-note">3 itens em 2 pedidos enviados. Quer fechar a conta agora?</div>
+      <button class="btn-conta">Pedir a conta</button>
+    </div>
+  </div>
+</div>
+</body>
+</html>

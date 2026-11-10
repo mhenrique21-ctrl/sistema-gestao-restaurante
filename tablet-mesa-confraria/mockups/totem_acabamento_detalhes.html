@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Confraria Café — Detalhes de Acabamento</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,420;9..144,520;9..144,560&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#1c140e; --surface:#251b13; --surface-2:#2c2117; --line:#3a2c1e;
+    --cream:#f3e9da; --cream-soft:#c9b89f; --gold:#cf9a4f;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:#0d0a08; min-height:100vh; font-family:'Inter',sans-serif;
+    padding:36px; display:flex; align-items:center; justify-content:center;
+  }
+  .wrap{ width:1180px; display:flex; flex-direction:column; gap:34px; }
+  .section-title{ font-family:'Fraunces',serif; font-weight:560; font-size:18px; color:var(--cream); margin-bottom:14px; }
+  .section-sub{ font-size:12px; color:var(--cream-soft); margin-top:-10px; margin-bottom:16px; }
+
+  /* A — Comparação de preço */
+  .price-row{ display:flex; gap:20px; }
+  .price-card{
+    flex:1; background:var(--surface); border:1px solid var(--line); border-radius:12px;
+    padding:20px; display:flex; align-items:center; justify-content:space-between;
+  }
+  .price-card-name{ font-family:'Fraunces',serif; font-weight:520; font-size:16px; color:var(--cream); }
+  .p-italic{ font-family:'Fraunces',serif; font-weight:500; font-style:italic; font-size:15px; color:var(--gold); }
+  .p-mono{ font-family:'JetBrains Mono',monospace; font-weight:600; font-size:15px; color:var(--gold); font-variant-numeric:tabular-nums; }
+  .price-label{ font-size:10.5px; color:var(--cream-soft); opacity:.6; margin-top:6px; }
+
+  /* B — Rail com scroll indicator */
+  .rail-demo{
+    width:216px; height:280px; background:var(--surface); border:1px solid var(--line);
+    border-radius:12px; overflow:hidden; position:relative;
+  }
+  .rail-scroll{ height:100%; overflow-y:auto; padding:16px 0; }
+  .rail-scroll .cat-item{ font-family:'Fraunces',serif; font-size:15px; color:var(--cream-soft); padding:11px 20px; }
+  .rail-scroll .cat-item.active{ color:var(--cream); background:var(--surface-2); }
+  .fade-bottom{
+    position:absolute; left:0; right:0; bottom:0; height:44px;
+    background:linear-gradient(to bottom, transparent, var(--surface));
+    display:flex; align-items:flex-end; justify-content:center; padding-bottom:6px;
+    pointer-events:none;
+  }
+  .fade-bottom svg{ width:16px; height:16px; color:var(--gold); opacity:.8; animation:bounce 1.6s ease-in-out infinite; }
+  @keyframes bounce{ 0%,100%{ transform:translateY(0);} 50%{ transform:translateY(4px);} }
+
+  /* C — Seletor de idioma */
+  .lang-demo{ display:flex; align-items:center; gap:20px; }
+  .lang-trigger{
+    display:flex; align-items:center; gap:8px;
+    background:var(--surface); border:1px solid var(--line); border-radius:20px;
+    padding:9px 16px; cursor:pointer;
+  }
+  .lang-trigger svg{ width:15px; height:15px; color:var(--cream-soft); }
+  .lang-trigger span{ font-size:13px; color:var(--cream); font-weight:500; }
+  .lang-menu{
+    background:var(--surface); border:1px solid var(--line); border-radius:12px;
+    padding:6px; display:flex; flex-direction:column; gap:2px; width:160px;
+  }
+  .lang-opt{
+    display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:8px;
+    font-size:13px; color:var(--cream-soft); cursor:pointer;
+  }
+  .lang-opt.selected{ background:var(--surface-2); color:var(--cream); }
+  .lang-flag{ font-size:15px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div>
+    <div class="section-title">A · Legibilidade do preço</div>
+    <div class="section-sub">Mesmo tamanho de fonte, à distância de quem está sentado à mesa</div>
+    <div class="price-row">
+      <div class="price-card">
+        <div>
+          <div class="price-card-name">Cappuccino Cremoso</div>
+          <div class="price-label">itálico serifado (atual)</div>
+        </div>
+        <div class="p-italic">R$ 14,90</div>
+      </div>
+      <div class="price-card">
+        <div>
+          <div class="price-card-name">Cappuccino Cremoso</div>
+          <div class="price-label">JetBrains Mono — igual ao totem real</div>
+        </div>
+        <div class="p-mono">R$ 14,90</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex; gap:40px;">
+    <div>
+      <div class="section-title">B · Indicador de mais categorias</div>
+      <div class="section-sub">Sombra + seta pulsante quando a lista não cabe na tela</div>
+      <div class="rail-demo">
+        <div class="rail-scroll">
+          <div class="cat-item active">Cafés</div>
+          <div class="cat-item">Padaria</div>
+          <div class="cat-item">Croissants &amp; Tapiocas</div>
+          <div class="cat-item">Bebidas</div>
+          <div class="cat-item">Sobremesas</div>
+          <div class="cat-item">Salgados</div>
+          <div class="cat-item">Combos</div>
+        </div>
+        <div class="fade-bottom">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="section-title">C · Seletor de idioma</div>
+      <div class="section-sub">Discreto, perto da identificação da mesa — não disputa espaço com o cardápio</div>
+      <div class="lang-demo">
+        <div class="lang-trigger">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20 15 15 0 0 1 0-20z"/></svg>
+          <span>PT</span>
+        </div>
+        <div class="lang-menu">
+          <div class="lang-opt selected"><span class="lang-flag">🇧🇷</span> Português</div>
+          <div class="lang-opt"><span class="lang-flag">🇺🇸</span> English</div>
+          <div class="lang-opt"><span class="lang-flag">🇪🇸</span> Español</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

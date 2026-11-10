@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Confraria Café — Categoria Vazia</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,420;9..144,520;9..144,560&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#1c140e; --surface:#251b13; --surface-2:#2c2117; --line:#3a2c1e;
+    --cream:#f3e9da; --cream-soft:#c9b89f; --gold:#cf9a4f;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:#0d0a08; display:flex; align-items:center; justify-content:center;
+    min-height:100vh; font-family:'Inter',sans-serif; padding:24px;
+  }
+  .frame{
+    width:1180px; height:760px; background:var(--bg);
+    border-radius:18px; overflow:hidden; display:flex; position:relative;
+    box-shadow:0 40px 100px rgba(0,0,0,.6), inset 0 0 0 1px rgba(207,154,79,.08);
+  }
+  .rail{
+    width:216px; flex-shrink:0; padding:30px 0 20px;
+    background:var(--surface); border-right:1px solid var(--line);
+    display:flex; flex-direction:column;
+  }
+  .rail-mesa{
+    font-family:'Fraunces',serif; font-weight:520; font-size:14.5px;
+    color:var(--cream); padding:0 26px 20px; border-bottom:1px solid var(--line); margin-bottom:8px;
+  }
+  .rail-mesa .sub{ display:block; font-family:'Inter',sans-serif; font-size:10.5px; color:var(--gold); margin-top:4px; letter-spacing:.03em; }
+  .cat-item{
+    font-family:'Fraunces',serif; font-weight:440; font-size:15.5px;
+    color:var(--cream-soft); padding:13px 26px; cursor:pointer; position:relative;
+  }
+  .cat-item.active{ color:var(--cream); background:var(--surface-2); }
+  .cat-item.active::before{ content:''; position:absolute; left:0; top:0; bottom:0; width:2px; background:var(--gold); }
+
+  .content{ flex:1; display:flex; flex-direction:column; }
+  .content-head{ padding:28px 34px 0; }
+  .content-title{ font-family:'Fraunces',serif; font-weight:560; font-size:27px; color:var(--cream); }
+
+  .empty{
+    flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding:0 40px;
+  }
+  .empty-icon{
+    width:64px; height:64px; border-radius:50%; border:1px solid var(--line);
+    display:flex; align-items:center; justify-content:center; margin-bottom:22px;
+  }
+  .empty-icon svg{ width:26px; height:26px; stroke:var(--cream-soft); opacity:.7; }
+  .empty-title{ font-family:'Fraunces',serif; font-weight:520; font-size:19px; color:var(--cream); }
+  .empty-sub{ font-size:13px; color:var(--cream-soft); margin-top:8px; text-align:center; max-width:34ch; line-height:1.5; }
+  .empty-cta{
+    margin-top:24px; background:transparent; border:1px solid var(--gold); color:var(--gold);
+    font-family:'Inter',sans-serif; font-weight:600; font-size:13px;
+    padding:11px 20px; border-radius:11px; cursor:pointer;
+  }
+</style>
+</head>
+<body>
+<div class="frame">
+  <div class="rail">
+    <div class="rail-mesa">Mesa 07<span class="sub">CONFRARIA CAFÉ</span></div>
+    <div class="cat-item">Cafés</div>
+    <div class="cat-item">Padaria</div>
+    <div class="cat-item">Croissants &amp; Tapiocas</div>
+    <div class="cat-item">Bebidas</div>
+    <div class="cat-item active">Sobremesas</div>
+  </div>
+
+  <div class="content">
+    <div class="content-head">
+      <div class="content-title">Sobremesas</div>
+    </div>
+
+    <div class="empty">
+      <div class="empty-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></svg>
+      </div>
+      <div class="empty-title">Nada disponível aqui agora</div>
+      <div class="empty-sub">A cozinha está reabastecendo essa categoria. Dá uma olhada em Cafés ou Padaria enquanto isso</div>
+      <button class="empty-cta">Ver Padaria</button>
+    </div>
+  </div>
+</div>
+</body>
+</html>
